@@ -178,7 +178,13 @@
               <textarea id="events" placeholder="Формат: ММ-ДД: Название&#10;Пример: 04-20: Релиз, 12-31: Новый Год"></textarea>
             </div>
             
-            <div class="field full">
+            <div class="field">
+              <label for="c_event">Цвет пользовательской даты</label>
+              <input type="color" id="c_event" value="#ff8f2d">
+              <div style="font-size:11px; color:var(--muted);">Используется для дат из поля событий</div>
+            </div>
+
+            <div class="field">
               <label for="city">Город для погоды</label>
               <input type="text" id="city" placeholder="Например: Москва" />
               <div style="font-size:11px; color:var(--muted);">Впиши город, чтобы скрипт подтянул погоду в шапку</div>
@@ -187,11 +193,14 @@
             <div class="field full">
               <label for="footer">Информационный подвал</label>
               <select id="footer">
-                <option value="year_summary">Таймер года (Дни до конца)</option>
-                <option value="progress_bar">Линия времени (Прогресс-бар)</option>
-                <option value="today_card">Карточка сегодняшнего дня</option>
-                <option value="quote">Мотивационная цитата</option>
-                <option value="custom_note">Собственная мысль (Заметка)</option>
+                <option value="year_summary">Годовой остаток</option>
+                <option value="progress_bar">Прогресс года</option>
+                <option value="today_card">Фокус на сегодня</option>
+                <option value="next_event">Ближайшее событие</option>
+                <option value="seasonal_focus">Сезонный режим</option>
+                <option value="weather_strip">Сводка среды</option>
+                <option value="quote">Цитата</option>
+                <option value="custom_note">Своя заметка</option>
               </select>
             </div>
             <div class="field full">
@@ -204,13 +213,13 @@
         <details class="group">
           <summary>3. Детализация интерфейса</summary>
           <div class="toggle-grid">
-            <label class="toggle"><input type="checkbox" id="show_weekdays" checked><span class="switch"></span><div><div class="t-main">Ритм недели</div><div class="t-sub">Показывать Пн, Вт, Ср...</div></div></label>
-            <label class="toggle"><input type="checkbox" id="accent_today" checked><span class="switch"></span><div><div class="t-main">Пульс времени</div><div class="t-sub">Визуально выделять сегодняшний день</div></div></label>
-            <label class="toggle"><input type="checkbox" id="show_progress_ring" checked><span class="switch"></span><div><div class="t-main">Кольцо эпохи</div><div class="t-sub">Круговой прогресс года (если нет погоды)</div></div></label>
-            <label class="toggle"><input type="checkbox" id="show_week_numbers"><span class="switch"></span><div><div class="t-main">Хронология</div><div class="t-sub">Отображать номера недель</div></div></label>
-            <label class="toggle"><input type="checkbox" id="quarter_dividers" checked><span class="switch"></span><div><div class="t-main">Смена сезонов</div><div class="t-sub">Тонкие линии между кварталами</div></div></label>
-            <label class="toggle"><input type="checkbox" id="month_badges" checked><span class="switch"></span><div><div class="t-main">Метрика месяца</div><div class="t-sub">Счетчик количества дней (30/31)</div></div></label>
-            <label class="toggle"><input type="checkbox" id="focus_current_month" checked><span class="switch"></span><div><div class="t-main">Глубина фокуса</div><div class="t-sub">Текущий месяц ярче остальных</div></div></label>
+            <label class="toggle"><input type="checkbox" id="show_weekdays" checked><span class="switch"></span><div><div class="t-main">Навигация по дням</div><div class="t-sub">Подписи дней недели для быстрого считывания сетки</div></div></label>
+            <label class="toggle"><input type="checkbox" id="accent_today" checked><span class="switch"></span><div><div class="t-main">Якорь сегодняшнего дня</div><div class="t-sub">Делает текущую дату главным ориентиром экрана</div></div></label>
+            <label class="toggle"><input type="checkbox" id="show_progress_ring" checked><span class="switch"></span><div><div class="t-main">Год в одном жесте</div><div class="t-sub">Если погода скрыта, справа появляется кольцо прогресса года</div></div></label>
+            <label class="toggle"><input type="checkbox" id="show_week_numbers"><span class="switch"></span><div><div class="t-main">Номера недель</div><div class="t-sub">Подходит для рабочих циклов, спринтов и планирования</div></div></label>
+            <label class="toggle"><input type="checkbox" id="quarter_dividers" checked><span class="switch"></span><div><div class="t-main">Квартальные разрывы</div><div class="t-sub">Разделяют год на четыре смысловых блока без перегруза</div></div></label>
+            <label class="toggle"><input type="checkbox" id="month_badges" checked><span class="switch"></span><div><div class="t-main">Емкость месяца</div><div class="t-sub">Показывает количество дней прямо в карточке месяца</div></div></label>
+            <label class="toggle"><input type="checkbox" id="focus_current_month" checked><span class="switch"></span><div><div class="t-main">Контраст текущего месяца</div><div class="t-sub">Помогает глазу мгновенно найти актуальный месяц</div></div></label>
           </div>
         </details>
 
@@ -256,13 +265,13 @@
       model:'iphone_17_pro', font:'inter', style:'numbers', theme:'graphite_orange', bg_style:'mesh_organic',
       month_layout:'grid_3x4_compact', weekend_mode:'weekends_only',
       lang:'ru', timezone:'3', footer:'year_summary', note:'', width:'1179', height:'2556',
-      events: '', city:'',
+      events: '', city:'', c_event:'#ff8f2d',
       show_weekdays:true, accent_today:true, show_progress_ring:true, show_week_numbers:false,
       quarter_dividers:true, month_badges:true, focus_current_month:true,
       c_bg: '#0a0d12', c_panel: '#131823', c_text: '#edf2ff', c_muted: '#8994a7', c_accent: '#ff8f2d', c_accent2: '#ffbc6f', c_weekend: '#ff8f7b'
     };
 
-    const colorFields = ['c_bg', 'c_panel', 'c_text', 'c_muted', 'c_accent', 'c_accent2', 'c_weekend'];
+    const colorFields = ['c_bg', 'c_panel', 'c_text', 'c_muted', 'c_accent', 'c_accent2', 'c_weekend', 'c_event'];
     const fields = ['model','font','style','theme','bg_style','month_layout','weekend_mode','lang','timezone','footer','note','width','height','events','city', ...colorFields];
     const checks = ['show_weekdays','accent_today','show_progress_ring','show_week_numbers','quarter_dividers','month_badges','focus_current_month'];
     const els = Object.fromEntries([...fields, ...checks].map(id => [id, document.getElementById(id)]));
@@ -295,7 +304,9 @@
         if(code >= 71 && code <= 77) icon = '❄️';
         if(code >= 80 && code <= 82) icon = '🌦️';
         if(code >= 95) icon = '⛈️';
-        return { temp: temp > 0 ? `+${temp}` : temp, icon };
+        const place = geoData.results[0];
+        const cityLabel = [place.name, place.admin1 || place.country].filter(Boolean).slice(0,2).join(', ');
+        return { temp: temp > 0 ? `+${temp}` : temp, icon, cityLabel };
       } catch(e) { return null; }
     }
 
@@ -345,7 +356,7 @@
         themeObj: q.get('theme') === 'custom_palette' 
           ? { bg:q.get('c_bg'), panel:q.get('c_panel'), text:q.get('c_text'), muted:q.get('c_muted'), accent:q.get('c_accent'), accent2:q.get('c_accent2'), weekend:q.get('c_weekend') }
           : (window.Engine.THEMES[q.get('theme')] || window.Engine.THEMES.graphite_orange),
-        fontFamily: optionsCache.fonts[q.get('font')] || 'Inter',
+        fontFamily: (optionsCache.fontFamilies && optionsCache.fontFamilies[q.get('font')]) || 'Inter',
         style: q.get('style') || 'numbers', monthLayout: q.get('month_layout') || 'grid_3x4',
         weekendMode: q.get('weekend_mode') || 'weekends_only', bgStyle: q.get('bg_style') || 'mesh_organic',
         lang: q.get('lang') || 'ru', timezone: Number(q.get('timezone')) || 3,

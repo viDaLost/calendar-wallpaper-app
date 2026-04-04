@@ -88,6 +88,40 @@
     return { dayOfYear, daysInYear, daysLeft: daysInYear - dayOfYear, percentPassed: Math.round((dayOfYear / daysInYear) * 100) };
   }
 
+  function findNearestEvent(cfg, now, labels) {
+    if (!cfg.eventsMap) return null;
+    let best = null;
+    for (const [mmdd, title] of Object.entries(cfg.eventsMap)) {
+      const [m, d] = mmdd.split('-').map(Number);
+      let candidate = now.year(now.year()).month(m - 1).date(d).hour(12).minute(0).second(0);
+      if (candidate.isBefore(now, 'day')) candidate = candidate.add(1, 'year');
+      const diff = candidate.startOf('day').diff(now.startOf('day'), 'day');
+      if (!best || diff < best.diff) {
+        best = { title, diff, date: candidate, label: `${d} ${labels.months[m - 1].toLowerCase?.() || labels.months[m - 1]}` };
+      }
+    }
+    return best;
+  }
+
+  function getSeasonLabel(lang, monthIndex) {
+    if (lang === 'ru') {
+      if ([11,0,1].includes(monthIndex)) return 'Зима';
+      if ([2,3,4].includes(monthIndex)) return 'Весна';
+      if ([5,6,7].includes(monthIndex)) return 'Лето';
+      return 'Осень';
+    }
+    if ([11,0,1].includes(monthIndex)) return 'Winter';
+    if ([2,3,4].includes(monthIndex)) return 'Spring';
+    if ([5,6,7].includes(monthIndex)) return 'Summer';
+    return 'Autumn';
+  }
+
+  function weatherSummary(cfg, lang) {
+    if (!cfg.weatherData) return lang === 'ru' ? 'Погода не выбрана' : 'No city weather';
+    return `${cfg.weatherData.icon} ${cfg.weatherData.temp}°C · ${cfg.weatherData.cityLabel || ''}`.trim();
+  }
+
+
   function renderBackground(cfg, theme, width, height) {
     const bgType = cfg.bgStyle;
     const proceduralFilters = `
@@ -166,51 +200,41 @@
     };
   }
 
-  // --- ОБНОВЛЕННЫЙ HEADER С ГОДОМ ПОСЕРЕДИНЕ ---
+  // --- HEADER ---
   function renderHeader(cfg, theme, labels, now, stats, width, padding, topY, FONT) {
-    const titleSize = Math.round(width * 0.045);
     const subtitleSize = Math.round(width * 0.033);
     const chipWidth = Math.round(width * 0.23);
     const chipHeight = Math.round(width * 0.07);
     const ringR = Math.round(width * 0.035);
-    
-    // Новые настройки выравнивания
     const yearSize = Math.round(width * 0.075);
     const yearY = topY + yearSize;
-    
     const dateText = cfg.lang === 'ru' ? `${labels.today}: ${now.date()} ${labels.months[now.month()].toLowerCase()}` : `${labels.today}: ${labels.months[now.month()]} ${now.date()}`;
-
-    // Погода (Справа)
-    let weatherSvg = '';
-    if (cfg.weatherData) {
-      weatherSvg = `<text x="${width - padding}" y="${yearY - yearSize * 0.4}" text-anchor="end" fill="${theme.text}" font-size="${subtitleSize * 1.5}" font-family="${FONT}" font-weight="700">${cfg.weatherData.temp}°C ${cfg.weatherData.icon}</text>`;
-    }
-
-    // Год всегда посередине экрана
-    const yearSvg = `<text x="${width / 2}" y="${yearY}" text-anchor="middle" fill="${theme.text}" font-size="${yearSize}" font-family="${FONT}" font-weight="900" letter-spacing="-0.03em">${now.year()}</text>`;
-
-    // Дата и Бейдж недель (Слева)
     const leftTextY = yearY - yearSize * 0.45;
     const badgeY = yearY - yearSize * 0.15;
-    
+
+    const yearSvg = `<text x="${width / 2}" y="${yearY}" text-anchor="middle" fill="${theme.text}" font-size="${yearSize}" font-family="${FONT}" font-weight="900" letter-spacing="-0.03em">${now.year()}</text>`;
     const todaySvg = `<text x="${padding}" y="${leftTextY}" fill="${theme.muted}" font-size="${subtitleSize}" font-family="${FONT}">${escapeXml(dateText)}</text>`;
     const badgeSvg = `
       <rect x="${padding}" y="${badgeY}" width="${chipWidth}" height="${chipHeight}" rx="${chipHeight / 2}" fill="${alpha(theme.panel, 0.92)}" stroke="${alpha(theme.accent2, 0.22)}"/>
       <text x="${padding + chipWidth / 2}" y="${badgeY + chipHeight * 0.66}" text-anchor="middle" fill="${theme.accent2}" font-size="${Math.round(width * 0.024)}" font-family="${FONT}" font-weight="700">${labels.week} ${now.week()}</text>`;
 
-    // Прогресс-кольцо (Справа), если нет погоды
-    let ringSvg = '';
-    if (cfg.showProgressRing && !cfg.weatherData && stats) {
+    let rightSvg = '';
+    if (cfg.weatherData) {
+      const weatherX = width - padding;
+      const weatherY = yearY - yearSize * 0.42;
+      const cityLineY = weatherY + subtitleSize * 1.18;
+      rightSvg += `<text x="${weatherX}" y="${weatherY}" text-anchor="end" fill="${theme.text}" font-size="${subtitleSize * 1.5}" font-family="${FONT}" font-weight="700">${cfg.weatherData.temp}°C ${cfg.weatherData.icon}</text>`;
+      if (cfg.weatherData.cityLabel) rightSvg += `<text x="${weatherX}" y="${cityLineY}" text-anchor="end" fill="${theme.muted}" font-size="${Math.round(subtitleSize * 0.92)}" font-family="${FONT}" font-weight="600">${escapeXml(cfg.weatherData.cityLabel)}</text>`;
+    } else if (cfg.showProgressRing && stats) {
       const ringCx = width - padding - ringR;
       const ringCy = yearY - yearSize * 0.25;
       const dash = (Math.PI * 2 * ringR) * (stats.percentPassed / 100);
-      ringSvg = `
+      rightSvg += `
         <circle cx="${ringCx}" cy="${ringCy}" r="${ringR}" fill="none" stroke="${alpha(theme.panel, 0.92)}" stroke-width="${ringR * 0.28}" />
         <circle cx="${ringCx}" cy="${ringCy}" r="${ringR}" fill="none" stroke="${theme.accent}" stroke-width="${ringR * 0.28}" stroke-linecap="round" stroke-dasharray="${dash} ${Math.PI * 2 * ringR}" transform="rotate(-90 ${ringCx} ${ringCy})" />
         <text x="${ringCx}" y="${ringCy + width * 0.008}" text-anchor="middle" fill="${theme.text}" font-size="${Math.round(width * 0.02)}" font-family="${FONT}" font-weight="800">${stats.percentPassed}%</text>`;
     }
-
-    return yearSvg + todaySvg + badgeSvg + weatherSvg + ringSvg;
+    return yearSvg + todaySvg + badgeSvg + rightSvg;
   }
 
   function isRestDayFactory(cfg, year, dayjsInst) {
@@ -281,11 +305,11 @@
       const isCustomEvent = cfg.eventsMap && cfg.eventsMap[mmdd];
 
       let textColor = isToday ? theme.text : isWeekend ? theme.weekend : isPast ? alpha(theme.text, 0.6) : theme.text;
-      if (isCustomEvent && !isToday) textColor = theme.accent;
+      const eventColor = cfg.eventColor || theme.accent;
+      if (isCustomEvent && !isToday) textColor = eventColor;
 
-      // Улучшенное выделение пользовательского события
       if (isCustomEvent) {
-        out += `<rect x="${cx - cellW * 0.35}" y="${cy - cellHReal * 0.6}" width="${cellW * 0.7}" height="${cellHReal * 0.75}" rx="${Math.min(cellW, cellHReal) * 0.2}" fill="${alpha(theme.accent, 0.15)}"/>`;
+        out += `<rect x="${cx - cellW * 0.35}" y="${cy - cellHReal * 0.6}" width="${cellW * 0.7}" height="${cellHReal * 0.75}" rx="${Math.min(cellW, cellHReal) * 0.2}" fill="${alpha(eventColor, 0.18)}" stroke="${alpha(eventColor, 0.34)}"/>`;
       }
 
       if (isToday) {
@@ -312,10 +336,6 @@
         out += `<text x="${cx}" y="${cy}" text-anchor="middle" fill="${textColor}" font-size="${numSize}" font-family="${FONT}" font-weight="${isToday ? 800 : 600}">${day}</text>`;
       }
 
-      // Маркер события
-      if (isCustomEvent) {
-        out += `<circle cx="${cx}" cy="${cy + cellHReal * 0.26}" r="${Math.max(2.5, w*0.012)}" fill="${theme.accent}"/>`;
-      }
     }
     if (weekNumberCol) {
       [...usedWeekRows].forEach((row) => {
@@ -365,16 +385,16 @@
       const isCustomEvent = cfg.eventsMap && cfg.eventsMap[mmdd];
 
       let textColor = isToday ? theme.text : isRestDay(date) ? theme.weekend : isPast ? alpha(theme.text, 0.64) : theme.text;
-      if (isCustomEvent && !isToday) textColor = theme.accent;
+      const eventColor = cfg.eventColor || theme.accent;
+      if (isCustomEvent && !isToday) textColor = eventColor;
 
-      if (isCustomEvent) out += `<rect x="${cx - cellW * 0.35}" y="${cy - cellH * 0.65}" width="${cellW * 0.7}" height="${cellH * 0.75}" rx="${Math.min(cellW, cellH) * 0.2}" fill="${alpha(theme.accent, 0.15)}"/>`;
+      if (isCustomEvent) out += `<rect x="${cx - cellW * 0.35}" y="${cy - cellH * 0.65}" width="${cellW * 0.7}" height="${cellH * 0.75}" rx="${Math.min(cellW, cellH) * 0.2}" fill="${alpha(eventColor, 0.18)}" stroke="${alpha(eventColor, 0.34)}"/>`;
 
       if (isToday) out += `<rect x="${cx - cellW * 0.34}" y="${cy - cellH * 0.58}" width="${cellW * 0.68}" height="${cellH * 0.72}" rx="${Math.min(cellW, cellH) * 0.22}" fill="${alpha(theme.accent, 0.24)}" stroke="${alpha(theme.accent2, 0.28)}"/>`;
       if (cfg.style === 'dots' || cfg.style === 'micro') out += `<circle cx="${cx}" cy="${cy - cellH * 0.24}" r="${Math.max(1.1, Math.min(cellW, cellH) * 0.08)}" fill="${isToday ? theme.accent : isRestDay(date) ? theme.weekend : alpha(theme.text, 0.22)}"/>`;
       
       out += `<text x="${cx}" y="${cy + (cfg.style === 'dots' || cfg.style === 'micro' ? cellH * 0.18 : 0)}" text-anchor="middle" fill="${textColor}" font-size="${numberSize}" font-family="${FONT}" font-weight="${isToday ? 800 : 600}">${day}</text>`;
       
-      if (isCustomEvent) out += `<circle cx="${cx}" cy="${cy + cellH * 0.25}" r="${Math.max(1.5, w*0.010)}" fill="${theme.accent}"/>`;
     }
     return out;
   }
@@ -385,6 +405,7 @@
     const base = `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${Math.round(w * 0.05)}" fill="${alpha(theme.panel, 0.82)}" stroke="${alpha('#ffffff', 0.06)}"/>`;
     const textSize = Math.round(h * 0.22);
     const subSize = Math.round(h * 0.15);
+    const nextEvent = findNearestEvent(cfg, now, labels);
     
     if (cfg.footer === 'quote') {
       const lines = wrap(cfg.note || randomQuote(cfg.lang, now.year()), 34);
@@ -397,6 +418,23 @@
     if (cfg.footer === 'today_card') {
       const dateLabel = cfg.lang === 'ru' ? `${labels.weekdaysFull[(now.day() + 6) % 7]}, ${now.date()} ${labels.months[now.month()].toLowerCase()}` : `${labels.weekdaysFull[(now.day() + 6) % 7]}, ${labels.months[now.month()]} ${now.date()}`;
       return base + `<text x="${x + pad}" y="${y + h * 0.34}" fill="${theme.accent2}" font-size="${subSize}" font-family="${FONT}" font-weight="700">${labels.today}</text><text x="${x + pad}" y="${y + h * 0.68}" fill="${theme.text}" font-size="${textSize}" font-family="${FONT}" font-weight="800">${escapeXml(dateLabel)}</text>`;
+    }
+    if (cfg.footer === 'next_event') {
+      const title = nextEvent ? nextEvent.title : (cfg.lang === 'ru' ? 'События не добавлены' : 'No events added');
+      const meta = nextEvent ? (cfg.lang === 'ru' ? `Через ${nextEvent.diff} дн. · ${nextEvent.label}` : `In ${nextEvent.diff} days · ${nextEvent.label}`) : weatherSummary(cfg, cfg.lang);
+      return base + `<text x="${x + pad}" y="${y + h * 0.32}" fill="${theme.accent2}" font-size="${subSize}" font-family="${FONT}" font-weight="700">${cfg.lang === 'ru' ? 'Ближайший ориентир' : 'Next marker'}</text><text x="${x + pad}" y="${y + h * 0.62}" fill="${theme.text}" font-size="${textSize}" font-family="${FONT}" font-weight="800">${escapeXml(title)}</text><text x="${x + pad}" y="${y + h * 0.82}" fill="${theme.muted}" font-size="${subSize}" font-family="${FONT}" font-weight="600">${escapeXml(meta)}</text>`;
+    }
+    if (cfg.footer === 'seasonal_focus') {
+      const season = getSeasonLabel(cfg.lang, now.month());
+      const detail = cfg.lang === 'ru' ? `${season} · ${stats.daysLeft} дн. до конца года` : `${season} · ${stats.daysLeft} days left this year`;
+      const focusText = cfg.note || (cfg.lang === 'ru' ? 'Спокойный темп, ясный фокус, один главный приоритет.' : 'Calm pace, clear focus, one main priority.');
+      const lines = wrap(focusText, 48).slice(0, 2);
+      return base + `<text x="${x + pad}" y="${y + h * 0.26}" fill="${theme.accent2}" font-size="${subSize}" font-family="${FONT}" font-weight="700">${cfg.lang === 'ru' ? 'Сезонный режим' : 'Season mode'}</text><text x="${x + pad}" y="${y + h * 0.5}" fill="${theme.text}" font-size="${textSize}" font-family="${FONT}" font-weight="800">${escapeXml(detail)}</text>${lines.map((line, i) => `<text x="${x + pad}" y="${y + h * 0.72 + i * subSize * 1.4}" fill="${theme.muted}" font-size="${subSize}" font-family="${FONT}" font-weight="600">${escapeXml(line)}</text>`).join('')}`;
+    }
+    if (cfg.footer === 'weather_strip') {
+      const weatherLine = weatherSummary(cfg, cfg.lang);
+      const tzLine = `UTC${cfg.timezone >= 0 ? '+' + cfg.timezone : cfg.timezone} · ${labels.months[now.month()]} ${now.date()}`;
+      return base + `<text x="${x + pad}" y="${y + h * 0.34}" fill="${theme.accent2}" font-size="${subSize}" font-family="${FONT}" font-weight="700">${cfg.lang === 'ru' ? 'Сводка среды' : 'Ambient summary'}</text><text x="${x + pad}" y="${y + h * 0.62}" fill="${theme.text}" font-size="${textSize}" font-family="${FONT}" font-weight="800">${escapeXml(weatherLine)}</text><text x="${x + pad}" y="${y + h * 0.82}" fill="${theme.muted}" font-size="${subSize}" font-family="${FONT}" font-weight="600">${escapeXml(tzLine)}</text>`;
     }
     if (cfg.footer === 'custom_note' && cfg.note) {
       const lines = wrap(cfg.note, 36).slice(0, 2);
@@ -418,8 +456,8 @@
     const padBottom = height - (cfg.lockscreenSafe ? Math.round(height * 0.105 + width * 0.03) : padSide);
     
     // Безопасный фоллбек шрифта для облачных платформ (Arial/sans-serif)
-    const FONT_FAMILY = `'${cfg.fontFamily}','DejaVu Sans','Arial',sans-serif`;
-    const fontDefs = b64FontStr ? `<style>@font-face { font-family: '${cfg.fontFamily}'; src: url(data:font/truetype;base64,${b64FontStr}) format('truetype'); font-weight: 100 900; } text, tspan { font-family: ${FONT_FAMILY}; }</style>` : '';
+    const FONT_FAMILY = `'${cfg.fontFamily}','Inter','Helvetica','Arial','DejaVu Sans',sans-serif`;
+    const fontDefs = b64FontStr ? `<style>@font-face { font-family: '${cfg.fontFamily}'; src: url(data:font/ttf;base64,${b64FontStr}) format('truetype'); font-style: normal; font-weight: 400; } text, tspan { font-family: ${FONT_FAMILY}; text-rendering: geometricPrecision; }</style>` : `<style>text, tspan { font-family: ${FONT_FAMILY}; text-rendering: geometricPrecision; }</style>`;
 
     const listLike = isListLayout(cfg.monthLayout);
     const compactLike = isCompactGridLayout(cfg.monthLayout) || listLike;
