@@ -1,6 +1,8 @@
 const express = require('express');
 const path = require('path');
 const sharp = require('sharp');
+let Resvg = null;
+try { ({ Resvg } = require('@resvg/resvg-js')); } catch (e) { /* optional fallback */ }
 const dayjs = require('dayjs');
 const utc = require('dayjs/plugin/utc');
 const isLeapYear = require('dayjs/plugin/isLeapYear');
@@ -589,7 +591,28 @@ app.get('/wallpaper.png', async (req, res) => {
   try {
     const cfg = getConfig(req.query);
     const svg = renderSvg(cfg);
-    const png = await sharp(Buffer.from(svg)).png().toBuffer();
+    let png;
+
+    if (Resvg) {
+      const fontFiles = Object.values(FONTS)
+        .map((fontDef) => path.join(fontsDir, fontDef.file))
+        .filter((fontPath) => fs.existsSync(fontPath));
+
+      const selectedFontDef = FONTS[cfg.font] || FONTS.inter;
+      const resvg = new Resvg(svg, {
+        fitTo: { mode: 'width', value: cfg.width },
+        background: 'rgba(0,0,0,0)',
+        font: {
+          loadSystemFonts: true,
+          defaultFontFamily: selectedFontDef.family,
+          fontFiles,
+        },
+      });
+      png = Buffer.from(resvg.render().asPng());
+    } else {
+      png = await sharp(Buffer.from(svg)).png().toBuffer();
+    }
+
     res.setHeader('Content-Type', 'image/png');
     res.send(png);
   } catch (err) {
