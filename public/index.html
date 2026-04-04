@@ -117,8 +117,8 @@
 <body>
   <div class="app">
     <section class="hero">
-      <h1>Wallpaper Calendar Pro v2</h1>
-      <p>Сгенерируй идеальные обои-календарь для смартфона с поддержкой 10 красивых шрифтов и множеством тем.</p>
+      <h1>Wallpaper Calendar Pro v3</h1>
+      <p>Более аккуратные обои-календарь для iPhone: новые темы, более глубокие фоны, улучшенный режим 1 колонки и расширенный список моделей вплоть до линейки iPhone 17.</p>
     </section>
 
     <div class="layout">
@@ -144,9 +144,12 @@
               <label for="style">Стиль дат</label>
               <select id="style">
                 <option value="numbers">Только цифры</option>
-                <option value="dots">С точками</option>
+                <option value="dots">Точки + цифры</option>
                 <option value="outline">Контур сегодня</option>
                 <option value="focus">Акцент на месяце</option>
+                <option value="capsule">Капсулы</option>
+                <option value="ring">Кольцо у даты</option>
+                <option value="micro">Минимализм</option>
               </select>
             </div>
             <div class="field">
@@ -170,7 +173,7 @@
               <select id="month_layout">
                 <option value="grid_3x4">3 колонки × 4 ряда</option>
                 <option value="grid_4x3">4 колонки × 3 ряда</option>
-                <option value="list_1x12">1 колонка (список)</option>
+                <option value="list_1x12">1 колонка (аккуратный список)</option>
               </select>
             </div>
             <div class="field">
@@ -252,34 +255,19 @@
           <button class="ok" id="savePresetBtn">Сохранить пресет</button>
           <button class="ghost" id="openPngBtn">Открыть PNG</button>
           <button class="ghost" id="openSvgBtn">Открыть SVG</button>
-          <button class="accent" id="copyPngUrlBtn">Скопировать PNG‑ссылку</button>
-          <button class="ghost" id="copyLinkBtn">Скопировать ссылку на конфиг</button>
+          <button class="ghost" id="copyLinkBtn">Скопировать ссылку</button>
           <button class="ghost" id="randomBtn">Случайный стиль</button>
           <button class="ghost" id="resetBtn">Сбросить</button>
         </div>
 
-        <details class="guide" style="margin-top:10px" open>
-          <summary class="group-title" style="margin-bottom:0; font-size:14px; color:#fff; cursor:pointer;">Автообновление на iPhone через Команды</summary>
-          <ol>
-            <li>Открой <strong>Команды</strong> → <strong>Автоматизация</strong> → <strong>Новая автоматизация</strong> → <strong>Время суток</strong>.</li>
-            <li>Выбери удобное время, например <strong>06:00</strong>, режим <strong>Ежедневно</strong> и включи <strong>Запускать немедленно</strong>.</li>
-            <li>Создай быструю команду и добавь действия: <strong>Получить содержимое URL</strong> → <strong>Установить фото как обои</strong>.</li>
-            <li>Нажми выше <strong>Скопировать PNG‑ссылку</strong> и вставь её в действие <strong>Получить содержимое URL</strong>.</li>
-            <li>В действии <strong>Установить фото как обои</strong> выбери <strong>Экран блокировки</strong> и выключи <strong>Показать предпросмотр</strong> и <strong>Обрезать до объекта</strong>.</li>
-            <li>После этого дата и выделение текущего дня будут обновляться автоматически каждый день по этой PNG‑ссылке.</li>
-          </ol>
-          <div class="footer-note" style="margin-top:10px">Ниже показывается именно та PNG‑ссылка, которую нужно вставить в Команды.</div>
-          <div class="url-box" style="margin-top:10px"><div class="mono" id="pngUrlBox">—</div></div>
-        </details>
-
         <details class="guide" style="margin-top:10px">
-          <summary class="group-title" style="margin-bottom:0; font-size:14px; color:#fff; cursor:pointer;">Как поставить вручную на экран блокировки</summary>
+          <summary class="group-title" style="margin-bottom:0; font-size:14px; color:#fff; cursor:pointer;">Как добавить на iPhone</summary>
           <ol>
-            <li>Нажми <strong>Скачать PNG обои</strong>.</li>
-            <li>Сохрани картинку в <strong>Фото</strong>.</li>
-            <li>Удерживай палец на экране блокировки.</li>
-            <li>Нажми <strong>+</strong> → выбери <strong>Фото</strong>.</li>
-            <li>Выбери сохранённые обои и при необходимости отключи глубину/эффекты.</li>
+            <li>Нажми «Скачать PNG обои» или «Открыть PNG».</li>
+            <li>Сохрани картинку в «Фото».</li>
+            <li>На iPhone удерживай экран блокировки и нажми «Настроить» или «+».</li>
+            <li>Выбери «Фото» и укажи сохранённые обои.</li>
+            <li>Для автообновления используй PNG‑ссылку в приложении «Команды»: Получить содержимое URL → Сохранить в Фото → Установить фото как обои.</li>
           </ol>
         </details>
       </aside>
@@ -302,7 +290,7 @@
 
   <script>
     const defaults = {
-      model:'iphone_15', font:'inter', style:'numbers', theme:'graphite_orange', bg_style:'aurora',
+      model:'iphone_17_pro', font:'inter', style:'numbers', theme:'graphite_orange', bg_style:'aurora',
       calendar_size:'balanced', month_layout:'grid_3x4', opacity:'8', weekend_mode:'weekends_only',
       lang:'ru', timezone:'3', footer:'year_summary', note:'', width:'1179', height:'2556',
       show_weekdays:true, accent_today:true, show_progress_ring:true, show_week_numbers:false,
@@ -315,7 +303,6 @@
     const preview = document.getElementById('preview');
     const presetsContainer = document.getElementById('presetsContainer');
     const sizeLabel = document.getElementById('sizeLabel');
-    const pngUrlBox = document.getElementById('pngUrlBox');
     
     let optionsCache = null;
 
@@ -353,18 +340,16 @@
       const png = `${location.origin}/wallpaper.png?${q.toString()}`;
       const svg = `${location.origin}/wallpaper.svg?${q.toString()}`;
       const page = `${location.origin}/?${q.toString()}`;
-      preview.src = `${png}&_ts=${Date.now()}`;
+      preview.src = `${svg}&_ts=${Date.now()}`;
       if(push) history.replaceState({}, '', page);
 
-      pngUrlBox.textContent = png;
       document.getElementById('openPngBtn').onclick = () => window.open(png, '_blank');
       document.getElementById('openSvgBtn').onclick = () => window.open(svg, '_blank');
       
       document.getElementById('downloadBtn').onclick = () => {
         const a = document.createElement('a'); a.href = png; a.download = 'calendar.png'; a.click();
       };
-      document.getElementById('copyPngUrlBtn').onclick = async () => { await navigator.clipboard.writeText(png); alert('PNG‑ссылка скопирована!'); };
-      document.getElementById('copyLinkBtn').onclick = async () => { await navigator.clipboard.writeText(page); alert('Ссылка на конфиг скопирована!'); };
+      document.getElementById('copyLinkBtn').onclick = async () => { await navigator.clipboard.writeText(page); alert('Ссылка скопирована!'); };
     }
 
     function fillDefaults(){
@@ -408,7 +393,7 @@
     document.getElementById('randomBtn').addEventListener('click', () => {
       const r = o => Object.keys(o)[Math.floor(Math.random() * Object.keys(o).length)];
       els.theme.value = r(optionsCache.themes); els.bg_style.value = r(optionsCache.bgStyles);
-      els.font.value = r(optionsCache.fonts); els.style.value = ['numbers','dots','outline','focus'][Math.floor(Math.random()*4)];
+      els.font.value = r(optionsCache.fonts); els.style.value = ['numbers','dots','outline','focus','capsule','ring','micro'][Math.floor(Math.random()*7)];
       updatePreview();
     });
 
