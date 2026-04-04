@@ -82,6 +82,11 @@ function normalizeCityLabel(city) {
   return String(city || '').split(',')[0].trim();
 }
 
+
+function getDefaultFontBuffer() {
+  return getFontBuffer('inter') || getFontBuffer('ubuntu') || getFontBuffer('montserrat') || null;
+}
+
 async function fetchJsonWithTimeout(url, timeoutMs = 2500) {
   const controller = new AbortController();
   const t = setTimeout(() => controller.abort(), timeoutMs);
@@ -204,6 +209,7 @@ app.get('/wallpaper.png', async (req, res) => {
     
     // Запрашиваем погоду по городу (если указан)
     cfg.weatherData = await fetchWeatherByCity(cfg.city);
+    if (cfg.weatherData && cfg.weatherData.dayWeather) cfg.dayWeather = cfg.weatherData.dayWeather;
 
     const b64Font = fontCache[req.query.font || 'inter'];
     const svg = Engine.renderSvg(cfg, dayjs, b64Font);
@@ -220,14 +226,14 @@ app.get('/wallpaper.png', async (req, res) => {
         fitTo: { mode: 'original' },
         font: {
           fontBuffers,
-          loadSystemFonts: true,
-          defaultFontFamily: 'Inter',
+          loadSystemFonts: false,
+          defaultFontFamily: 'AppFont',
         }
       });
       png = resvg.render().asPng();
     } catch (renderErr) {
-      console.error('Resvg Error, falling back to sharp:', renderErr);
-      png = await sharp(Buffer.from(svg), { density: 300 }).png().toBuffer();
+      console.error('Resvg render error:', renderErr);
+      throw renderErr;
     }
 
     if (pngCache.size < 1000) pngCache.set(cacheKey, png);
