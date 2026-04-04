@@ -1,7 +1,5 @@
 const express = require('express');
 const path = require('path');
-let sharp = null;
-try { sharp = require('sharp'); } catch (_) {}
 const { Resvg } = require('@resvg/resvg-js');
 const dayjs = require('dayjs');
 const utc = require('dayjs/plugin/utc');
@@ -74,8 +72,27 @@ if (fs.existsSync(fontsDir)) {
   }
 }
 
-// Локальный буфер шрифта по умолчанию: без внешних запросов, чтобы серверless не падал
-const defaultFontBuffer = fontCache.inter ? Buffer.from(fontCache.inter, 'base64') : null;
+
+
+function buildFontPayload(fontKey) {
+  return {
+    selected: fontCache[fontKey] || fontCache.inter || '',
+    inter: fontCache.inter || '',
+    ubuntu: fontCache.ubuntu || ''
+  };
+}
+
+function buildResvgFontBuffers(fontKey) {
+  const keys = [fontKey, 'inter', 'ubuntu'];
+  const seen = new Set();
+  const buffers = [];
+  for (const key of keys) {
+    if (!key || seen.has(key) || !fontCache[key]) continue;
+    seen.add(key);
+    buffers.push(Buffer.from(fontCache[key], 'base64'));
+  }
+  return buffers;
+}
 
 async function fetchJsonWithTimeout(url, timeoutMs = 2200) {
   const controller = new AbortController();
@@ -197,7 +214,7 @@ app.get('/wallpaper.svg', async (req, res) => {
   try {
     if (cfg.city) cfg.weatherData = await fetchWeatherByCity(cfg.city);
   } catch (_) {}
-  res.type('image/svg+xml').send(Engine.renderSvg(cfg, dayjs, fontCache[req.query.font || 'inter']));
+  res.type('image/svg+xml').send(Engine.renderSvg(cfg, dayjs, buildFontPayload(req.query.font || 'inter')));
 });
 
 app.get('/wallpaper.png', async (req, res) => {
@@ -214,36 +231,19 @@ app.get('/wallpaper.png', async (req, res) => {
     // Запрашиваем погоду по городу (если указан)
     cfg.weatherData = await fetchWeatherByCity(cfg.city);
 
-    const b64Font = fontCache[req.query.font || 'inter'];
-    const svg = Engine.renderSvg(cfg, dayjs, b64Font);
+    const fontKey = req.query.font || 'inter';
+    const svg = Engine.renderSvg(cfg, dayjs, buildFontPayload(fontKey));
+    const fontBuffers = buildResvgFontBuffers(fontKey);
 
-    // Только локальные шрифты: никаких внешних запросов во время рендера
-    const fontBuffers = [];
-    if (b64Font) fontBuffers.push(Buffer.from(b64Font, 'base64'));
-    if (defaultFontBuffer) fontBuffers.push(defaultFontBuffer);
-
-    const allFontBuffers = fontBuffers.length ? fontBuffers : (defaultFontBuffer ? [defaultFontBuffer] : []);
-
-    let png;
-    if (sharp) {
-      try {
-        png = await sharp(Buffer.from(svg), { density: 320 }).png().toBuffer();
-      } catch (sharpErr) {
-        console.error('Sharp SVG render error, switching to Resvg:', sharpErr);
+    const resvg = new Resvg(svg, {
+      fitTo: { mode: 'original' },
+      font: {
+        fontBuffers,
+        loadSystemFonts: false,
+        defaultFontFamily: 'Ubuntu',
       }
-    }
-
-    if (!png) {
-      const resvg = new Resvg(svg, {
-        fitTo: { mode: 'original' },
-        font: {
-          fontBuffers: allFontBuffers,
-          loadSystemFonts: false,
-          defaultFontFamily: 'Arial',
-        }
-      });
-      png = Buffer.from(resvg.render().asPng());
-    }
+    });
+    const png = Buffer.from(resvg.render().asPng());
 
     if (pngCache.size < 1000) pngCache.set(cacheKey, png);
     res.setHeader('Content-Type', 'image/png');
