@@ -92,17 +92,18 @@ const THEMES = {
 const BG_STYLES = {
   aurora: 'Аврора (Aurora)',
   liquid_glass: 'Жидкое стекло (Glass)',
-  paper: 'Бумага (Paper)',
+  paper: 'Пергамент / Бумага (Paper)',
+  stone: 'Камень / Бетон (Stone)',
+  metal: 'Шлифованный металл (Metal)',
   spotlight: 'Прожектор (Spotlight)',
   waves: 'Мягкие волны (Waves)',
   noir: 'Нуар (Noir)',
-  mesh: 'Глубокая сетка (Mesh)',
+  carbon: 'Карбон / Сетка (Carbon)',
   topography: 'Топография (Topography)',
   bloom: 'Сияние (Bloom)',
-  diagonal: 'Диагональные лучи',
+  diagonal: 'Динамика лучей (Diagonal)',
   orbit: 'Орбиты (Orbit)',
   velvet: 'Бархат (Velvet)',
-  grain_light: 'Светлое зерно (Grain)',
   static_noise: 'Шум эфира (Noise)'
 };
 
@@ -181,9 +182,11 @@ function getConfig(query) {
     themeObj = THEMES[query.theme] || THEMES.graphite_orange;
   }
 
-  // Fallback для старых названий фонов
+  // Fallbacks для старых названий
   let rawBg = query.bg_style || 'aurora';
   if(rawBg === 'glass') rawBg = 'liquid_glass';
+  if(rawBg === 'mesh') rawBg = 'carbon';
+  if(rawBg === 'grain_light') rawBg = 'paper';
 
   return {
     model: query.model || 'iphone_15',
@@ -255,143 +258,217 @@ function formatLongToday(now, labels, lang) {
 }
 
 // --------------------------------------------------------
-// СОВЕРШЕННО НОВЫЙ ДВИЖОК РЕНДЕРА ФОНОВ (БЕЗ ЖЕСТКИХ КРУГОВ)
+// ДВИЖОК РЕАЛИСТИЧНЫХ ТЕКСТУР (ПРОЦЕДУРНЫЙ SVG)
 // --------------------------------------------------------
 function renderBackground(cfg, theme, width, height) {
   const bgType = cfg.bgStyle;
-  const panelAlpha = alpha(theme.panel, 0.4);
 
-  // Универсальный паттерн "Зерно" для обеспечения шума без фильтров (совместим с Resvg)
-  const grainDef = `
-    <pattern id="dot_grain" width="4" height="4" patternUnits="userSpaceOnUse">
-      <rect width="1" height="1" fill="${alpha(theme.text, 0.06)}" x="0" y="0"/>
-      <rect width="1" height="1" fill="${alpha(theme.text, 0.03)}" x="2" y="2"/>
-    </pattern>`;
+  // Базовые фильтры процедурного шума (совместимы с Resvg)
+  // Мы используем feColorMatrix для конвертации фрактального шума в точные карты прозрачности.
+  const proceduralFilters = `
+    <filter id="tex_paper" x="0" y="0" width="100%" height="100%">
+      <feTurbulence type="fractalNoise" baseFrequency="0.008" numOctaves="5" result="noise"/>
+      <feColorMatrix type="matrix" values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  1 0 0 0 0" in="noise"/>
+      <feComponentTransfer><feFuncA type="linear" slope="0.12"/></feComponentTransfer>
+    </filter>
 
-  if (bgType === 'paper' || bgType === 'grain_light') {
-    const isLight = bgType === 'grain_light';
-    const bgA = isLight ? '#f3f0ea' : theme.bg;
-    const bgB = isLight ? '#e7e1d8' : alpha(theme.panel, 0.8);
+    <filter id="tex_stone" x="0" y="0" width="100%" height="100%">
+      <feTurbulence type="fractalNoise" baseFrequency="0.02" numOctaves="6" result="noise"/>
+      <feColorMatrix type="matrix" values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  1 0 0 0 0" in="noise"/>
+      <feComponentTransfer><feFuncA type="linear" slope="0.25"/></feComponentTransfer>
+    </filter>
+
+    <filter id="tex_metal" x="0" y="0" width="100%" height="100%">
+      <feTurbulence type="fractalNoise" baseFrequency="0.001 0.4" numOctaves="3" result="noise"/>
+      <feColorMatrix type="matrix" values="0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  1 0 0 0 0" in="noise"/>
+      <feComponentTransfer><feFuncA type="linear" slope="0.15"/></feComponentTransfer>
+    </filter>
+    
+    <filter id="tex_static" x="0" y="0" width="100%" height="100%">
+      <feTurbulence type="fractalNoise" baseFrequency="0.8" numOctaves="2" result="noise"/>
+      <feColorMatrix type="matrix" values="0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  1 0 0 0 0" in="noise"/>
+      <feComponentTransfer><feFuncA type="linear" slope="0.06"/></feComponentTransfer>
+    </filter>
+  `;
+
+  if (bgType === 'paper') {
     return `
       <defs>
-        ${grainDef}
-        <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0%" stop-color="${bgA}" />
-          <stop offset="100%" stop-color="${bgB}" />
-        </linearGradient>
-      </defs>
-      <rect width="100%" height="100%" fill="url(#bg)"/>
-      <rect width="100%" height="100%" fill="url(#dot_grain)"/>`;
-  }
-
-  if (bgType === 'static_noise') {
-    return `
-      <defs>
-        ${grainDef}
-        <radialGradient id="vignette_noise" cx="50%" cy="50%" r="75%">
+        ${proceduralFilters}
+        <linearGradient id="p_grad" x1="0" y1="0" x2="1" y2="1">
           <stop offset="0%" stop-color="${theme.bg}"/>
-          <stop offset="100%" stop-color="${alpha(theme.panel, 0.95)}"/>
+          <stop offset="100%" stop-color="${alpha(theme.panel, 0.8)}"/>
+        </linearGradient>
+        <radialGradient id="p_vignette" cx="50%" cy="50%" r="75%">
+          <stop offset="60%" stop-color="#000000" stop-opacity="0"/>
+          <stop offset="100%" stop-color="#000000" stop-opacity="0.25"/>
         </radialGradient>
       </defs>
-      <rect width="100%" height="100%" fill="url(#vignette_noise)"/>
-      <rect width="100%" height="100%" fill="url(#dot_grain)" opacity="1.5"/>`;
+      <rect width="100%" height="100%" fill="url(#p_grad)"/>
+      <rect width="100%" height="100%" filter="url(#tex_paper)"/>
+      <rect width="100%" height="100%" fill="url(#p_vignette)"/>`;
+  }
+
+  if (bgType === 'stone') {
+    return `
+      <defs>
+        ${proceduralFilters}
+        <radialGradient id="s_vignette" cx="50%" cy="50%" r="80%">
+          <stop offset="40%" stop-color="#000000" stop-opacity="0"/>
+          <stop offset="100%" stop-color="#000000" stop-opacity="0.4"/>
+        </radialGradient>
+        <radialGradient id="s_spot1" cx="20%" cy="10%" r="50%">
+          <stop offset="0%" stop-color="${alpha(theme.panel, 0.6)}"/>
+          <stop offset="100%" stop-color="${alpha(theme.panel, 0)}"/>
+        </radialGradient>
+        <radialGradient id="s_spot2" cx="80%" cy="80%" r="60%">
+          <stop offset="0%" stop-color="${alpha(theme.accent, 0.1)}"/>
+          <stop offset="100%" stop-color="${alpha(theme.accent, 0)}"/>
+        </radialGradient>
+      </defs>
+      <rect width="100%" height="100%" fill="${theme.bg}"/>
+      <rect width="100%" height="100%" fill="url(#s_spot1)"/>
+      <rect width="100%" height="100%" fill="url(#s_spot2)"/>
+      <rect width="100%" height="100%" filter="url(#tex_stone)"/>
+      <rect width="100%" height="100%" fill="url(#s_vignette)"/>`;
+  }
+
+  if (bgType === 'metal') {
+    return `
+      <defs>
+        ${proceduralFilters}
+        <linearGradient id="m_base" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" stop-color="${theme.panel}"/>
+          <stop offset="30%" stop-color="${theme.bg}"/>
+          <stop offset="50%" stop-color="${theme.panel}"/>
+          <stop offset="70%" stop-color="${theme.bg}"/>
+          <stop offset="100%" stop-color="${theme.panel}"/>
+        </linearGradient>
+      </defs>
+      <rect width="100%" height="100%" fill="url(#m_base)"/>
+      <rect width="100%" height="100%" filter="url(#tex_metal)"/>
+      <polygon points="0,${height*0.1} ${width},${height*0.55} ${width},${height*0.7} 0,${height*0.25}" fill="${alpha('#ffffff', 0.05)}"/>
+      <linearGradient id="m_shade" x1="0%" y1="0%" x2="100%" y2="0%">
+        <stop offset="0%" stop-color="#000000" stop-opacity="0.3"/>
+        <stop offset="20%" stop-color="#000000" stop-opacity="0"/>
+        <stop offset="80%" stop-color="#000000" stop-opacity="0"/>
+        <stop offset="100%" stop-color="#000000" stop-opacity="0.3"/>
+      </linearGradient>
+      <rect width="100%" height="100%" fill="url(#m_shade)"/>`;
+  }
+
+  if (bgType === 'carbon') {
+    const cs = Math.max(16, Math.round(width * 0.015));
+    return `
+      <defs>
+        <pattern id="carbon_mesh" width="${cs}" height="${cs}" patternUnits="userSpaceOnUse">
+          <rect x="0" y="0" width="${cs/2}" height="${cs/2}" fill="${alpha(theme.panel, 0.7)}"/>
+          <rect x="${cs/2}" y="${cs/2}" width="${cs/2}" height="${cs/2}" fill="${alpha(theme.panel, 0.4)}"/>
+          <rect x="0" y="${cs/2}" width="${cs/2}" height="${cs/2}" fill="${alpha('#000000', 0.3)}"/>
+          <rect x="${cs/2}" y="0" width="${cs/2}" height="${cs/2}" fill="${alpha('#000000', 0.5)}"/>
+        </pattern>
+        <radialGradient id="c_glow" cx="50%" cy="10%" r="80%">
+          <stop offset="0%" stop-color="${alpha(theme.accent, 0.15)}"/>
+          <stop offset="100%" stop-color="${alpha(theme.bg, 0)}"/>
+        </radialGradient>
+        <radialGradient id="c_shade" cx="50%" cy="50%" r="80%">
+          <stop offset="40%" stop-color="#000000" stop-opacity="0"/>
+          <stop offset="100%" stop-color="#000000" stop-opacity="0.5"/>
+        </radialGradient>
+      </defs>
+      <rect width="100%" height="100%" fill="${theme.bg}"/>
+      <rect width="100%" height="100%" fill="url(#carbon_mesh)"/>
+      <rect width="100%" height="100%" fill="url(#c_glow)"/>
+      <rect width="100%" height="100%" fill="url(#c_shade)"/>`;
   }
 
   if (bgType === 'liquid_glass') {
     return `
       <defs>
-        <linearGradient id="glass_base" x1="0%" y1="0%" x2="100%" y2="100%">
-          <stop offset="0%" stop-color="${theme.bg}"/>
-          <stop offset="100%" stop-color="${alpha(theme.panel, 0.9)}"/>
+        ${proceduralFilters}
+        <radialGradient id="g_blob1" cx="15%" cy="15%" r="60%">
+          <stop offset="0%" stop-color="${alpha(theme.accent, 0.35)}"/>
+          <stop offset="100%" stop-color="${alpha(theme.accent, 0)}"/>
+        </radialGradient>
+        <radialGradient id="g_blob2" cx="85%" cy="85%" r="70%">
+          <stop offset="0%" stop-color="${alpha(theme.accent2, 0.25)}"/>
+          <stop offset="100%" stop-color="${alpha(theme.accent2, 0)}"/>
+        </radialGradient>
+        <radialGradient id="g_blob3" cx="60%" cy="30%" r="45%">
+          <stop offset="0%" stop-color="${alpha(theme.panel, 0.9)}"/>
+          <stop offset="100%" stop-color="${alpha(theme.panel, 0)}"/>
+        </radialGradient>
+        <linearGradient id="g_sheen" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0%" stop-color="${alpha('#ffffff', 0.1)}"/>
+          <stop offset="35%" stop-color="${alpha('#ffffff', 0)}"/>
+          <stop offset="65%" stop-color="${alpha('#ffffff', 0)}"/>
+          <stop offset="100%" stop-color="${alpha('#000000', 0.25)}"/>
         </linearGradient>
-        <radialGradient id="g1" cx="15%" cy="10%" r="65%">
-          <stop offset="0%" stop-color="${alpha(theme.accent, 0.25)}"/>
-          <stop offset="50%" stop-color="${alpha(theme.accent, 0.08)}"/>
-          <stop offset="100%" stop-color="${alpha(theme.bg, 0)}"/>
-        </radialGradient>
-        <radialGradient id="g2" cx="85%" cy="90%" r="65%">
-          <stop offset="0%" stop-color="${alpha(theme.accent2, 0.22)}"/>
-          <stop offset="50%" stop-color="${alpha(theme.accent2, 0.07)}"/>
-          <stop offset="100%" stop-color="${alpha(theme.bg, 0)}"/>
-        </radialGradient>
       </defs>
-      <rect width="100%" height="100%" fill="url(#glass_base)"/>
-      <rect width="100%" height="100%" fill="url(#g1)"/>
-      <rect width="100%" height="100%" fill="url(#g2)"/>
-      <polygon points="0,0 ${width},0 0,${height}" fill="${alpha('#ffffff', 0.015)}"/>
-    `;
+      <rect width="100%" height="100%" fill="${theme.bg}"/>
+      <rect width="100%" height="100%" fill="url(#g_blob1)"/>
+      <rect width="100%" height="100%" fill="url(#g_blob2)"/>
+      <rect width="100%" height="100%" fill="url(#g_blob3)"/>
+      <rect width="100%" height="100%" fill="url(#g_sheen)"/>
+      <rect width="100%" height="100%" filter="url(#tex_static)" opacity="0.6"/>`;
   }
 
   if (bgType === 'spotlight') {
     return `
       <defs>
-        <radialGradient id="spot" cx="50%" cy="-5%" r="110%">
-          <stop offset="0%" stop-color="${alpha(theme.accent2, 0.18)}"/>
-          <stop offset="15%" stop-color="${alpha(theme.accent, 0.12)}"/>
-          <stop offset="50%" stop-color="${alpha(theme.bg, 0.95)}"/>
-          <stop offset="100%" stop-color="${theme.bg}"/>
+        <radialGradient id="spot1" cx="50%" cy="0%" r="90%">
+          <stop offset="0%" stop-color="${alpha(theme.accent2, 0.22)}"/>
+          <stop offset="25%" stop-color="${alpha(theme.accent, 0.15)}"/>
+          <stop offset="60%" stop-color="${theme.bg}"/>
         </radialGradient>
       </defs>
-      <rect width="100%" height="100%" fill="url(#spot)"/>`;
+      <rect width="100%" height="100%" fill="${theme.bg}"/>
+      <rect width="100%" height="100%" fill="url(#spot1)"/>`;
   }
 
   if (bgType === 'waves') {
     return `
       <defs>
-        <linearGradient id="w1" x1="0" y1="0" x2="0" y2="1">
-           <stop offset="0%" stop-color="${alpha(theme.accent, 0.12)}"/>
-           <stop offset="100%" stop-color="${alpha(theme.bg, 0)}"/>
-        </linearGradient>
-        <linearGradient id="w2" x1="0" y1="1" x2="0" y2="0">
-           <stop offset="0%" stop-color="${alpha(theme.accent2, 0.08)}"/>
-           <stop offset="100%" stop-color="${alpha(theme.bg, 0)}"/>
-        </linearGradient>
+        ${proceduralFilters}
       </defs>
       <rect width="100%" height="100%" fill="${theme.bg}"/>
-      <path d="M0,${height*0.25} C${width*0.3},${height*0.1} ${width*0.7},${height*0.45} ${width},${height*0.2} L${width},0 L0,0 Z" fill="url(#w1)"/>
-      <path d="M0,${height*0.8} C${width*0.4},${height*0.95} ${width*0.6},${height*0.6} ${width},${height*0.7} L${width},${height} L0,${height} Z" fill="url(#w2)"/>
-      <path d="M0,${height*0.3} C${width*0.25},${height*0.2} ${width*0.8},${height*0.5} ${width},${height*0.25}" fill="none" stroke="${alpha(theme.accent, 0.05)}" stroke-width="${width*0.005}"/>
-    `;
+      <path d="M0,${height*0.25} C${width*0.4},${height*0.05} ${width*0.6},${height*0.45} ${width},${height*0.2} L${width},0 L0,0 Z" fill="${alpha(theme.panel, 0.8)}"/>
+      <path d="M0,${height*0.27} C${width*0.4},${height*0.07} ${width*0.6},${height*0.47} ${width},${height*0.22}" fill="none" stroke="${theme.accent}" stroke-width="2" opacity="0.6"/>
+      <path d="M0,${height*0.75} C${width*0.3},${height*0.95} ${width*0.7},${height*0.6} ${width},${height*0.8} L${width},${height} L0,${height} Z" fill="${alpha(theme.panel, 0.6)}"/>
+      <path d="M0,${height*0.73} C${width*0.3},${height*0.93} ${width*0.7},${height*0.58} ${width},${height*0.78}" fill="none" stroke="${theme.accent2}" stroke-width="1.5" opacity="0.5"/>
+      <rect width="100%" height="100%" filter="url(#tex_static)" opacity="0.3"/>`;
   }
 
   if (bgType === 'topography') {
     return `
-      <rect width="100%" height="100%" fill="${theme.bg}"/>
-      <path d="M -${width*0.2} ${height*0.15} Q ${width*0.3} ${height*0.05}, ${width*0.6} ${height*0.35} T ${width*1.2} ${height*0.25}" fill="none" stroke="${alpha(theme.accent, 0.12)}" stroke-width="2"/>
-      <path d="M -${width*0.2} ${height*0.20} Q ${width*0.3} ${height*0.10}, ${width*0.6} ${height*0.40} T ${width*1.2} ${height*0.30}" fill="none" stroke="${alpha(theme.accent, 0.08)}" stroke-width="1.5"/>
-      <path d="M -${width*0.2} ${height*0.25} Q ${width*0.3} ${height*0.15}, ${width*0.6} ${height*0.45} T ${width*1.2} ${height*0.35}" fill="none" stroke="${alpha(theme.accent, 0.05)}" stroke-width="1"/>
-      
-      <path d="M -${width*0.2} ${height*0.70} Q ${width*0.4} ${height*0.85}, ${width*0.8} ${height*0.60} T ${width*1.2} ${height*0.85}" fill="none" stroke="${alpha(theme.accent2, 0.1)}" stroke-width="2"/>
-      <path d="M -${width*0.2} ${height*0.75} Q ${width*0.4} ${height*0.90}, ${width*0.8} ${height*0.65} T ${width*1.2} ${height*0.90}" fill="none" stroke="${alpha(theme.accent2, 0.06)}" stroke-width="1"/>
-    `;
-  }
-
-  if (bgType === 'mesh') {
-    return `
       <defs>
-        <pattern id="grid" width="${Math.max(40, width*0.05)}" height="${Math.max(40, width*0.05)}" patternUnits="userSpaceOnUse">
-          <line x1="${Math.max(40, width*0.05)}" y1="0" x2="${Math.max(40, width*0.05)}" y2="${Math.max(40, width*0.05)}" stroke="${alpha(theme.accent, 0.06)}" stroke-width="1"/>
-          <line x1="0" y1="${Math.max(40, width*0.05)}" x2="${Math.max(40, width*0.05)}" y2="${Math.max(40, width*0.05)}" stroke="${alpha(theme.accent, 0.06)}" stroke-width="1"/>
-        </pattern>
-        <radialGradient id="fade" cx="50%" cy="50%" r="70%">
-          <stop offset="20%" stop-color="${theme.bg}" stop-opacity="0"/>
-          <stop offset="100%" stop-color="${theme.bg}" stop-opacity="1"/>
-        </radialGradient>
+        ${proceduralFilters}
       </defs>
       <rect width="100%" height="100%" fill="${theme.bg}"/>
-      <rect width="100%" height="100%" fill="url(#grid)"/>
-      <rect width="100%" height="100%" fill="url(#fade)"/>`;
+      <g stroke="${alpha(theme.accent, 0.18)}" fill="none" stroke-width="1.5">
+        <path d="M -${width*0.2} ${height*0.1} Q ${width*0.4} ${height*0.3}, ${width*1.2} -${height*0.1}"/>
+        <path d="M -${width*0.2} ${height*0.14} Q ${width*0.4} ${height*0.34}, ${width*1.2} -${height*0.06}"/>
+        <path d="M -${width*0.2} ${height*0.18} Q ${width*0.4} ${height*0.38}, ${width*1.2} -${height*0.02}"/>
+      </g>
+      <g stroke="${alpha(theme.accent2, 0.12)}" fill="none" stroke-width="1">
+        <path d="M -${width*0.2} ${height*0.8} Q ${width*0.6} ${height*0.6}, ${width*1.2} ${height*1.1}"/>
+        <path d="M -${width*0.2} ${height*0.84} Q ${width*0.6} ${height*0.64}, ${width*1.2} ${height*1.14}"/>
+        <path d="M -${width*0.2} ${height*0.88} Q ${width*0.6} ${height*0.68}, ${width*1.2} ${height*1.18}"/>
+      </g>
+      <circle cx="${width*0.85}" cy="${height*0.15}" r="${width*0.25}" fill="none" stroke="${alpha(theme.panel, 0.6)}" stroke-width="15"/>
+      <circle cx="${width*0.85}" cy="${height*0.15}" r="${width*0.32}" fill="none" stroke="${alpha(theme.panel, 0.3)}" stroke-width="1"/>
+      <rect width="100%" height="100%" filter="url(#tex_static)" opacity="0.4"/>`;
   }
 
   if (bgType === 'bloom') {
     return `
       <defs>
-        <radialGradient id="b1" cx="0%" cy="50%" r="70%">
-          <stop offset="0%" stop-color="${alpha(theme.accent2, 0.18)}"/>
+        <radialGradient id="b1" cx="10%" cy="40%" r="70%">
+          <stop offset="0%" stop-color="${alpha(theme.accent2, 0.22)}"/>
           <stop offset="100%" stop-color="${alpha(theme.bg, 0)}"/>
         </radialGradient>
-        <radialGradient id="b2" cx="100%" cy="100%" r="80%">
-          <stop offset="0%" stop-color="${alpha(theme.accent, 0.15)}"/>
+        <radialGradient id="b2" cx="90%" cy="90%" r="80%">
+          <stop offset="0%" stop-color="${alpha(theme.accent, 0.18)}"/>
           <stop offset="100%" stop-color="${alpha(theme.bg, 0)}"/>
         </radialGradient>
       </defs>
@@ -403,39 +480,43 @@ function renderBackground(cfg, theme, width, height) {
   if (bgType === 'diagonal') {
     return `
       <rect width="100%" height="100%" fill="${theme.bg}"/>
-      <path d="M0,0 L${width*0.6},0 L0,${height*0.35} Z" fill="${alpha(theme.accent, 0.06)}"/>
-      <path d="M${width},${height} L${width*0.4},${height} L${width},${height*0.65} Z" fill="${alpha(theme.accent2, 0.05)}"/>
-      <line x1="0" y1="${height*0.25}" x2="${width}" y2="${height*0.85}" stroke="${alpha(theme.accent, 0.08)}" stroke-width="${Math.max(1, width*0.002)}"/>
-      <line x1="0" y1="${height*0.27}" x2="${width}" y2="${height*0.87}" stroke="${alpha(theme.accent, 0.03)}" stroke-width="${Math.max(1, width*0.001)}"/>
+      <path d="M0,0 L${width*0.7},0 L0,${height*0.4} Z" fill="${alpha(theme.accent, 0.08)}"/>
+      <path d="M${width},${height} L${width*0.3},${height} L${width},${height*0.6} Z" fill="${alpha(theme.accent2, 0.06)}"/>
+      <line x1="0" y1="${height*0.3}" x2="${width}" y2="${height*0.8}" stroke="${alpha(theme.accent, 0.12)}" stroke-width="2"/>
+      <line x1="0" y1="${height*0.32}" x2="${width}" y2="${height*0.82}" stroke="${alpha(theme.accent, 0.05)}" stroke-width="1"/>
     `;
   }
 
   if (bgType === 'orbit') {
     return `
       <rect width="100%" height="100%" fill="${theme.bg}"/>
-      <circle cx="50%" cy="40%" r="${width*0.5}" fill="none" stroke="${alpha(theme.accent, 0.08)}" stroke-width="${Math.max(1, width*0.003)}" stroke-dasharray="6 12"/>
-      <circle cx="50%" cy="40%" r="${width*0.7}" fill="none" stroke="${alpha(theme.accent2, 0.05)}" stroke-width="${Math.max(1, width*0.002)}"/>
-      <circle cx="50%" cy="40%" r="${width*0.9}" fill="none" stroke="${alpha(theme.accent, 0.03)}" stroke-width="${Math.max(2, width*0.005)}"/>
+      <circle cx="50%" cy="35%" r="${width*0.45}" fill="none" stroke="${alpha(theme.accent, 0.1)}" stroke-width="${Math.max(1, width*0.003)}" stroke-dasharray="8 12"/>
+      <circle cx="50%" cy="35%" r="${width*0.65}" fill="none" stroke="${alpha(theme.accent2, 0.06)}" stroke-width="${Math.max(1, width*0.002)}"/>
+      <circle cx="50%" cy="35%" r="${width*0.85}" fill="none" stroke="${alpha(theme.accent, 0.04)}" stroke-width="${Math.max(2, width*0.005)}"/>
     `;
   }
 
   if (bgType === 'velvet') {
     return `
       <defs>
-        <linearGradient id="v1" x1="0%" y1="0%" x2="100%" y2="100%">
+        ${proceduralFilters}
+        <linearGradient id="v_grad" x1="0%" y1="0%" x2="100%" y2="100%">
           <stop offset="0%" stop-color="${theme.bg}"/>
-          <stop offset="45%" stop-color="${alpha(theme.panel, 0.8)}"/>
+          <stop offset="40%" stop-color="${alpha(theme.panel, 0.9)}"/>
+          <stop offset="60%" stop-color="${theme.bg}"/>
+          <stop offset="85%" stop-color="${alpha(theme.panel, 0.9)}"/>
           <stop offset="100%" stop-color="${theme.bg}"/>
         </linearGradient>
       </defs>
-      <rect width="100%" height="100%" fill="url(#v1)"/>`;
+      <rect width="100%" height="100%" fill="url(#v_grad)"/>
+      <rect width="100%" height="100%" filter="url(#tex_paper)" opacity="0.6"/>`;
   }
 
   if (bgType === 'noir') {
     return `
       <defs>
-        <radialGradient id="vignette" cx="50%" cy="40%" r="90%">
-          <stop offset="20%" stop-color="${alpha(theme.accent, 0.08)}"/>
+        <radialGradient id="vignette" cx="50%" cy="40%" r="95%">
+          <stop offset="15%" stop-color="${alpha(theme.accent, 0.1)}"/>
           <stop offset="50%" stop-color="${theme.bg}"/>
           <stop offset="100%" stop-color="#000000"/>
         </radialGradient>
@@ -443,26 +524,39 @@ function renderBackground(cfg, theme, width, height) {
       <rect width="100%" height="100%" fill="url(#vignette)"/>`;
   }
 
-  // Default: Aurora
+  if (bgType === 'static_noise') {
+    return `
+      <defs>
+        ${proceduralFilters}
+        <radialGradient id="sn_vignette" cx="50%" cy="50%" r="85%">
+          <stop offset="0%" stop-color="${theme.bg}"/>
+          <stop offset="100%" stop-color="${alpha(theme.panel, 0.95)}"/>
+        </radialGradient>
+      </defs>
+      <rect width="100%" height="100%" fill="url(#sn_vignette)"/>
+      <rect width="100%" height="100%" filter="url(#tex_static)" opacity="1.2"/>`;
+  }
+
+  // Default: Aurora (чистые, глубокие градиенты без жестких форм)
   return `
     <defs>
-      <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
-        <stop offset="0%" stop-color="${theme.bg}"/>
-        <stop offset="50%" stop-color="${alpha(theme.panel, 0.6)}"/>
-        <stop offset="100%" stop-color="${theme.bg}"/>
-      </linearGradient>
-      <radialGradient id="aurora1" cx="0%" cy="0%" r="75%">
-        <stop offset="0%" stop-color="${alpha(theme.accent, 0.15)}"/>
+      <radialGradient id="au1" cx="20%" cy="-10%" r="85%">
+        <stop offset="0%" stop-color="${alpha(theme.accent, 0.35)}"/>
         <stop offset="100%" stop-color="${alpha(theme.bg, 0)}"/>
       </radialGradient>
-      <radialGradient id="aurora2" cx="100%" cy="100%" r="75%">
-        <stop offset="0%" stop-color="${alpha(theme.accent2, 0.12)}"/>
+      <radialGradient id="au2" cx="110%" cy="40%" r="75%">
+        <stop offset="0%" stop-color="${alpha(theme.accent2, 0.25)}"/>
+        <stop offset="100%" stop-color="${alpha(theme.bg, 0)}"/>
+      </radialGradient>
+      <radialGradient id="au3" cx="-10%" cy="110%" r="80%">
+        <stop offset="0%" stop-color="${alpha(theme.panel, 0.9)}"/>
         <stop offset="100%" stop-color="${alpha(theme.bg, 0)}"/>
       </radialGradient>
     </defs>
-    <rect width="100%" height="100%" fill="url(#bg)"/>
-    <rect width="100%" height="100%" fill="url(#aurora1)"/>
-    <rect width="100%" height="100%" fill="url(#aurora2)"/>`;
+    <rect width="100%" height="100%" fill="${theme.bg}"/>
+    <rect width="100%" height="100%" fill="url(#au1)"/>
+    <rect width="100%" height="100%" fill="url(#au2)"/>
+    <rect width="100%" height="100%" fill="url(#au3)"/>`;
 }
 
 
