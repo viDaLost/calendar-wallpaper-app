@@ -12,21 +12,55 @@ dayjs.extend(utc);
 dayjs.extend(isLeapYear);
 dayjs.extend(weekOfYear);
 
-// Импортируем наше ядро
+// Импортируем ядро рендеринга
 const Engine = require('./public/engine.js');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Кеширование в памяти для PNG (аналог Redis)
+// Кеш PNG в памяти. Очищается раз в час
 const pngCache = new Map();
-// Очищаем кеш каждый час
 setInterval(() => pngCache.clear(), 1000 * 60 * 60);
 
 const FONTS = {
-  inter: { name: 'Inter', file: 'inter.ttf', family: 'Inter' },
-  montserrat: { name: 'Montserrat', file: 'montserrat.ttf', family: 'Montserrat' }
-  // Добавь свои шрифты сюда, если нужно
+  inter: { name: 'Inter (Стандарт)', file: 'inter.ttf', family: 'Inter' },
+  montserrat: { name: 'Montserrat (Геометрия)', file: 'montserrat.ttf', family: 'Montserrat' },
+  roboto_mono: { name: 'Roboto Mono (Код)', file: 'roboto-mono.ttf', family: 'Roboto Mono' },
+  playfair: { name: 'Playfair Display (Журнал)', file: 'playfair.ttf', family: 'Playfair Display' },
+  comfortaa: { name: 'Comfortaa (Круглый)', file: 'comfortaa.ttf', family: 'Comfortaa' },
+  jura: { name: 'Jura (Футуристичный)', file: 'jura.ttf', family: 'Jura' },
+  caveat: { name: 'Caveat (Рукописный)', file: 'caveat.ttf', family: 'Caveat' },
+  russo_one: { name: 'Russo One (Плакатный)', file: 'russo-one.ttf', family: 'Russo One' },
+  lora: { name: 'Lora (Книжный)', file: 'lora.ttf', family: 'Lora' },
+  ubuntu: { name: 'Ubuntu (Мягкий)', file: 'ubuntu.ttf', family: 'Ubuntu' }
+};
+
+const PHONE_PRESETS = {
+  iphone_se_1: { label: 'iPhone SE (1-е пок.)', width: 640, height: 1136 },
+  iphone_8: { label: 'iPhone 8 / 7 / 6s', width: 750, height: 1334 },
+  iphone_8_plus: { label: 'iPhone 8 Plus / 7 Plus', width: 1080, height: 1920 },
+  iphone_se_2: { label: 'iPhone SE (2/3-е пок.)', width: 750, height: 1334 },
+  iphone_x: { label: 'iPhone X / XS / 11 Pro', width: 1125, height: 2436 },
+  iphone_xr: { label: 'iPhone XR / 11', width: 828, height: 1792 },
+  iphone_xs_max: { label: 'iPhone XS Max / 11 Pro Max', width: 1242, height: 2688 },
+  iphone_12_mini: { label: 'iPhone 12/13 mini', width: 1080, height: 2340 },
+  iphone_12: { label: 'iPhone 12/13/14 / Pro', width: 1170, height: 2532 },
+  iphone_12_pro_max: { label: 'iPhone 12/13 Pro Max / 14 Plus', width: 1284, height: 2778 },
+  iphone_14_pro: { label: 'iPhone 14 Pro', width: 1179, height: 2556 },
+  iphone_14_pro_max: { label: 'iPhone 14 Pro Max', width: 1290, height: 2796 },
+  iphone_15: { label: 'iPhone 15', width: 1179, height: 2556 },
+  iphone_15_plus: { label: 'iPhone 15 Plus', width: 1290, height: 2796 },
+  iphone_15_pro: { label: 'iPhone 15 Pro', width: 1179, height: 2556 },
+  iphone_15_pro_max: { label: 'iPhone 15 Pro Max', width: 1290, height: 2796 },
+  iphone_16: { label: 'iPhone 16', width: 1179, height: 2556 },
+  iphone_16_plus: { label: 'iPhone 16 Plus', width: 1290, height: 2796 },
+  iphone_16_pro: { label: 'iPhone 16 Pro', width: 1206, height: 2622 },
+  iphone_16_pro_max: { label: 'iPhone 16 Pro Max', width: 1320, height: 2868 },
+  iphone_17: { label: 'iPhone 17', width: 1206, height: 2622 },
+  iphone_air: { label: 'iPhone Air', width: 1260, height: 2736 },
+  iphone_17_pro: { label: 'iPhone 17 Pro', width: 1206, height: 2622 },
+  iphone_17_pro_max: { label: 'iPhone 17 Pro Max', width: 1320, height: 2868 },
+  custom: { label: 'Свой размер', width: 1179, height: 2556 }
 };
 
 const fontCache = {};
@@ -38,7 +72,6 @@ if (fs.existsSync(fontsDir)) {
   }
 }
 
-// Запрос погоды через бесплатный Open-Meteo API
 async function fetchWeather(lat, lon) {
   if (!lat || !lon) return null;
   try {
@@ -54,84 +87,92 @@ async function fetchWeather(lat, lon) {
     if(code >= 80 && code <= 82) icon = '🌦️';
     if(code >= 95) icon = '⛈️';
     return { temp: temp > 0 ? `+${temp}` : temp, icon };
-  } catch (e) {
-    console.error('Weather Fetch Error', e);
-    return null;
-  }
+  } catch (e) { return null; }
 }
 
 app.use(express.static(path.join(__dirname, 'public')));
 
-app.get('/api/fonts', (req, res) => {
-  res.json({ b64: fontCache, list: Object.fromEntries(Object.entries(FONTS).map(([k, v]) => [k, v.name])) });
+app.get('/api/options', (req, res) => {
+  res.json({ 
+    presets: PHONE_PRESETS, themes: Engine.THEMES, bgStyles: Engine.BG_STYLES, 
+    fonts: Object.fromEntries(Object.entries(FONTS).map(([k, v]) => [k, v.name])) 
+  });
 });
 
-app.get('/api/options', (req, res) => {
-  res.json({ themes: Engine.THEMES, bgStyles: Engine.BG_STYLES });
+app.get('/api/fonts', (req, res) => res.json(fontCache));
+
+function getConfig(query) {
+  const preset = PHONE_PRESETS[query.model] || PHONE_PRESETS.iphone_15;
+  let themeObj;
+  if (query.theme === 'custom_palette') {
+    themeObj = {
+      name: 'Custom',
+      bg: query.c_bg || '#0a0d12', panel: query.c_panel || '#131823',
+      text: query.c_text || '#edf2ff', muted: query.c_muted || '#8994a7',
+      accent: query.c_accent || '#ff8f2d', accent2: query.c_accent2 || '#ffbc6f', weekend: query.c_weekend || '#ff8f7b'
+    };
+  } else {
+    themeObj = Engine.THEMES[query.theme] || Engine.THEMES.graphite_orange;
+  }
+  let rawBg = query.bg_style || 'mesh_organic';
+  if(rawBg === 'glass') rawBg = 'liquid_glass'; if(rawBg === 'mesh') rawBg = 'carbon'; if(rawBg === 'grain_light') rawBg = 'paper';
+
+  return {
+    model: query.model || 'iphone_15',
+    width: query.model === 'custom' ? Math.max(320, Number(query.width)) : preset.width,
+    height: query.model === 'custom' ? Math.max(568, Number(query.height)) : preset.height,
+    fontFamily: (FONTS[query.font] || FONTS.inter).family,
+    style: query.style || 'numbers',
+    monthLayout: query.month_layout || 'grid_3x4',
+    weekendMode: query.weekend_mode || 'weekends_only',
+    themeObj: themeObj,
+    bgStyle: Engine.BG_STYLES[rawBg] ? rawBg : 'mesh_organic',
+    lang: query.lang === 'en' ? 'en' : 'ru',
+    timezone: Number(query.timezone) || 3,
+    footer: query.footer || 'year_summary', note: (query.note || '').slice(0, 80),
+    events: query.events || '',
+    showWeekdays: String(query.show_weekdays || '1') === '1', accentToday: String(query.accent_today || '1') === '1',
+    showProgressRing: String(query.show_progress_ring || '1') === '1', showWeekNumbers: String(query.show_week_numbers || '0') === '1',
+    quarterDividers: String(query.quarter_dividers || '1') === '1', monthBadges: String(query.month_badges || '1') === '1',
+    focusCurrentMonth: String(query.focus_current_month || '1') === '1', lockscreenSafe: String(query.lockscreen_safe || '1') === '1',
+    lat: query.lat, lon: query.lon
+  };
+}
+
+app.get('/wallpaper.svg', async (req, res) => {
+  const cfg = getConfig(req.query);
+  res.type('image/svg+xml').send(Engine.renderSvg(cfg, dayjs, fontCache[req.query.font || 'inter']));
 });
 
 app.get('/wallpaper.png', async (req, res) => {
   try {
-    // Ключ кеша зависит от всех параметров и от ТЕКУЩЕЙ ДАТЫ (чтобы ночью кеш инвалидировался)
     const cacheKey = req.originalUrl + dayjs().format('YYYY-MM-DD');
     if (pngCache.has(cacheKey)) {
       res.setHeader('Content-Type', 'image/png');
-      res.setHeader('X-Cache', 'HIT');
       return res.send(pngCache.get(cacheKey));
     }
 
-    // Собираем конфиг из URL параметров
-    const cfg = {
-      width: Number(req.query.width) || 1179,
-      height: Number(req.query.height) || 2556,
-      themeObj: Engine.THEMES[req.query.theme] || Engine.THEMES.graphite_orange,
-      bgStyle: req.query.bg_style || 'mesh_organic',
-      lang: req.query.lang || 'ru',
-      timezone: Number(req.query.timezone) || 3,
-      events: req.query.events || '', // "04-20: Релиз, 12-31: НГ"
-      fontFamily: (FONTS[req.query.font] || FONTS.inter).family,
-      weekendMode: req.query.weekend_mode || 'weekends_only',
-      lockscreenSafe: true,
-      accentToday: true
-    };
+    const cfg = getConfig(req.query);
+    cfg.weatherData = await fetchWeather(cfg.lat, cfg.lon);
 
-    // Подменяем кастомные цвета, если выбрана custom_palette
-    if (req.query.theme === 'custom_palette') {
-      cfg.themeObj = {
-        name: 'Custom',
-        bg: req.query.c_bg || '#0a0d12', panel: req.query.c_panel || '#131823',
-        text: req.query.c_text || '#edf2ff', muted: req.query.c_muted || '#8994a7',
-        accent: req.query.c_accent || '#ff8f2d', accent2: req.query.c_accent2 || '#ffbc6f',
-        weekend: req.query.c_weekend || '#ff8f7b'
-      };
-    }
+    const b64Font = fontCache[req.query.font || 'inter'];
+    const svg = Engine.renderSvg(cfg, dayjs, b64Font);
 
-    // Запрашиваем погоду, если есть координаты
-    cfg.weatherData = await fetchWeather(req.query.lat, req.query.lon);
-
-    // Генерируем SVG с помощью ядра
-    const svg = Engine.renderSvg(cfg, dayjs, fontCache[req.query.font || 'inter']);
-    
     let png;
     try {
       const resvg = new Resvg(svg, { fitTo: { mode: 'original' } });
       png = resvg.render().asPng();
     } catch (renderErr) {
-      // Фолбэк на sharp, если resvg недоступен
       png = await sharp(Buffer.from(svg), { density: 300 }).png().toBuffer();
     }
 
-    // Записываем в кеш (максимум 1000 комбинаций в памяти)
     if (pngCache.size < 1000) pngCache.set(cacheKey, png);
-
     res.setHeader('Content-Type', 'image/png');
-    res.setHeader('Cache-Control', 'public, max-age=3600');
-    res.setHeader('X-Cache', 'MISS');
     res.send(png);
-
   } catch (err) {
     res.status(500).json({ error: 'RENDER_ERROR', details: err.message });
   }
 });
 
-app.listen(PORT, () => console.log(`Сервер запущен на http://localhost:${PORT}`));
+app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'public', 'index.html')));
+app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
