@@ -70,9 +70,6 @@ const PHONE_PRESETS = {
 };
 
 const THEMES = {
-  anomaly_call: { name: 'Зов аномалии', bg: '#1a1c17', panel: '#24261f', text: '#d9d4a8', muted: '#8f8f82', accent: '#ff7300', accent2: '#ff9d47', weekend: '#ff5e00' },
-  eden_light: { name: 'Свет Эдема', bg: '#fdfbf7', panel: '#2d3a2b', text: '#1b2419', muted: '#6b7a68', accent: '#d4af37', accent2: '#e8c968', weekend: '#a38a36' },
-  syndicate: { name: 'Синдикат', bg: '#050505', panel: '#121212', text: '#00f0ff', muted: '#4a707a', accent: '#fcee0a', accent2: '#ffff5c', weekend: '#ff003c' },
   graphite_orange: { name: 'Графит и Оранж', bg: '#0a0d12', panel: '#131823', text: '#edf2ff', muted: '#8994a7', accent: '#ff8f2d', accent2: '#ffbc6f', weekend: '#ff8f7b' },
   obsidian_blue: { name: 'Обсидиан и Синий', bg: '#07111e', panel: '#0d1726', text: '#eef6ff', muted: '#92abc9', accent: '#5db6ff', accent2: '#a7dcff', weekend: '#86b4ff' },
   frost_light: { name: 'Светлый Иней', bg: '#edf4ff', panel: '#dfe8f7', text: '#1e2d41', muted: '#73839a', accent: '#3b7bff', accent2: '#7ea6ff', weekend: '#5b88ff' },
@@ -86,25 +83,27 @@ const THEMES = {
   emerald_smoke: { name: 'Изумрудный дым', bg: '#081311', panel: '#10211e', text: '#ecfff7', muted: '#89b7aa', accent: '#4ec9a2', accent2: '#93edd0', weekend: '#74d7b8' },
   pearl_mist: { name: 'Жемчужный туман', bg: '#f5f4f2', panel: '#ebe8e3', text: '#2a2a2a', muted: '#7a7a7a', accent: '#6d8cff', accent2: '#9fb2ff', weekend: '#8c77ff' },
   ruby_velvet: { name: 'Рубиновый бархат', bg: '#12070b', panel: '#220d15', text: '#ffeef3', muted: '#c8a1ad', accent: '#ff5a7c', accent2: '#ff9db4', weekend: '#ff8d9f' },
-  moon_silver: { name: 'Лунное серебро', bg: '#0d1118', panel: '#161c27', text: '#f0f4fb', muted: '#99a4b7', accent: '#c8d2e5', accent2: '#eef3ff', weekend: '#b7c3da' }
+  moon_silver: { name: 'Лунное серебро', bg: '#0d1118', panel: '#161c27', text: '#f0f4fb', muted: '#99a4b7', accent: '#c8d2e5', accent2: '#eef3ff', weekend: '#b7c3da' },
+  anomaly_zone: { name: 'Зов аномалии', bg: '#1a1c17', panel: '#24261f', text: '#d9d4a8', muted: '#8a8d7a', accent: '#ff7300', accent2: '#e59e5c', weekend: '#ff5050' },
+  eden_light: { name: 'Свет Эдема', bg: '#fdfbf7', panel: '#f0ece1', text: '#1b2419', muted: '#72826d', accent: '#d4af37', accent2: '#e6cc80', weekend: '#c74b4b' },
+  syndicate: { name: 'Синдикат (Неон)', bg: '#050505', panel: '#121212', text: '#e0e0e0', muted: '#666666', accent: '#fcee0a', accent2: '#00f0ff', weekend: '#ff003c' }
 };
 
 const BG_STYLES = {
-  aurora: 'Аврора',
-  glass: 'Стекло',
-  paper: 'Бумага',
-  spotlight: 'Прожектор',
-  waves: 'Мягкие волны',
-  noir: 'Нуар',
-  mesh: 'Глубокая сетка',
-  bloom: 'Сияние',
+  aurora: 'Аврора (Aurora)',
+  liquid_glass: 'Жидкое стекло (Glass)',
+  paper: 'Бумага (Paper)',
+  spotlight: 'Прожектор (Spotlight)',
+  waves: 'Мягкие волны (Waves)',
+  noir: 'Нуар (Noir)',
+  mesh: 'Глубокая сетка (Mesh)',
+  topography: 'Топография (Topography)',
+  bloom: 'Сияние (Bloom)',
   diagonal: 'Диагональные лучи',
-  orbit: 'Орбиты',
-  velvet: 'Бархат',
-  grain_light: 'Светлое зерно',
-  topography: 'Топография',
-  liquid_glass: 'Жидкое стекло',
-  static_noise: 'Шум эфира'
+  orbit: 'Орбиты (Orbit)',
+  velvet: 'Бархат (Velvet)',
+  grain_light: 'Светлое зерно (Grain)',
+  static_noise: 'Шум эфира (Noise)'
 };
 
 const QUOTES = {
@@ -137,6 +136,7 @@ function escapeXml(str) {
 function clamp(v, min, max) { return Math.max(min, Math.min(max, v)); }
 function alpha(hex, opacity) {
   const clean = hex.replace('#', '');
+  if (clean.length !== 6) return hex;
   const bigint = parseInt(clean, 16);
   const r = (bigint >> 16) & 255;
   const g = (bigint >> 8) & 255;
@@ -181,6 +181,10 @@ function getConfig(query) {
     themeObj = THEMES[query.theme] || THEMES.graphite_orange;
   }
 
+  // Fallback для старых названий фонов
+  let rawBg = query.bg_style || 'aurora';
+  if(rawBg === 'glass') rawBg = 'liquid_glass';
+
   return {
     model: query.model || 'iphone_15',
     width: query.model === 'custom' ? clamp(num(query.width, preset.width), 320, 4000) : preset.width,
@@ -192,7 +196,7 @@ function getConfig(query) {
     weekendMode: query.weekend_mode || 'weekends_only',
     opacity: clamp(num(query.opacity, 8), 0, 60),
     themeObj: themeObj,
-    bgStyle: BG_STYLES[query.bg_style] ? query.bg_style : 'aurora',
+    bgStyle: BG_STYLES[rawBg] ? rawBg : 'aurora',
     lang: query.lang === 'en' ? 'en' : 'ru',
     timezone: clamp(num(query.timezone, 3), -12, 14),
     footer: query.footer || 'year_summary',
@@ -250,114 +254,215 @@ function formatLongToday(now, labels, lang) {
     : `${wd}, ${labels.months[now.month()]} ${now.date()}`;
 }
 
+// --------------------------------------------------------
+// СОВЕРШЕННО НОВЫЙ ДВИЖОК РЕНДЕРА ФОНОВ (БЕЗ ЖЕСТКИХ КРУГОВ)
+// --------------------------------------------------------
 function renderBackground(cfg, theme, width, height) {
-  const overlayOpacity = cfg.opacity / 100;
-  const accents = `
-    <circle cx="${width * 0.83}" cy="${height * 0.18}" r="${width * 0.16}" fill="${alpha(theme.accent, 0.10)}"/>
-    <circle cx="${width * 0.22}" cy="${height * 0.78}" r="${width * 0.20}" fill="${alpha(theme.accent2, 0.07)}"/>`;
-    
-  if (cfg.bgStyle === 'topography') {
-    let lines = '';
-    for(let i=1; i<12; i++) {
-       lines += `<path d="M 0 ${height*0.08*i} Q ${width*0.6} ${height*0.12*i}, ${width} ${height*0.06*i}" fill="none" stroke="${alpha(theme.accent, 0.08)}" stroke-width="1.5"/>`;
-       lines += `<path d="M 0 ${height*0.12*i} Q ${width*0.3} ${height*0.08*i}, ${width} ${height*0.14*i}" fill="none" stroke="${alpha(theme.accent2, 0.06)}" stroke-width="1"/>`;
-    }
-    return `<rect width="100%" height="100%" fill="${theme.bg}"/>${lines}${accents}`;
-  }
-  if (cfg.bgStyle === 'liquid_glass') {
+  const bgType = cfg.bgStyle;
+  const panelAlpha = alpha(theme.panel, 0.4);
+
+  // Универсальный паттерн "Зерно" для обеспечения шума без фильтров (совместим с Resvg)
+  const grainDef = `
+    <pattern id="dot_grain" width="4" height="4" patternUnits="userSpaceOnUse">
+      <rect width="1" height="1" fill="${alpha(theme.text, 0.06)}" x="0" y="0"/>
+      <rect width="1" height="1" fill="${alpha(theme.text, 0.03)}" x="2" y="2"/>
+    </pattern>`;
+
+  if (bgType === 'paper' || bgType === 'grain_light') {
+    const isLight = bgType === 'grain_light';
+    const bgA = isLight ? '#f3f0ea' : theme.bg;
+    const bgB = isLight ? '#e7e1d8' : alpha(theme.panel, 0.8);
     return `
       <defs>
-        <radialGradient id="lg_a1" cx="80%" cy="15%" r="65%"><stop offset="0%" stop-color="${alpha(theme.accent, 0.28)}"/><stop offset="100%" stop-color="${alpha(theme.bg, 0)}"/></radialGradient>
-        <radialGradient id="lg_a2" cx="15%" cy="85%" r="70%"><stop offset="0%" stop-color="${alpha(theme.accent2, 0.22)}"/><stop offset="100%" stop-color="${alpha(theme.bg, 0)}"/></radialGradient>
-      </defs>
-      <rect width="100%" height="100%" fill="${theme.bg}"/>
-      <rect width="100%" height="100%" fill="url(#lg_a1)"/>
-      <rect width="100%" height="100%" fill="url(#lg_a2)"/>`;
-  }
-  if (cfg.bgStyle === 'static_noise') {
-    return `
-      <defs>
-        <filter id="noise_stat"><feTurbulence type="fractalNoise" baseFrequency="0.85" numOctaves="3" stitchTiles="stitch"/><feColorMatrix type="matrix" values="1 0 0 0 0, 1 0 0 0 0, 1 0 0 0 0, 0 0 0 0.09 0" /></filter>
-      </defs>
-      <rect width="100%" height="100%" fill="${theme.bg}"/>
-      <rect width="100%" height="100%" filter="url(#noise_stat)"/>
-      ${accents}`;
-  }
-  if (cfg.bgStyle === 'paper' || cfg.bgStyle === 'grain_light') {
-    const bgA = cfg.bgStyle === 'grain_light' ? '#f3f0ea' : theme.bg;
-    const bgB = cfg.bgStyle === 'grain_light' ? '#e7e1d8' : theme.panel;
-    return `
-      <defs>
+        ${grainDef}
         <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
           <stop offset="0%" stop-color="${bgA}" />
           <stop offset="100%" stop-color="${bgB}" />
         </linearGradient>
-        <filter id="noise"><feTurbulence type="fractalNoise" baseFrequency="0.8" numOctaves="2" stitchTiles="stitch"/><feColorMatrix type="saturate" values="0"/><feComponentTransfer><feFuncA type="table" tableValues="0 0 .02 .05"/></feComponentTransfer></filter>
       </defs>
       <rect width="100%" height="100%" fill="url(#bg)"/>
-      <rect width="100%" height="100%" filter="url(#noise)" opacity="0.65"/>`;
+      <rect width="100%" height="100%" fill="url(#dot_grain)"/>`;
   }
-  if (cfg.bgStyle === 'glass') {
-    return `
-      <defs><radialGradient id="bg" cx="25%" cy="15%" r="85%"><stop offset="0%" stop-color="${alpha(theme.accent, 0.42)}"/><stop offset="35%" stop-color="${alpha(theme.bg, 0.95)}"/><stop offset="100%" stop-color="${theme.bg}"/></radialGradient></defs>
-      <rect width="100%" height="100%" fill="url(#bg)"/>
-      ${accents}`;
-  }
-  if (cfg.bgStyle === 'spotlight') {
-    return `
-      <defs><radialGradient id="bg" cx="50%" cy="20%" r="85%"><stop offset="0%" stop-color="${alpha(theme.accent2, 0.32)}"/><stop offset="20%" stop-color="${alpha(theme.accent, 0.15)}"/><stop offset="55%" stop-color="${alpha(theme.bg, 0.97)}"/><stop offset="100%" stop-color="${theme.bg}"/></radialGradient></defs>
-      <rect width="100%" height="100%" fill="url(#bg)"/>`;
-  }
-  if (cfg.bgStyle === 'waves') {
-    return `
-      <defs><linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="${theme.bg}"/><stop offset="100%" stop-color="${theme.panel}"/></linearGradient></defs>
-      <rect width="100%" height="100%" fill="url(#bg)"/>
-      <path d="M 0 ${height * 0.22} C ${width * 0.12} ${height * 0.18}, ${width * 0.28} ${height * 0.28}, ${width * 0.42} ${height * 0.24} S ${width * 0.74} ${height * 0.14}, ${width} ${height * 0.22}" fill="none" stroke="${alpha(theme.accent2, 0.16)}" stroke-width="${width * 0.01}"/>
-      <path d="M 0 ${height * 0.62} C ${width * 0.18} ${height * 0.56}, ${width * 0.34} ${height * 0.69}, ${width * 0.56} ${height * 0.64} S ${width * 0.82} ${height * 0.58}, ${width} ${height * 0.65}" fill="none" stroke="${alpha(theme.accent, 0.14)}" stroke-width="${width * 0.013}"/>`;
-  }
-  if (cfg.bgStyle === 'mesh') {
-    let lines='';
-    const step = Math.max(44, Math.round(width * 0.065));
-    for (let x = -height; x < width + height; x += step) lines += `<line x1="${x}" y1="0" x2="${x + height}" y2="${height}" stroke="${alpha(theme.accent2, 0.05)}"/>`;
-    for (let x = 0; x < width + height; x += step) lines += `<line x1="${x}" y1="0" x2="${x - height}" y2="${height}" stroke="${alpha(theme.accent, 0.035)}"/>`;
-    return `<rect width="100%" height="100%" fill="${theme.bg}"/>${lines}${accents}`;
-  }
-  if (cfg.bgStyle === 'bloom') {
+
+  if (bgType === 'static_noise') {
     return `
       <defs>
-        <radialGradient id="b1" cx="20%" cy="18%" r="55%"><stop offset="0%" stop-color="${alpha(theme.accent2, 0.33)}"/><stop offset="100%" stop-color="${alpha(theme.bg, 0)}"/></radialGradient>
-        <radialGradient id="b2" cx="80%" cy="72%" r="50%"><stop offset="0%" stop-color="${alpha(theme.accent, 0.26)}"/><stop offset="100%" stop-color="${alpha(theme.bg, 0)}"/></radialGradient>
+        ${grainDef}
+        <radialGradient id="vignette_noise" cx="50%" cy="50%" r="75%">
+          <stop offset="0%" stop-color="${theme.bg}"/>
+          <stop offset="100%" stop-color="${alpha(theme.panel, 0.95)}"/>
+        </radialGradient>
+      </defs>
+      <rect width="100%" height="100%" fill="url(#vignette_noise)"/>
+      <rect width="100%" height="100%" fill="url(#dot_grain)" opacity="1.5"/>`;
+  }
+
+  if (bgType === 'liquid_glass') {
+    return `
+      <defs>
+        <linearGradient id="glass_base" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" stop-color="${theme.bg}"/>
+          <stop offset="100%" stop-color="${alpha(theme.panel, 0.9)}"/>
+        </linearGradient>
+        <radialGradient id="g1" cx="15%" cy="10%" r="65%">
+          <stop offset="0%" stop-color="${alpha(theme.accent, 0.25)}"/>
+          <stop offset="50%" stop-color="${alpha(theme.accent, 0.08)}"/>
+          <stop offset="100%" stop-color="${alpha(theme.bg, 0)}"/>
+        </radialGradient>
+        <radialGradient id="g2" cx="85%" cy="90%" r="65%">
+          <stop offset="0%" stop-color="${alpha(theme.accent2, 0.22)}"/>
+          <stop offset="50%" stop-color="${alpha(theme.accent2, 0.07)}"/>
+          <stop offset="100%" stop-color="${alpha(theme.bg, 0)}"/>
+        </radialGradient>
+      </defs>
+      <rect width="100%" height="100%" fill="url(#glass_base)"/>
+      <rect width="100%" height="100%" fill="url(#g1)"/>
+      <rect width="100%" height="100%" fill="url(#g2)"/>
+      <polygon points="0,0 ${width},0 0,${height}" fill="${alpha('#ffffff', 0.015)}"/>
+    `;
+  }
+
+  if (bgType === 'spotlight') {
+    return `
+      <defs>
+        <radialGradient id="spot" cx="50%" cy="-5%" r="110%">
+          <stop offset="0%" stop-color="${alpha(theme.accent2, 0.18)}"/>
+          <stop offset="15%" stop-color="${alpha(theme.accent, 0.12)}"/>
+          <stop offset="50%" stop-color="${alpha(theme.bg, 0.95)}"/>
+          <stop offset="100%" stop-color="${theme.bg}"/>
+        </radialGradient>
+      </defs>
+      <rect width="100%" height="100%" fill="url(#spot)"/>`;
+  }
+
+  if (bgType === 'waves') {
+    return `
+      <defs>
+        <linearGradient id="w1" x1="0" y1="0" x2="0" y2="1">
+           <stop offset="0%" stop-color="${alpha(theme.accent, 0.12)}"/>
+           <stop offset="100%" stop-color="${alpha(theme.bg, 0)}"/>
+        </linearGradient>
+        <linearGradient id="w2" x1="0" y1="1" x2="0" y2="0">
+           <stop offset="0%" stop-color="${alpha(theme.accent2, 0.08)}"/>
+           <stop offset="100%" stop-color="${alpha(theme.bg, 0)}"/>
+        </linearGradient>
+      </defs>
+      <rect width="100%" height="100%" fill="${theme.bg}"/>
+      <path d="M0,${height*0.25} C${width*0.3},${height*0.1} ${width*0.7},${height*0.45} ${width},${height*0.2} L${width},0 L0,0 Z" fill="url(#w1)"/>
+      <path d="M0,${height*0.8} C${width*0.4},${height*0.95} ${width*0.6},${height*0.6} ${width},${height*0.7} L${width},${height} L0,${height} Z" fill="url(#w2)"/>
+      <path d="M0,${height*0.3} C${width*0.25},${height*0.2} ${width*0.8},${height*0.5} ${width},${height*0.25}" fill="none" stroke="${alpha(theme.accent, 0.05)}" stroke-width="${width*0.005}"/>
+    `;
+  }
+
+  if (bgType === 'topography') {
+    return `
+      <rect width="100%" height="100%" fill="${theme.bg}"/>
+      <path d="M -${width*0.2} ${height*0.15} Q ${width*0.3} ${height*0.05}, ${width*0.6} ${height*0.35} T ${width*1.2} ${height*0.25}" fill="none" stroke="${alpha(theme.accent, 0.12)}" stroke-width="2"/>
+      <path d="M -${width*0.2} ${height*0.20} Q ${width*0.3} ${height*0.10}, ${width*0.6} ${height*0.40} T ${width*1.2} ${height*0.30}" fill="none" stroke="${alpha(theme.accent, 0.08)}" stroke-width="1.5"/>
+      <path d="M -${width*0.2} ${height*0.25} Q ${width*0.3} ${height*0.15}, ${width*0.6} ${height*0.45} T ${width*1.2} ${height*0.35}" fill="none" stroke="${alpha(theme.accent, 0.05)}" stroke-width="1"/>
+      
+      <path d="M -${width*0.2} ${height*0.70} Q ${width*0.4} ${height*0.85}, ${width*0.8} ${height*0.60} T ${width*1.2} ${height*0.85}" fill="none" stroke="${alpha(theme.accent2, 0.1)}" stroke-width="2"/>
+      <path d="M -${width*0.2} ${height*0.75} Q ${width*0.4} ${height*0.90}, ${width*0.8} ${height*0.65} T ${width*1.2} ${height*0.90}" fill="none" stroke="${alpha(theme.accent2, 0.06)}" stroke-width="1"/>
+    `;
+  }
+
+  if (bgType === 'mesh') {
+    return `
+      <defs>
+        <pattern id="grid" width="${Math.max(40, width*0.05)}" height="${Math.max(40, width*0.05)}" patternUnits="userSpaceOnUse">
+          <line x1="${Math.max(40, width*0.05)}" y1="0" x2="${Math.max(40, width*0.05)}" y2="${Math.max(40, width*0.05)}" stroke="${alpha(theme.accent, 0.06)}" stroke-width="1"/>
+          <line x1="0" y1="${Math.max(40, width*0.05)}" x2="${Math.max(40, width*0.05)}" y2="${Math.max(40, width*0.05)}" stroke="${alpha(theme.accent, 0.06)}" stroke-width="1"/>
+        </pattern>
+        <radialGradient id="fade" cx="50%" cy="50%" r="70%">
+          <stop offset="20%" stop-color="${theme.bg}" stop-opacity="0"/>
+          <stop offset="100%" stop-color="${theme.bg}" stop-opacity="1"/>
+        </radialGradient>
+      </defs>
+      <rect width="100%" height="100%" fill="${theme.bg}"/>
+      <rect width="100%" height="100%" fill="url(#grid)"/>
+      <rect width="100%" height="100%" fill="url(#fade)"/>`;
+  }
+
+  if (bgType === 'bloom') {
+    return `
+      <defs>
+        <radialGradient id="b1" cx="0%" cy="50%" r="70%">
+          <stop offset="0%" stop-color="${alpha(theme.accent2, 0.18)}"/>
+          <stop offset="100%" stop-color="${alpha(theme.bg, 0)}"/>
+        </radialGradient>
+        <radialGradient id="b2" cx="100%" cy="100%" r="80%">
+          <stop offset="0%" stop-color="${alpha(theme.accent, 0.15)}"/>
+          <stop offset="100%" stop-color="${alpha(theme.bg, 0)}"/>
+        </radialGradient>
       </defs>
       <rect width="100%" height="100%" fill="${theme.bg}"/>
       <rect width="100%" height="100%" fill="url(#b1)"/>
       <rect width="100%" height="100%" fill="url(#b2)"/>`;
   }
-  if (cfg.bgStyle === 'diagonal') {
-    let rays='';
-    const step = Math.max(26, Math.round(width * 0.03));
-    for (let i = -height; i < width; i += step) rays += `<line x1="${i}" y1="0" x2="${i + height * 0.5}" y2="${height}" stroke="${alpha(theme.accent, 0.03)}" stroke-width="${Math.max(1, width * 0.002)}"/>`;
-    return `<rect width="100%" height="100%" fill="${theme.bg}"/>${rays}${accents}`;
-  }
-  if (cfg.bgStyle === 'orbit') {
+
+  if (bgType === 'diagonal') {
     return `
       <rect width="100%" height="100%" fill="${theme.bg}"/>
-      <ellipse cx="${width * 0.72}" cy="${height * 0.22}" rx="${width * 0.28}" ry="${width * 0.14}" fill="none" stroke="${alpha(theme.accent2, 0.08)}" stroke-width="${width * 0.008}"/>
-      <ellipse cx="${width * 0.3}" cy="${height * 0.74}" rx="${width * 0.26}" ry="${width * 0.1}" fill="none" stroke="${alpha(theme.accent, 0.06)}" stroke-width="${width * 0.012}"/>
-      ${accents}`;
+      <path d="M0,0 L${width*0.6},0 L0,${height*0.35} Z" fill="${alpha(theme.accent, 0.06)}"/>
+      <path d="M${width},${height} L${width*0.4},${height} L${width},${height*0.65} Z" fill="${alpha(theme.accent2, 0.05)}"/>
+      <line x1="0" y1="${height*0.25}" x2="${width}" y2="${height*0.85}" stroke="${alpha(theme.accent, 0.08)}" stroke-width="${Math.max(1, width*0.002)}"/>
+      <line x1="0" y1="${height*0.27}" x2="${width}" y2="${height*0.87}" stroke="${alpha(theme.accent, 0.03)}" stroke-width="${Math.max(1, width*0.001)}"/>
+    `;
   }
-  if (cfg.bgStyle === 'velvet') {
+
+  if (bgType === 'orbit') {
     return `
-      <defs><linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="${theme.bg}"/><stop offset="55%" stop-color="${alpha(theme.panel, 0.95)}"/><stop offset="100%" stop-color="${theme.bg}"/></linearGradient></defs>
-      <rect width="100%" height="100%" fill="url(#bg)"/>${accents}`;
+      <rect width="100%" height="100%" fill="${theme.bg}"/>
+      <circle cx="50%" cy="40%" r="${width*0.5}" fill="none" stroke="${alpha(theme.accent, 0.08)}" stroke-width="${Math.max(1, width*0.003)}" stroke-dasharray="6 12"/>
+      <circle cx="50%" cy="40%" r="${width*0.7}" fill="none" stroke="${alpha(theme.accent2, 0.05)}" stroke-width="${Math.max(1, width*0.002)}"/>
+      <circle cx="50%" cy="40%" r="${width*0.9}" fill="none" stroke="${alpha(theme.accent, 0.03)}" stroke-width="${Math.max(2, width*0.005)}"/>
+    `;
   }
-  if (cfg.bgStyle === 'noir') {
+
+  if (bgType === 'velvet') {
     return `
-      <defs><radialGradient id="bg" cx="50%" cy="-10%" r="120%"><stop offset="0%" stop-color="${alpha(theme.accent, 0.22)}"/><stop offset="35%" stop-color="${alpha(theme.bg, 0.95)}"/><stop offset="100%" stop-color="${theme.bg}"/></radialGradient></defs>
-      <rect width="100%" height="100%" fill="url(#bg)"/>${accents}`;
+      <defs>
+        <linearGradient id="v1" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" stop-color="${theme.bg}"/>
+          <stop offset="45%" stop-color="${alpha(theme.panel, 0.8)}"/>
+          <stop offset="100%" stop-color="${theme.bg}"/>
+        </linearGradient>
+      </defs>
+      <rect width="100%" height="100%" fill="url(#v1)"/>`;
   }
+
+  if (bgType === 'noir') {
+    return `
+      <defs>
+        <radialGradient id="vignette" cx="50%" cy="40%" r="90%">
+          <stop offset="20%" stop-color="${alpha(theme.accent, 0.08)}"/>
+          <stop offset="50%" stop-color="${theme.bg}"/>
+          <stop offset="100%" stop-color="#000000"/>
+        </radialGradient>
+      </defs>
+      <rect width="100%" height="100%" fill="url(#vignette)"/>`;
+  }
+
+  // Default: Aurora
   return `
-    <defs><radialGradient id="bg" cx="15%" cy="10%" r="120%"><stop offset="0%" stop-color="${alpha(theme.accent2, 0.26)}"/><stop offset="20%" stop-color="${alpha(theme.accent, 0.18)}"/><stop offset="60%" stop-color="${alpha(theme.bg, 0.96)}"/><stop offset="100%" stop-color="${theme.bg}"/></radialGradient></defs>
-    <rect width="100%" height="100%" fill="url(#bg)"/>${accents}`;
+    <defs>
+      <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+        <stop offset="0%" stop-color="${theme.bg}"/>
+        <stop offset="50%" stop-color="${alpha(theme.panel, 0.6)}"/>
+        <stop offset="100%" stop-color="${theme.bg}"/>
+      </linearGradient>
+      <radialGradient id="aurora1" cx="0%" cy="0%" r="75%">
+        <stop offset="0%" stop-color="${alpha(theme.accent, 0.15)}"/>
+        <stop offset="100%" stop-color="${alpha(theme.bg, 0)}"/>
+      </radialGradient>
+      <radialGradient id="aurora2" cx="100%" cy="100%" r="75%">
+        <stop offset="0%" stop-color="${alpha(theme.accent2, 0.12)}"/>
+        <stop offset="100%" stop-color="${alpha(theme.bg, 0)}"/>
+      </radialGradient>
+    </defs>
+    <rect width="100%" height="100%" fill="url(#bg)"/>
+    <rect width="100%" height="100%" fill="url(#aurora1)"/>
+    <rect width="100%" height="100%" fill="url(#aurora2)"/>`;
 }
 
 
@@ -537,12 +642,11 @@ function renderMonthGrid({ monthIndex, year, x, y, w, h, cfg, theme, labels, now
     const isPast = date.isBefore(now, 'day') && now.month() === monthIndex;
     const textColor = isToday ? theme.text : isWeekend ? theme.weekend : isPast ? alpha(theme.text, 0.6) : theme.text;
     
-    if (isToday && cfg.style === 'outline') {
+    if (isToday) {
       const rect = `<rect x="${cx - cellW * 0.45}" y="${cy - cellHReal * 0.6}" width="${cellW * 0.9}" height="${cellHReal * 0.8}" rx="${Math.min(cellW, cellHReal) * 0.2}"`;
-      out += `${rect} fill="none" stroke="${theme.accent}" stroke-width="${Math.max(1.2, w * 0.004)}"/>`;
-    } else if (isToday && cfg.style === 'numbers') {
-      const rect = `<rect x="${cx - cellW * 0.45}" y="${cy - cellHReal * 0.6}" width="${cellW * 0.9}" height="${cellHReal * 0.8}" rx="${Math.min(cellW, cellHReal) * 0.2}"`;
-      out += `${rect} fill="${alpha(theme.accent, 0.24)}" stroke="${alpha(theme.accent2, 0.34)}"/>`;
+      out += cfg.style === 'outline'
+        ? `${rect} fill="none" stroke="${theme.accent}" stroke-width="${Math.max(1.2, w * 0.004)}"/>`
+        : `${rect} fill="${alpha(theme.accent, cfg.style === 'numbers' ? 0.24 : 0.18)}" stroke="${alpha(theme.accent2, 0.34)}"/>`;
     }
 
     if (cfg.style === 'dots') {
@@ -561,12 +665,6 @@ function renderMonthGrid({ monthIndex, year, x, y, w, h, cfg, theme, labels, now
     } else if (cfg.style === 'micro') {
       out += `<circle cx="${cx}" cy="${cy - cellHReal * 0.18}" r="${Math.max(1.1, Math.min(cellW, cellHReal) * 0.08)}" fill="${isToday ? theme.accent : isWeekend ? theme.weekend : alpha(theme.text, 0.24)}"/>`;
       out += `<text x="${cx}" y="${cy + cellHReal * 0.24}" text-anchor="middle" fill="${textColor}" font-size="${Math.round(numSize * 0.72)}" font-family="${FONT}" font-weight="700">${day}</text>`;
-    } else if (cfg.style === 'eclipse') {
-      if (isToday) out += `<circle cx="${cx - cellW * 0.12}" cy="${cy - cellHReal * 0.25}" r="${Math.min(cellW, cellHReal) * 0.28}" fill="${alpha(theme.accent, 0.35)}"/>`;
-      out += `<text x="${cx}" y="${cy}" text-anchor="middle" fill="${textColor}" font-size="${numSize}" font-family="${FONT}" font-weight="${isToday ? 800 : 600}">${day}</text>`;
-    } else if (cfg.style === 'glassmorphism') {
-      if (isToday) out += `<rect x="${cx - cellW * 0.38}" y="${cy - cellHReal * 0.5}" width="${cellW * 0.76}" height="${cellHReal * 0.6}" rx="${cellHReal * 0.15}" fill="${alpha(theme.accent, 0.15)}" stroke="${alpha('#ffffff', 0.25)}" stroke-width="${Math.max(1, w * 0.003)}"/>`;
-      out += `<text x="${cx}" y="${cy}" text-anchor="middle" fill="${textColor}" font-size="${numSize}" font-family="${FONT}" font-weight="${isToday ? 800 : 600}">${day}</text>`;
     } else {
       out += `<text x="${cx}" y="${cy}" text-anchor="middle" fill="${textColor}" font-size="${numSize}" font-family="${FONT}" font-weight="${isToday ? 800 : 600}">${day}</text>`;
     }
@@ -630,21 +728,9 @@ function renderMonthListRow({ monthIndex, year, x, y, w, h, cfg, theme, labels, 
     const isWeekend = isRestDay(date);
     const isPast = date.isBefore(now, 'day') && now.month() === monthIndex;
     const textColor = isToday ? theme.text : isWeekend ? theme.weekend : isPast ? alpha(theme.text, 0.64) : theme.text;
-    
-    if (cfg.style === 'dots' || cfg.style === 'micro') {
-      if (isToday) out += `<rect x="${cx - cellW * 0.34}" y="${cy - cellH * 0.58}" width="${cellW * 0.68}" height="${cellH * 0.72}" rx="${Math.min(cellW, cellH) * 0.22}" fill="${alpha(theme.accent, 0.24)}" stroke="${alpha(theme.accent2, 0.28)}"/>`;
-      out += `<circle cx="${cx}" cy="${cy - cellH * 0.24}" r="${Math.max(1.1, Math.min(cellW, cellH) * 0.08)}" fill="${isToday ? theme.accent : isWeekend ? theme.weekend : alpha(theme.text, 0.22)}"/>`;
-      out += `<text x="${cx}" y="${cy + cellH * 0.18}" text-anchor="middle" fill="${textColor}" font-size="${numberSize}" font-family="${FONT}" font-weight="${isToday ? 800 : 600}">${day}</text>`;
-    } else if (cfg.style === 'eclipse') {
-      if (isToday) out += `<circle cx="${cx - cellW * 0.12}" cy="${cy - cellH * 0.15}" r="${Math.min(cellW, cellH) * 0.28}" fill="${alpha(theme.accent, 0.35)}"/>`;
-      out += `<text x="${cx}" y="${cy}" text-anchor="middle" fill="${textColor}" font-size="${numberSize}" font-family="${FONT}" font-weight="${isToday ? 800 : 600}">${day}</text>`;
-    } else if (cfg.style === 'glassmorphism') {
-      if (isToday) out += `<rect x="${cx - cellW * 0.38}" y="${cy - cellH * 0.5}" width="${cellW * 0.76}" height="${cellH * 0.6}" rx="${cellH * 0.15}" fill="${alpha(theme.accent, 0.15)}" stroke="${alpha('#ffffff', 0.25)}" stroke-width="1.5"/>`;
-      out += `<text x="${cx}" y="${cy}" text-anchor="middle" fill="${textColor}" font-size="${numberSize}" font-family="${FONT}" font-weight="${isToday ? 800 : 600}">${day}</text>`;
-    } else {
-      if (isToday) out += `<rect x="${cx - cellW * 0.34}" y="${cy - cellH * 0.58}" width="${cellW * 0.68}" height="${cellH * 0.72}" rx="${Math.min(cellW, cellH) * 0.22}" fill="${alpha(theme.accent, 0.24)}" stroke="${alpha(theme.accent2, 0.28)}"/>`;
-      out += `<text x="${cx}" y="${cy}" text-anchor="middle" fill="${textColor}" font-size="${numberSize}" font-family="${FONT}" font-weight="${isToday ? 800 : 600}">${day}</text>`;
-    }
+    if (isToday) out += `<rect x="${cx - cellW * 0.34}" y="${cy - cellH * 0.58}" width="${cellW * 0.68}" height="${cellH * 0.72}" rx="${Math.min(cellW, cellH) * 0.22}" fill="${alpha(theme.accent, 0.24)}" stroke="${alpha(theme.accent2, 0.28)}"/>`;
+    if (cfg.style === 'dots' || cfg.style === 'micro') out += `<circle cx="${cx}" cy="${cy - cellH * 0.24}" r="${Math.max(1.1, Math.min(cellW, cellH) * 0.08)}" fill="${isToday ? theme.accent : isWeekend ? theme.weekend : alpha(theme.text, 0.22)}"/>`;
+    out += `<text x="${cx}" y="${cy + (cfg.style === 'dots' || cfg.style === 'micro' ? cellH * 0.18 : 0)}" text-anchor="middle" fill="${textColor}" font-size="${numberSize}" font-family="${FONT}" font-weight="${isToday ? 800 : 600}">${day}</text>`;
   }
   return out;
 }
