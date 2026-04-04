@@ -70,6 +70,9 @@ const PHONE_PRESETS = {
 };
 
 const THEMES = {
+  anomaly_call: { name: 'Зов аномалии', bg: '#1a1c17', panel: '#24261f', text: '#d9d4a8', muted: '#8f8f82', accent: '#ff7300', accent2: '#ff9d47', weekend: '#ff5e00' },
+  eden_light: { name: 'Свет Эдема', bg: '#fdfbf7', panel: '#2d3a2b', text: '#1b2419', muted: '#6b7a68', accent: '#d4af37', accent2: '#e8c968', weekend: '#a38a36' },
+  syndicate: { name: 'Синдикат', bg: '#050505', panel: '#121212', text: '#00f0ff', muted: '#4a707a', accent: '#fcee0a', accent2: '#ffff5c', weekend: '#ff003c' },
   graphite_orange: { name: 'Графит и Оранж', bg: '#0a0d12', panel: '#131823', text: '#edf2ff', muted: '#8994a7', accent: '#ff8f2d', accent2: '#ffbc6f', weekend: '#ff8f7b' },
   obsidian_blue: { name: 'Обсидиан и Синий', bg: '#07111e', panel: '#0d1726', text: '#eef6ff', muted: '#92abc9', accent: '#5db6ff', accent2: '#a7dcff', weekend: '#86b4ff' },
   frost_light: { name: 'Светлый Иней', bg: '#edf4ff', panel: '#dfe8f7', text: '#1e2d41', muted: '#73839a', accent: '#3b7bff', accent2: '#7ea6ff', weekend: '#5b88ff' },
@@ -98,7 +101,10 @@ const BG_STYLES = {
   diagonal: 'Диагональные лучи',
   orbit: 'Орбиты',
   velvet: 'Бархат',
-  grain_light: 'Светлое зерно'
+  grain_light: 'Светлое зерно',
+  topography: 'Топография',
+  liquid_glass: 'Жидкое стекло',
+  static_noise: 'Шум эфира'
 };
 
 const QUOTES = {
@@ -158,6 +164,23 @@ function getLabels(lang) {
 }
 function getConfig(query) {
   const preset = PHONE_PRESETS[query.model] || PHONE_PRESETS.iphone_15;
+  
+  let themeObj;
+  if (query.theme === 'custom_palette') {
+    themeObj = {
+      name: 'Custom',
+      bg: query.c_bg || '#0a0d12',
+      panel: query.c_panel || '#131823',
+      text: query.c_text || '#edf2ff',
+      muted: query.c_muted || '#8994a7',
+      accent: query.c_accent || '#ff8f2d',
+      accent2: query.c_accent2 || '#ffbc6f',
+      weekend: query.c_weekend || '#ff8f7b'
+    };
+  } else {
+    themeObj = THEMES[query.theme] || THEMES.graphite_orange;
+  }
+
   return {
     model: query.model || 'iphone_15',
     width: query.model === 'custom' ? clamp(num(query.width, preset.width), 320, 4000) : preset.width,
@@ -168,7 +191,7 @@ function getConfig(query) {
     monthLayout: query.month_layout || 'grid_3x4',
     weekendMode: query.weekend_mode || 'weekends_only',
     opacity: clamp(num(query.opacity, 8), 0, 60),
-    theme: THEMES[query.theme] ? query.theme : 'graphite_orange',
+    themeObj: themeObj,
     bgStyle: BG_STYLES[query.bg_style] ? query.bg_style : 'aurora',
     lang: query.lang === 'en' ? 'en' : 'ru',
     timezone: clamp(num(query.timezone, 3), -12, 14),
@@ -232,6 +255,34 @@ function renderBackground(cfg, theme, width, height) {
   const accents = `
     <circle cx="${width * 0.83}" cy="${height * 0.18}" r="${width * 0.16}" fill="${alpha(theme.accent, 0.10)}"/>
     <circle cx="${width * 0.22}" cy="${height * 0.78}" r="${width * 0.20}" fill="${alpha(theme.accent2, 0.07)}"/>`;
+    
+  if (cfg.bgStyle === 'topography') {
+    let lines = '';
+    for(let i=1; i<12; i++) {
+       lines += `<path d="M 0 ${height*0.08*i} Q ${width*0.6} ${height*0.12*i}, ${width} ${height*0.06*i}" fill="none" stroke="${alpha(theme.accent, 0.08)}" stroke-width="1.5"/>`;
+       lines += `<path d="M 0 ${height*0.12*i} Q ${width*0.3} ${height*0.08*i}, ${width} ${height*0.14*i}" fill="none" stroke="${alpha(theme.accent2, 0.06)}" stroke-width="1"/>`;
+    }
+    return `<rect width="100%" height="100%" fill="${theme.bg}"/>${lines}${accents}`;
+  }
+  if (cfg.bgStyle === 'liquid_glass') {
+    return `
+      <defs>
+        <radialGradient id="lg_a1" cx="80%" cy="15%" r="65%"><stop offset="0%" stop-color="${alpha(theme.accent, 0.28)}"/><stop offset="100%" stop-color="${alpha(theme.bg, 0)}"/></radialGradient>
+        <radialGradient id="lg_a2" cx="15%" cy="85%" r="70%"><stop offset="0%" stop-color="${alpha(theme.accent2, 0.22)}"/><stop offset="100%" stop-color="${alpha(theme.bg, 0)}"/></radialGradient>
+      </defs>
+      <rect width="100%" height="100%" fill="${theme.bg}"/>
+      <rect width="100%" height="100%" fill="url(#lg_a1)"/>
+      <rect width="100%" height="100%" fill="url(#lg_a2)"/>`;
+  }
+  if (cfg.bgStyle === 'static_noise') {
+    return `
+      <defs>
+        <filter id="noise_stat"><feTurbulence type="fractalNoise" baseFrequency="0.85" numOctaves="3" stitchTiles="stitch"/><feColorMatrix type="matrix" values="1 0 0 0 0, 1 0 0 0 0, 1 0 0 0 0, 0 0 0 0.09 0" /></filter>
+      </defs>
+      <rect width="100%" height="100%" fill="${theme.bg}"/>
+      <rect width="100%" height="100%" filter="url(#noise_stat)"/>
+      ${accents}`;
+  }
   if (cfg.bgStyle === 'paper' || cfg.bgStyle === 'grain_light') {
     const bgA = cfg.bgStyle === 'grain_light' ? '#f3f0ea' : theme.bg;
     const bgB = cfg.bgStyle === 'grain_light' ? '#e7e1d8' : theme.panel;
@@ -440,7 +491,6 @@ function renderMonthGrid({ monthIndex, year, x, y, w, h, cfg, theme, labels, now
   const titleSize = Math.min(Math.round(h * (focusHero ? 0.11 : opts.sixWide ? 0.09 : dense ? 0.10 : 0.12)), Math.round(w * (focusHero ? 0.13 : opts.sixWide ? 0.11 : dense ? 0.14 : 0.16))) * emphasis;
   const titleY = showInlineTitle ? (y + pad + titleSize * 0.80) : (y + pad + titleSize * 0.75);
   const weekdaySize = Math.min(Math.round(cellW * (focusHero ? 0.34 : opts.sixWide ? 0.30 : dense ? 0.4 : 0.5)), Math.round(h * (focusHero ? 0.044 : opts.sixWide ? 0.032 : dense ? 0.048 : 0.058)));
-  const numberSize = Math.min(Math.round(cellW * (focusHero ? 0.5 : opts.sixWide ? 0.34 : dense ? 0.52 : 0.6)), Math.round(cellH = 0));
   const topBand = weekdayVisible
     ? h * (focusHero ? 0.40 : opts.sixWide ? 0.20 : dense ? 0.245 : 0.285)
     : h * (focusHero ? 0.18 : opts.sixWide ? 0.14 : dense ? 0.17 : 0.20);
@@ -486,12 +536,15 @@ function renderMonthGrid({ monthIndex, year, x, y, w, h, cfg, theme, labels, now
     const isWeekend = isRestDay(date);
     const isPast = date.isBefore(now, 'day') && now.month() === monthIndex;
     const textColor = isToday ? theme.text : isWeekend ? theme.weekend : isPast ? alpha(theme.text, 0.6) : theme.text;
-    if (isToday) {
+    
+    if (isToday && cfg.style === 'outline') {
       const rect = `<rect x="${cx - cellW * 0.45}" y="${cy - cellHReal * 0.6}" width="${cellW * 0.9}" height="${cellHReal * 0.8}" rx="${Math.min(cellW, cellHReal) * 0.2}"`;
-      out += cfg.style === 'outline'
-        ? `${rect} fill="none" stroke="${theme.accent}" stroke-width="${Math.max(1.2, w * 0.004)}"/>`
-        : `${rect} fill="${alpha(theme.accent, cfg.style === 'numbers' ? 0.24 : 0.18)}" stroke="${alpha(theme.accent2, 0.34)}"/>`;
+      out += `${rect} fill="none" stroke="${theme.accent}" stroke-width="${Math.max(1.2, w * 0.004)}"/>`;
+    } else if (isToday && cfg.style === 'numbers') {
+      const rect = `<rect x="${cx - cellW * 0.45}" y="${cy - cellHReal * 0.6}" width="${cellW * 0.9}" height="${cellHReal * 0.8}" rx="${Math.min(cellW, cellHReal) * 0.2}"`;
+      out += `${rect} fill="${alpha(theme.accent, 0.24)}" stroke="${alpha(theme.accent2, 0.34)}"/>`;
     }
+
     if (cfg.style === 'dots') {
       const r = Math.min(cellW, cellHReal) * (isToday ? 0.18 : 0.12);
       out += `<circle cx="${cx}" cy="${cy - cellHReal * 0.2}" r="${r}" fill="${isToday ? theme.accent : isPast ? theme.accent2 : isWeekend ? alpha(theme.weekend, 0.9) : alpha(theme.text, 0.26)}"/>`;
@@ -508,6 +561,12 @@ function renderMonthGrid({ monthIndex, year, x, y, w, h, cfg, theme, labels, now
     } else if (cfg.style === 'micro') {
       out += `<circle cx="${cx}" cy="${cy - cellHReal * 0.18}" r="${Math.max(1.1, Math.min(cellW, cellHReal) * 0.08)}" fill="${isToday ? theme.accent : isWeekend ? theme.weekend : alpha(theme.text, 0.24)}"/>`;
       out += `<text x="${cx}" y="${cy + cellHReal * 0.24}" text-anchor="middle" fill="${textColor}" font-size="${Math.round(numSize * 0.72)}" font-family="${FONT}" font-weight="700">${day}</text>`;
+    } else if (cfg.style === 'eclipse') {
+      if (isToday) out += `<circle cx="${cx - cellW * 0.12}" cy="${cy - cellHReal * 0.25}" r="${Math.min(cellW, cellHReal) * 0.28}" fill="${alpha(theme.accent, 0.35)}"/>`;
+      out += `<text x="${cx}" y="${cy}" text-anchor="middle" fill="${textColor}" font-size="${numSize}" font-family="${FONT}" font-weight="${isToday ? 800 : 600}">${day}</text>`;
+    } else if (cfg.style === 'glassmorphism') {
+      if (isToday) out += `<rect x="${cx - cellW * 0.38}" y="${cy - cellHReal * 0.5}" width="${cellW * 0.76}" height="${cellHReal * 0.6}" rx="${cellHReal * 0.15}" fill="${alpha(theme.accent, 0.15)}" stroke="${alpha('#ffffff', 0.25)}" stroke-width="${Math.max(1, w * 0.003)}"/>`;
+      out += `<text x="${cx}" y="${cy}" text-anchor="middle" fill="${textColor}" font-size="${numSize}" font-family="${FONT}" font-weight="${isToday ? 800 : 600}">${day}</text>`;
     } else {
       out += `<text x="${cx}" y="${cy}" text-anchor="middle" fill="${textColor}" font-size="${numSize}" font-family="${FONT}" font-weight="${isToday ? 800 : 600}">${day}</text>`;
     }
@@ -571,9 +630,21 @@ function renderMonthListRow({ monthIndex, year, x, y, w, h, cfg, theme, labels, 
     const isWeekend = isRestDay(date);
     const isPast = date.isBefore(now, 'day') && now.month() === monthIndex;
     const textColor = isToday ? theme.text : isWeekend ? theme.weekend : isPast ? alpha(theme.text, 0.64) : theme.text;
-    if (isToday) out += `<rect x="${cx - cellW * 0.34}" y="${cy - cellH * 0.58}" width="${cellW * 0.68}" height="${cellH * 0.72}" rx="${Math.min(cellW, cellH) * 0.22}" fill="${alpha(theme.accent, 0.24)}" stroke="${alpha(theme.accent2, 0.28)}"/>`;
-    if (cfg.style === 'dots' || cfg.style === 'micro') out += `<circle cx="${cx}" cy="${cy - cellH * 0.24}" r="${Math.max(1.1, Math.min(cellW, cellH) * 0.08)}" fill="${isToday ? theme.accent : isWeekend ? theme.weekend : alpha(theme.text, 0.22)}"/>`;
-    out += `<text x="${cx}" y="${cy + (cfg.style === 'dots' || cfg.style === 'micro' ? cellH * 0.18 : 0)}" text-anchor="middle" fill="${textColor}" font-size="${numberSize}" font-family="${FONT}" font-weight="${isToday ? 800 : 600}">${day}</text>`;
+    
+    if (cfg.style === 'dots' || cfg.style === 'micro') {
+      if (isToday) out += `<rect x="${cx - cellW * 0.34}" y="${cy - cellH * 0.58}" width="${cellW * 0.68}" height="${cellH * 0.72}" rx="${Math.min(cellW, cellH) * 0.22}" fill="${alpha(theme.accent, 0.24)}" stroke="${alpha(theme.accent2, 0.28)}"/>`;
+      out += `<circle cx="${cx}" cy="${cy - cellH * 0.24}" r="${Math.max(1.1, Math.min(cellW, cellH) * 0.08)}" fill="${isToday ? theme.accent : isWeekend ? theme.weekend : alpha(theme.text, 0.22)}"/>`;
+      out += `<text x="${cx}" y="${cy + cellH * 0.18}" text-anchor="middle" fill="${textColor}" font-size="${numberSize}" font-family="${FONT}" font-weight="${isToday ? 800 : 600}">${day}</text>`;
+    } else if (cfg.style === 'eclipse') {
+      if (isToday) out += `<circle cx="${cx - cellW * 0.12}" cy="${cy - cellH * 0.15}" r="${Math.min(cellW, cellH) * 0.28}" fill="${alpha(theme.accent, 0.35)}"/>`;
+      out += `<text x="${cx}" y="${cy}" text-anchor="middle" fill="${textColor}" font-size="${numberSize}" font-family="${FONT}" font-weight="${isToday ? 800 : 600}">${day}</text>`;
+    } else if (cfg.style === 'glassmorphism') {
+      if (isToday) out += `<rect x="${cx - cellW * 0.38}" y="${cy - cellH * 0.5}" width="${cellW * 0.76}" height="${cellH * 0.6}" rx="${cellH * 0.15}" fill="${alpha(theme.accent, 0.15)}" stroke="${alpha('#ffffff', 0.25)}" stroke-width="1.5"/>`;
+      out += `<text x="${cx}" y="${cy}" text-anchor="middle" fill="${textColor}" font-size="${numberSize}" font-family="${FONT}" font-weight="${isToday ? 800 : 600}">${day}</text>`;
+    } else {
+      if (isToday) out += `<rect x="${cx - cellW * 0.34}" y="${cy - cellH * 0.58}" width="${cellW * 0.68}" height="${cellH * 0.72}" rx="${Math.min(cellW, cellH) * 0.22}" fill="${alpha(theme.accent, 0.24)}" stroke="${alpha(theme.accent2, 0.28)}"/>`;
+      out += `<text x="${cx}" y="${cy}" text-anchor="middle" fill="${textColor}" font-size="${numberSize}" font-family="${FONT}" font-weight="${isToday ? 800 : 600}">${day}</text>`;
+    }
   }
   return out;
 }
@@ -611,7 +682,7 @@ function renderFooter(cfg, theme, labels, now, stats, width, footerBox, FONT) {
 }
 
 function renderSvg(cfg) {
-  const theme = THEMES[cfg.theme];
+  const theme = cfg.themeObj;
   const labels = getLabels(cfg.lang);
   const now = zonedNow(cfg.timezone);
   const stats = yearStats(now);
