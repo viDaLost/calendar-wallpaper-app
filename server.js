@@ -1,11 +1,14 @@
 const express = require('express');
 const path = require('path');
 const sharp = require('sharp');
+const { Resvg } = require('@resvg/resvg-js');
 const dayjs = require('dayjs');
 const utc = require('dayjs/plugin/utc');
 const isLeapYear = require('dayjs/plugin/isLeapYear');
 const weekOfYear = require('dayjs/plugin/weekOfYear');
 const advancedFormat = require('dayjs/plugin/advancedFormat');
+require('dayjs/locale/ru');
+require('dayjs/locale/en');
 const fs = require('fs');
 
 dayjs.extend(utc);
@@ -32,6 +35,7 @@ const FONTS = {
 
 const fontCache = {};
 const fontsDir = path.join(__dirname, 'fonts');
+const fontFiles = Object.values(FONTS).map((f) => path.join(fontsDir, f.file)).filter((p) => fs.existsSync(p));
 
 if (fs.existsSync(fontsDir)) {
   for (const [key, fontDef] of Object.entries(FONTS)) {
@@ -49,19 +53,41 @@ if (fs.existsSync(fontsDir)) {
 
 const PHONE_PRESETS = {
   iphone_se_1: { label: 'iPhone SE (1-е пок.)', width: 640, height: 1136, family: 'SE / Классика' },
-  iphone_8: { label: 'iPhone 8 / 7 / 6s', width: 750, height: 1334, family: 'Классика' },
-  iphone_8_plus: { label: 'iPhone 8 Plus / 7 Plus', width: 1080, height: 1920, family: 'Классика Плюс' },
   iphone_se_2: { label: 'iPhone SE (2/3-е пок.)', width: 750, height: 1334, family: 'SE' },
-  iphone_x: { label: 'iPhone X / XS / 11 Pro', width: 1125, height: 2436, family: 'Face ID 5.8"' },
+  iphone_6: { label: 'iPhone 6', width: 750, height: 1334, family: 'Классика' },
+  iphone_6s: { label: 'iPhone 6s', width: 750, height: 1334, family: 'Классика' },
+  iphone_7: { label: 'iPhone 7', width: 750, height: 1334, family: 'Классика' },
+  iphone_8: { label: 'iPhone 8', width: 750, height: 1334, family: 'Классика' },
+  iphone_6_plus: { label: 'iPhone 6 Plus', width: 1080, height: 1920, family: 'Классика Плюс' },
+  iphone_6s_plus: { label: 'iPhone 6s Plus', width: 1080, height: 1920, family: 'Классика Плюс' },
+  iphone_7_plus: { label: 'iPhone 7 Plus', width: 1080, height: 1920, family: 'Классика Плюс' },
+  iphone_8_plus: { label: 'iPhone 8 Plus', width: 1080, height: 1920, family: 'Классика Плюс' },
+  iphone_x: { label: 'iPhone X', width: 1125, height: 2436, family: 'Face ID 5.8"' },
+  iphone_xs: { label: 'iPhone XS', width: 1125, height: 2436, family: 'Face ID 5.8"' },
   iphone_xr: { label: 'iPhone XR / 11', width: 828, height: 1792, family: 'Liquid Retina 6.1"' },
-  iphone_xs_max: { label: 'iPhone XS Max / 11 Pro Max', width: 1242, height: 2688, family: 'Max 6.5"' },
-  iphone_12_mini: { label: 'iPhone 12/13 mini', width: 1080, height: 2340, family: 'mini' },
-  iphone_12: { label: 'iPhone 12/13/14 / Pro', width: 1170, height: 2532, family: '6.1"' },
-  iphone_12_pro_max: { label: 'iPhone 12/13 Pro Max / 14 Plus', width: 1284, height: 2778, family: 'Крупный 6.7"' },
+  iphone_11: { label: 'iPhone 11', width: 828, height: 1792, family: 'Liquid Retina 6.1"' },
+  iphone_11_pro: { label: 'iPhone 11 Pro', width: 1125, height: 2436, family: 'Pro 5.8"' },
+  iphone_xs_max: { label: 'iPhone XS Max', width: 1242, height: 2688, family: 'Max 6.5"' },
+  iphone_11_pro_max: { label: 'iPhone 11 Pro Max', width: 1242, height: 2688, family: 'Max 6.5"' },
+  iphone_12_mini: { label: 'iPhone 12 mini', width: 1080, height: 2340, family: 'mini' },
+  iphone_12: { label: 'iPhone 12', width: 1170, height: 2532, family: '6.1"' },
+  iphone_12_pro: { label: 'iPhone 12 Pro', width: 1170, height: 2532, family: '6.1"' },
+  iphone_12_pro_max: { label: 'iPhone 12 Pro Max', width: 1284, height: 2778, family: 'Крупный 6.7"' },
+  iphone_13_mini: { label: 'iPhone 13 mini', width: 1080, height: 2340, family: 'mini' },
+  iphone_13: { label: 'iPhone 13', width: 1170, height: 2532, family: '6.1"' },
+  iphone_13_pro: { label: 'iPhone 13 Pro', width: 1170, height: 2532, family: '6.1"' },
+  iphone_13_pro_max: { label: 'iPhone 13 Pro Max', width: 1284, height: 2778, family: 'Крупный 6.7"' },
+  iphone_14: { label: 'iPhone 14', width: 1170, height: 2532, family: '6.1"' },
+  iphone_14_plus: { label: 'iPhone 14 Plus', width: 1284, height: 2778, family: 'Plus 6.7"' },
   iphone_14_pro: { label: 'iPhone 14 Pro', width: 1179, height: 2556, family: 'Pro 6.1"' },
   iphone_14_pro_max: { label: 'iPhone 14 Pro Max', width: 1290, height: 2796, family: 'Pro Max 6.7"' },
-  iphone_15: { label: 'iPhone 15 / 16 / Pro', width: 1179, height: 2556, family: '6.1" новый' },
-  iphone_15_plus: { label: 'iPhone 15/16 Plus', width: 1290, height: 2796, family: '6.7" новый' },
+  iphone_15: { label: 'iPhone 15', width: 1179, height: 2556, family: '6.1" новый' },
+  iphone_15_plus: { label: 'iPhone 15 Plus', width: 1290, height: 2796, family: '6.7" новый' },
+  iphone_15_pro: { label: 'iPhone 15 Pro', width: 1179, height: 2556, family: 'Pro 6.1"' },
+  iphone_15_pro_max: { label: 'iPhone 15 Pro Max', width: 1290, height: 2796, family: 'Pro Max 6.7"' },
+  iphone_16e: { label: 'iPhone 16e', width: 1170, height: 2532, family: '6.1"' },
+  iphone_16: { label: 'iPhone 16', width: 1179, height: 2556, family: '6.1" новый' },
+  iphone_16_plus: { label: 'iPhone 16 Plus', width: 1290, height: 2796, family: '6.7" новый' },
   iphone_16_pro: { label: 'iPhone 16 Pro', width: 1206, height: 2622, family: 'Pro 6.3"' },
   iphone_16_pro_max: { label: 'iPhone 16 Pro Max', width: 1320, height: 2868, family: 'Pro Max 6.9"' },
   custom: { label: 'Свой размер', width: 1179, height: 2556, family: 'Custom' }
@@ -179,8 +205,8 @@ function getConfig(query) {
   };
 }
 
-function zonedNow(offsetHours) {
-  return dayjs.utc().add(offsetHours, 'hour');
+function zonedNow(offsetHours, lang = 'ru') {
+  return dayjs.utc().add(offsetHours, 'hour').locale(lang);
 }
 
 function yearStats(now) {
@@ -302,8 +328,8 @@ function wrap(text, max) {
 
 function renderHeader(cfg, theme, labels, now, stats, width, padding, topY, FONT) {
   const dateText = cfg.lang === 'ru'
-    ? `${labels.today}: ${now.format('D MMMM')}`
-    : `${labels.today}: ${now.format('MMM D')}`;
+    ? `${labels.today}: ${escapeXml(now.format('D MMMM'))}`
+    : `${labels.today}: ${escapeXml(now.format('MMM D'))}`;
   const right = width - padding;
   const titleSize = Math.round(width * 0.1);
   const subtitleSize = Math.round(width * 0.035);
@@ -319,7 +345,7 @@ function renderHeader(cfg, theme, labels, now, stats, width, padding, topY, FONT
     <text x="${padding}" y="${topY + titleSize}" fill="${theme.text}" font-size="${titleSize}" font-family="${FONT}" font-weight="900" letter-spacing="-0.03em">${now.year()}</text>
     <text x="${padding}" y="${topY + titleSize + subtitleSize * 1.8}" fill="${theme.muted}" font-size="${subtitleSize}" font-family="${FONT}">${escapeXml(dateText)}</text>
     <rect x="${padding}" y="${topY + titleSize + subtitleSize * 2.8}" width="${chipWidth}" height="${chipHeight}" rx="${chipHeight / 2}" fill="${alpha(theme.panel, 0.92)}" stroke="${alpha(theme.accent2, 0.24)}" />
-    <text x="${padding + chipWidth / 2}" y="${topY + titleSize + subtitleSize * 2.8 + chipHeight * 0.64}" text-anchor="middle" fill="${theme.accent2}" font-size="${Math.round(width * 0.026)}" font-family="${FONT}" font-weight="700">${labels.week} ${now.week()}</text>
+    <text x="${padding + chipWidth / 2}" y="${topY + titleSize + subtitleSize * 2.8 + chipHeight * 0.64}" text-anchor="middle" fill="${theme.accent2}" font-size="${Math.round(width * 0.026)}" font-family="${FONT}" font-weight="700">${escapeXml(labels.week)} ${now.week()}</text>
   `;
 
   if (cfg.showProgressRing) {
@@ -366,7 +392,7 @@ function renderMonth({ monthIndex, year, x, y, w, h, cfg, theme, labels, now, FO
   if (cfg.monthBadges) {
     out += `
       <rect x="${x + w - pad - badgeW}" y="${y + pad * 0.6}" width="${badgeW}" height="${badgeH}" rx="${badgeH / 2}" fill="${isCurrent ? alpha(theme.accent, 0.18) : alpha('#ffffff', 0.05)}" />
-      <text x="${x + w - pad - badgeW / 2}" y="${y + pad * 0.6 + badgeH * 0.65}" text-anchor="middle" fill="${isCurrent ? theme.accent2 : theme.muted}" font-size="${Math.round(badgeH * 0.6)}" font-family="${FONT}" font-weight="700">${daysInMonth}д</text>
+      <text x="${x + w - pad - badgeW / 2}" y="${y + pad * 0.6 + badgeH * 0.65}" text-anchor="middle" fill="${isCurrent ? theme.accent2 : theme.muted}" font-size="${Math.round(badgeH * 0.6)}" font-family="${FONT}" font-weight="700">${daysInMonth}${cfg.lang === 'ru' ? 'д' : 'd'}</text>
     `;
   }
 
@@ -486,7 +512,7 @@ function renderFooter(cfg, theme, labels, now, stats, width, footerBox, FONT) {
 function renderSvg(cfg) {
   const theme = THEMES[cfg.theme];
   const labels = getLabels(cfg.lang);
-  const now = zonedNow(cfg.timezone);
+  const now = zonedNow(cfg.timezone, cfg.lang);
   const stats = yearStats(now);
   const { width, height } = cfg;
   const padding = Math.round(width * 0.05); 
@@ -569,9 +595,25 @@ app.get('/wallpaper.png', async (req, res) => {
   try {
     const cfg = getConfig(req.query);
     const svg = renderSvg(cfg);
-    const png = await sharp(Buffer.from(svg)).png().toBuffer();
+
+    let png;
+    try {
+      const resvg = new Resvg(svg, {
+        fitTo: { mode: 'width', value: cfg.width },
+        font: {
+          fontFiles,
+          loadSystemFonts: true,
+          defaultFontFamily: (FONTS[cfg.font] || FONTS.inter).family,
+        },
+      });
+      png = resvg.render().asPng();
+    } catch (renderErr) {
+      png = await sharp(Buffer.from(svg), { density: 300 }).png().toBuffer();
+    }
+
     res.setHeader('Content-Type', 'image/png');
-    res.send(png);
+    res.setHeader('Cache-Control', 'no-store, max-age=0');
+    res.send(Buffer.from(png));
   } catch (err) {
     res.status(500).json({ error: 'ОШИБКА ГЕНЕРАЦИИ ОБОЕВ', details: err.message });
   }
