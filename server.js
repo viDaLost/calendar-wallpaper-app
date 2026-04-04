@@ -72,31 +72,34 @@ if (fs.existsSync(fontsDir)) {
   }
 }
 
-// Защита от пустых шрифтов на Vercel (динамическое скачивание в буфер)
-let fallbackFontBuffer = null;
-async function getDefaultFontBuffer() {
-  if (fallbackFontBuffer) return fallbackFontBuffer;
+// Локальный буфер шрифта по умолчанию: без внешних запросов, чтобы серверless не падал
+const defaultFontBuffer = fontCache.inter ? Buffer.from(fontCache.inter, 'base64') : null;
+
+async function fetchJsonWithTimeout(url, timeoutMs = 2200) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    const resp = await fetch('https://raw.githubusercontent.com/rsms/inter/master/docs/font-files/Inter-Regular.ttf');
-    fallbackFontBuffer = await resp.arrayBuffer();
-  } catch (e) {
-    console.error("Failed to fetch fallback font", e);
+    const resp = await fetch(url, { signal: controller.signal, headers: { 'accept': 'application/json' } });
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    return await resp.json();
+  } finally {
+    clearTimeout(timer);
   }
-  return fallbackFontBuffer;
 }
 
 // Получение погоды по названию города (Open-Meteo Geocoding)
 async function fetchWeatherByCity(city) {
-  if (!city) return null;
+  const normalizedCity = String(city || '').split(',')[0].trim();
+  if (!normalizedCity) return null;
   try {
-    const geoRes = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(city)}&count=1&language=ru`);
-    const geoData = await geoRes.json();
+    const geoData = await fetchJsonWithTimeout(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(normalizedCity)}&count=1&language=ru`);
     if (!geoData.results || geoData.results.length === 0) return null;
-    
+
     const place = geoData.results[0];
     const { latitude, longitude } = place;
-    const res = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current=temperature_2m,weather_code`);
-    const data = await res.json();
+    const data = await fetchJsonWithTimeout(`https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current=temperature_2m,weather_code`);
+    if (!data.current || typeof data.current.temperature_2m !== 'number') return null;
+
     const temp = Math.round(data.current.temperature_2m);
     const code = data.current.weather_code;
     let icon = '☀️';
@@ -106,9 +109,11 @@ async function fetchWeatherByCity(city) {
     if(code >= 71 && code <= 77) icon = '❄️';
     if(code >= 80 && code <= 82) icon = '🌦️';
     if(code >= 95) icon = '⛈️';
-    const cityLabel = [place.name, place.admin1 || place.country].filter(Boolean).slice(0,2).join(', ');
+    const cityLabel = String(place.name || normalizedCity).trim();
     return { temp: temp > 0 ? `+${temp}` : temp, icon, cityLabel };
-  } catch (e) { return null; }
+  } catch (e) {
+    return null;
+  }
 }
 
 app.use(express.static(path.join(__dirname, 'public')));
@@ -155,7 +160,7 @@ function getConfig(query) {
     timezone: Number(query.timezone) || 3,
     footer: query.footer || 'year_summary', note: (query.note || '').slice(0, 120),
     events: query.events || '',
-    city: query.city || '',
+    city: String(query.city || '').split(',')[0].trim(),
     eventColor: query.c_event || themeObj.accent,
     showWeekdays: String(query.show_weekdays || '1') === '1', accentToday: String(query.accent_today || '1') === '1',
     showProgressRing: String(query.show_progress_ring || '1') === '1', showWeekNumbers: String(query.show_week_numbers || '0') === '1',
@@ -166,6 +171,9 @@ function getConfig(query) {
 
 app.get('/wallpaper.svg', async (req, res) => {
   const cfg = getConfig(req.query);
+  try {
+    if (cfg.city) cfg.weatherData = await fetchWeatherByCity(cfg.city);
+  } catch (_) {}
   res.type('image/svg+xml').send(Engine.renderSvg(cfg, dayjs, fontCache[req.query.font || 'inter']));
 });
 
@@ -186,11 +194,10 @@ app.get('/wallpaper.png', async (req, res) => {
     const b64Font = fontCache[req.query.font || 'inter'];
     const svg = Engine.renderSvg(cfg, dayjs, b64Font);
 
-    // Подготовка буферов шрифтов для 100% рендера текста в Resvg на Vercel
+    // Только локальные шрифты: никаких внешних запросов во время рендера
     const fontBuffers = [];
     if (b64Font) fontBuffers.push(Buffer.from(b64Font, 'base64'));
-    const defaultFontBuf = await getDefaultFontBuffer();
-    if (defaultFontBuf) fontBuffers.push(Buffer.from(defaultFontBuf));
+    if (defaultFontBuffer) fontBuffers.push(defaultFontBuffer);
 
     const allFontBuffers = [
       ...Object.values(fontCache).map(v => Buffer.from(v, 'base64')),
@@ -219,6 +226,7 @@ app.get('/wallpaper.png', async (req, res) => {
     res.setHeader('X-Cache', 'MISS');
     res.send(png);
   } catch (err) {
+    console.error('WALLPAPER_PNG_ERROR', err);
     res.status(500).json({ error: 'RENDER_ERROR', details: err.message });
   }
 });
