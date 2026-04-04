@@ -1,0 +1,14 @@
+{
+  "name": "wallpaper-calendar-pro",
+  "version": "1.0.0",
+  "description": "Advanced wallpaper calendar generator with PNG export and shareable URLs",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "dayjs": "^1.11.13",
+    "express": "^4.21.2",
+    "sharp": "^0.33.5"
+  }
+}
