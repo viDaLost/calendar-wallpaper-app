@@ -6,6 +6,7 @@ const utc = require('dayjs/plugin/utc');
 const isLeapYear = require('dayjs/plugin/isLeapYear');
 const weekOfYear = require('dayjs/plugin/weekOfYear');
 const advancedFormat = require('dayjs/plugin/advancedFormat');
+const fs = require('fs');
 
 dayjs.extend(utc);
 dayjs.extend(isLeapYear);
@@ -15,9 +16,36 @@ dayjs.extend(advancedFormat);
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Расширенный список шрифтов. 'DejaVu Sans' обычно есть на серверах Vercel/AWS, 
-// что решает проблему квадратиков (▯▯▯) при рендере PNG.
-const FONT_FAMILY = "Inter, 'DejaVu Sans', system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif";
+// --- ШРИФТЫ ---
+const FONTS = {
+  inter: { name: 'Inter (Стандарт)', file: 'inter.ttf', family: 'Inter' },
+  montserrat: { name: 'Montserrat (Геометрия)', file: 'montserrat.ttf', family: 'Montserrat' },
+  roboto_mono: { name: 'Roboto Mono (Код)', file: 'roboto-mono.ttf', family: 'Roboto Mono' },
+  playfair: { name: 'Playfair Display (Журнал)', file: 'playfair.ttf', family: 'Playfair Display' },
+  comfortaa: { name: 'Comfortaa (Круглый)', file: 'comfortaa.ttf', family: 'Comfortaa' },
+  jura: { name: 'Jura (Футуристичный)', file: 'jura.ttf', family: 'Jura' },
+  caveat: { name: 'Caveat (Рукописный)', file: 'caveat.ttf', family: 'Caveat' },
+  russo_one: { name: 'Russo One (Плакатный)', file: 'russo-one.ttf', family: 'Russo One' },
+  lora: { name: 'Lora (Книжный)', file: 'lora.ttf', family: 'Lora' },
+  ubuntu: { name: 'Ubuntu (Мягкий)', file: 'ubuntu.ttf', family: 'Ubuntu' }
+};
+
+const fontCache = {};
+const fontsDir = path.join(__dirname, 'fonts');
+
+if (fs.existsSync(fontsDir)) {
+  for (const [key, fontDef] of Object.entries(FONTS)) {
+    const fontPath = path.join(fontsDir, fontDef.file);
+    if (fs.existsSync(fontPath)) {
+      fontCache[key] = fs.readFileSync(fontPath).toString('base64');
+      console.log(`✅ Шрифт загружен: ${fontDef.file}`);
+    } else {
+      console.warn(`⚠️ Файл не найден: fonts/${fontDef.file}`);
+    }
+  }
+} else {
+  console.warn('⚠️ Папка "fonts" не найдена. Создайте её и добавьте .ttf файлы для шрифтов.');
+}
 
 const PHONE_PRESETS = {
   iphone_se_1: { label: 'iPhone SE (1-е пок.)', width: 640, height: 1136, family: 'SE / Классика' },
@@ -129,6 +157,7 @@ function getConfig(query) {
     model: query.model || 'iphone_15',
     width: query.model === 'custom' ? clamp(num(query.width, preset.width), 320, 4000) : preset.width,
     height: query.model === 'custom' ? clamp(num(query.height, preset.height), 568, 5000) : preset.height,
+    font: FONTS[query.font] ? query.font : 'inter',
     style: query.style || 'numbers',
     calendarSize: query.calendar_size || 'balanced',
     monthLayout: query.month_layout || 'grid_3x4',
@@ -271,7 +300,7 @@ function wrap(text, max) {
   return lines;
 }
 
-function renderHeader(cfg, theme, labels, now, stats, width, padding, topY) {
+function renderHeader(cfg, theme, labels, now, stats, width, padding, topY, FONT) {
   const dateText = cfg.lang === 'ru'
     ? `${labels.today}: ${now.format('D MMMM')}`
     : `${labels.today}: ${now.format('MMM D')}`;
@@ -287,24 +316,24 @@ function renderHeader(cfg, theme, labels, now, stats, width, padding, topY) {
   const dash = circumference * (stats.percentPassed / 100);
 
   let out = `
-    <text x="${padding}" y="${topY + titleSize}" fill="${theme.text}" font-size="${titleSize}" font-family="${FONT_FAMILY}" font-weight="900" letter-spacing="-0.03em">${now.year()}</text>
-    <text x="${padding}" y="${topY + titleSize + subtitleSize * 1.8}" fill="${theme.muted}" font-size="${subtitleSize}" font-family="${FONT_FAMILY}">${escapeXml(dateText)}</text>
+    <text x="${padding}" y="${topY + titleSize}" fill="${theme.text}" font-size="${titleSize}" font-family="${FONT}" font-weight="900" letter-spacing="-0.03em">${now.year()}</text>
+    <text x="${padding}" y="${topY + titleSize + subtitleSize * 1.8}" fill="${theme.muted}" font-size="${subtitleSize}" font-family="${FONT}">${escapeXml(dateText)}</text>
     <rect x="${padding}" y="${topY + titleSize + subtitleSize * 2.8}" width="${chipWidth}" height="${chipHeight}" rx="${chipHeight / 2}" fill="${alpha(theme.panel, 0.92)}" stroke="${alpha(theme.accent2, 0.24)}" />
-    <text x="${padding + chipWidth / 2}" y="${topY + titleSize + subtitleSize * 2.8 + chipHeight * 0.64}" text-anchor="middle" fill="${theme.accent2}" font-size="${Math.round(width * 0.026)}" font-family="${FONT_FAMILY}" font-weight="700">${labels.week} ${now.week()}</text>
+    <text x="${padding + chipWidth / 2}" y="${topY + titleSize + subtitleSize * 2.8 + chipHeight * 0.64}" text-anchor="middle" fill="${theme.accent2}" font-size="${Math.round(width * 0.026)}" font-family="${FONT}" font-weight="700">${labels.week} ${now.week()}</text>
   `;
 
   if (cfg.showProgressRing) {
     out += `
       <circle cx="${ringCx}" cy="${ringCy}" r="${ringR}" fill="none" stroke="${alpha(theme.panel, 0.92)}" stroke-width="${ringR * 0.28}" />
       <circle cx="${ringCx}" cy="${ringCy}" r="${ringR}" fill="none" stroke="${theme.accent}" stroke-width="${ringR * 0.28}" stroke-linecap="round" stroke-dasharray="${dash} ${circumference}" transform="rotate(-90 ${ringCx} ${ringCy})" />
-      <text x="${ringCx}" y="${ringCy + width * 0.01}" text-anchor="middle" fill="${theme.text}" font-size="${Math.round(width * 0.025)}" font-family="${FONT_FAMILY}" font-weight="800">${stats.percentPassed}%</text>
+      <text x="${ringCx}" y="${ringCy + width * 0.01}" text-anchor="middle" fill="${theme.text}" font-size="${Math.round(width * 0.025)}" font-family="${FONT}" font-weight="800">${stats.percentPassed}%</text>
     `;
   }
 
   return out;
 }
 
-function renderMonth({ monthIndex, year, x, y, w, h, cfg, theme, labels, now }) {
+function renderMonth({ monthIndex, year, x, y, w, h, cfg, theme, labels, now, FONT }) {
   const first = dayjs(`${year}-${String(monthIndex + 1).padStart(2, '0')}-01`);
   const daysInMonth = first.daysInMonth();
   const firstWeekday = (first.day() + 6) % 7;
@@ -331,13 +360,13 @@ function renderMonth({ monthIndex, year, x, y, w, h, cfg, theme, labels, now }) 
   
   let out = `
     <rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${radius}" fill="${cardFill}" stroke="${isCurrent ? alpha(theme.accent2, 0.36) : alpha('#ffffff', 0.06)}" />
-    <text x="${x + pad}" y="${y + pad + titleSize * 0.75}" fill="${theme.text}" font-size="${titleSize}" font-family="${FONT_FAMILY}" font-weight="800">${labels.months[monthIndex]}</text>
+    <text x="${x + pad}" y="${y + pad + titleSize * 0.75}" fill="${theme.text}" font-size="${titleSize}" font-family="${FONT}" font-weight="800">${labels.months[monthIndex]}</text>
   `;
 
   if (cfg.monthBadges) {
     out += `
       <rect x="${x + w - pad - badgeW}" y="${y + pad * 0.6}" width="${badgeW}" height="${badgeH}" rx="${badgeH / 2}" fill="${isCurrent ? alpha(theme.accent, 0.18) : alpha('#ffffff', 0.05)}" />
-      <text x="${x + w - pad - badgeW / 2}" y="${y + pad * 0.6 + badgeH * 0.65}" text-anchor="middle" fill="${isCurrent ? theme.accent2 : theme.muted}" font-size="${Math.round(badgeH * 0.6)}" font-family="${FONT_FAMILY}" font-weight="700">${daysInMonth}д</text>
+      <text x="${x + w - pad - badgeW / 2}" y="${y + pad * 0.6 + badgeH * 0.65}" text-anchor="middle" fill="${isCurrent ? theme.accent2 : theme.muted}" font-size="${Math.round(badgeH * 0.6)}" font-family="${FONT}" font-weight="700">${daysInMonth}д</text>
     `;
   }
 
@@ -347,11 +376,11 @@ function renderMonth({ monthIndex, year, x, y, w, h, cfg, theme, labels, now }) 
 
   if (cfg.showWeekdays) {
     if (cfg.showWeekNumbers) {
-      out += `<text x="${x + pad + cellW / 2}" y="${weekdayY}" text-anchor="middle" fill="${theme.muted}" font-size="${weekdaySize}" font-family="${FONT_FAMILY}">#</text>`;
+      out += `<text x="${x + pad + cellW / 2}" y="${weekdayY}" text-anchor="middle" fill="${theme.muted}" font-size="${weekdaySize}" font-family="${FONT}">#</text>`;
     }
     labels.weekdays.forEach((wd, i) => {
       const weekend = i >= 5;
-      out += `<text x="${startX + i * cellW + cellW / 2}" y="${weekdayY}" text-anchor="middle" fill="${weekend ? alpha(theme.weekend, 0.95) : theme.muted}" font-size="${weekdaySize}" font-family="${FONT_FAMILY}" font-weight="700">${wd}</text>`;
+      out += `<text x="${startX + i * cellW + cellW / 2}" y="${weekdayY}" text-anchor="middle" fill="${weekend ? alpha(theme.weekend, 0.95) : theme.muted}" font-size="${weekdaySize}" font-family="${FONT}" font-weight="700">${wd}</text>`;
     });
   }
 
@@ -392,14 +421,14 @@ function renderMonth({ monthIndex, year, x, y, w, h, cfg, theme, labels, now }) 
     if (cfg.style === 'dots') {
       const r = Math.min(cellW, cellH) * (isToday ? 0.18 : 0.12);
       out += `<circle cx="${cx}" cy="${cy - cellH * 0.2}" r="${r}" fill="${isToday ? theme.accent : isPast ? theme.accent2 : isWeekend ? alpha(theme.weekend, 0.9) : alpha(theme.text, 0.26)}"/>`;
-      out += `<text x="${cx}" y="${cy + cellH * 0.3}" text-anchor="middle" fill="${textColor}" font-size="${Math.round(numberSize * 0.85)}" font-family="${FONT_FAMILY}" font-weight="700">${day}</text>`;
+      out += `<text x="${cx}" y="${cy + cellH * 0.3}" text-anchor="middle" fill="${textColor}" font-size="${Math.round(numberSize * 0.85)}" font-family="${FONT}" font-weight="700">${day}</text>`;
     } else if (cfg.style === 'focus') {
-      out += `<text x="${cx}" y="${cy}" text-anchor="middle" fill="${textColor}" font-size="${Math.round(numberSize * (isToday ? 1.05 : 1))}" font-family="${FONT_FAMILY}" font-weight="${isToday || isCurrent ? 800 : 600}">${day}</text>`;
+      out += `<text x="${cx}" y="${cy}" text-anchor="middle" fill="${textColor}" font-size="${Math.round(numberSize * (isToday ? 1.05 : 1))}" font-family="${FONT}" font-weight="${isToday || isCurrent ? 800 : 600}">${day}</text>`;
       if (isCurrent && !isToday) {
         out += `<line x1="${cx - cellW * 0.15}" y1="${cy + cellH * 0.15}" x2="${cx + cellW * 0.15}" y2="${cy + cellH * 0.15}" stroke="${alpha(theme.accent2, 0.35)}" stroke-linecap="round" stroke-width="2"/>`;
       }
     } else {
-      out += `<text x="${cx}" y="${cy}" text-anchor="middle" fill="${textColor}" font-size="${numberSize}" font-family="${FONT_FAMILY}" font-weight="${isToday ? 800 : 600}">${day}</text>`;
+      out += `<text x="${cx}" y="${cy}" text-anchor="middle" fill="${textColor}" font-size="${numberSize}" font-family="${FONT}" font-weight="${isToday ? 800 : 600}">${day}</text>`;
     }
   }
 
@@ -408,22 +437,23 @@ function renderMonth({ monthIndex, year, x, y, w, h, cfg, theme, labels, now }) 
       const date = first.add(row * 7 - firstWeekday, 'day');
       const wx = x + pad + cellW / 2;
       const wy = gridTop + row * cellH + cellH * 0.68;
-      out += `<text x="${wx}" y="${wy}" text-anchor="middle" fill="${alpha(theme.muted, 0.7)}" font-size="${Math.round(numberSize * 0.7)}" font-family="${FONT_FAMILY}">${dayjs(date).week()}</text>`;
+      out += `<text x="${wx}" y="${wy}" text-anchor="middle" fill="${alpha(theme.muted, 0.7)}" font-size="${Math.round(numberSize * 0.7)}" font-family="${FONT}">${dayjs(date).week()}</text>`;
     });
   }
 
   return out;
 }
 
-function renderFooter(cfg, theme, labels, now, stats, width, footerBox) {
+function renderFooter(cfg, theme, labels, now, stats, width, footerBox, FONT) {
   const { x, y, w, h } = footerBox;
   const pad = Math.round(w * 0.04);
   const base = `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${Math.round(w * 0.05)}" fill="${alpha(theme.panel, 0.82)}" stroke="${alpha('#ffffff', 0.06)}"/>`;
   const textSize = Math.round(h * 0.22);
   const subSize = Math.round(h * 0.15);
+
   if (cfg.footer === 'quote') {
     const lines = wrap(cfg.note || randomQuote(cfg.lang, now.year()), 34);
-    return base + lines.map((line, i) => `<text x="${x + w / 2}" y="${y + h * 0.38 + i * subSize * 1.45}" text-anchor="middle" fill="${theme.text}" font-size="${subSize}" font-family="${FONT_FAMILY}" font-weight="700">${escapeXml(line)}</text>`).join('');
+    return base + lines.map((line, i) => `<text x="${x + w / 2}" y="${y + h * 0.38 + i * subSize * 1.45}" text-anchor="middle" fill="${theme.text}" font-size="${subSize}" font-family="${FONT}" font-weight="700">${escapeXml(line)}</text>`).join('');
   }
   if (cfg.footer === 'progress_bar') {
     const barX = x + pad;
@@ -431,7 +461,7 @@ function renderFooter(cfg, theme, labels, now, stats, width, footerBox) {
     const barW = w - pad * 2;
     const barH = h * 0.12;
     return base + `
-      <text x="${x + pad}" y="${y + h * 0.32}" fill="${theme.text}" font-size="${textSize}" font-family="${FONT_FAMILY}" font-weight="800">${stats.percentPassed}% ${labels.passed}</text>
+      <text x="${x + pad}" y="${y + h * 0.32}" fill="${theme.text}" font-size="${textSize}" font-family="${FONT}" font-weight="800">${stats.percentPassed}% ${labels.passed}</text>
       <rect x="${barX}" y="${barY}" width="${barW}" height="${barH}" rx="${barH / 2}" fill="${alpha(theme.bg, 0.7)}" />
       <rect x="${barX}" y="${barY}" width="${barW * stats.percentPassed / 100}" height="${barH}" rx="${barH / 2}" fill="${theme.accent}" />
     `;
@@ -439,17 +469,17 @@ function renderFooter(cfg, theme, labels, now, stats, width, footerBox) {
   if (cfg.footer === 'today_card') {
     const dateLabel = cfg.lang === 'ru' ? now.format('dddd, D MMMM') : now.format('dddd, MMMM D');
     return base + `
-      <text x="${x + pad}" y="${y + h * 0.34}" fill="${theme.accent2}" font-size="${subSize}" font-family="${FONT_FAMILY}" font-weight="700">${labels.today}</text>
-      <text x="${x + pad}" y="${y + h * 0.68}" fill="${theme.text}" font-size="${textSize}" font-family="${FONT_FAMILY}" font-weight="800">${escapeXml(dateLabel)}</text>
+      <text x="${x + pad}" y="${y + h * 0.34}" fill="${theme.accent2}" font-size="${subSize}" font-family="${FONT}" font-weight="700">${labels.today}</text>
+      <text x="${x + pad}" y="${y + h * 0.68}" fill="${theme.text}" font-size="${textSize}" font-family="${FONT}" font-weight="800">${escapeXml(dateLabel)}</text>
     `;
   }
   if (cfg.footer === 'custom_note' && cfg.note) {
     const lines = wrap(cfg.note, 36).slice(0, 2);
-    return base + lines.map((line, i) => `<text x="${x + pad}" y="${y + h * 0.38 + i * subSize * 1.6}" fill="${theme.text}" font-size="${subSize}" font-family="${FONT_FAMILY}" font-weight="700">${escapeXml(line)}</text>`).join('');
+    return base + lines.map((line, i) => `<text x="${x + pad}" y="${y + h * 0.38 + i * subSize * 1.6}" fill="${theme.text}" font-size="${subSize}" font-family="${FONT}" font-weight="700">${escapeXml(line)}</text>`).join('');
   }
   return base + `
-    <text x="${x + pad}" y="${y + h * 0.36}" fill="${theme.text}" font-size="${textSize}" font-family="${FONT_FAMILY}" font-weight="800">${stats.daysLeft} ${labels.daysLeft}</text>
-    <text x="${x + pad}" y="${y + h * 0.66}" fill="${theme.muted}" font-size="${subSize}" font-family="${FONT_FAMILY}">${stats.percentPassed}% ${labels.passed}</text>
+    <text x="${x + pad}" y="${y + h * 0.36}" fill="${theme.text}" font-size="${textSize}" font-family="${FONT}" font-weight="800">${stats.daysLeft} ${labels.daysLeft}</text>
+    <text x="${x + pad}" y="${y + h * 0.66}" fill="${theme.muted}" font-size="${subSize}" font-family="${FONT}">${stats.percentPassed}% ${labels.passed}</text>
   `;
 }
 
@@ -466,6 +496,19 @@ function renderSvg(cfg) {
   const contentBottom = height - padding - footerArea;
   const contentH = contentBottom - contentTop;
 
+  // --- ЛОГИКА ВСТАВКИ ШРИФТА ---
+  const selectedFontDef = FONTS[cfg.font] || FONTS.inter;
+  const b64Font = fontCache[cfg.font];
+  const FONT_FAMILY = b64Font ? `'${selectedFontDef.family}', sans-serif` : `${selectedFontDef.family}, system-ui, sans-serif`;
+  const fontDefs = b64Font ? `
+    <style>
+      @font-face {
+        font-family: '${selectedFontDef.family}';
+        src: url(data:font/truetype;base64,${b64Font}) format('truetype');
+      }
+    </style>
+  ` : '';
+
   let cols = 3, rows = 4;
   if (cfg.monthLayout === 'grid_4x3') { cols = 4; rows = 3; }
   if (cfg.monthLayout === 'list_1x12') { cols = 1; rows = 12; }
@@ -480,7 +523,7 @@ function renderSvg(cfg) {
     const row = Math.floor(i / cols);
     const x = padding + col * (monthW + gap);
     const y = contentTop + row * (monthH + gap);
-    monthsSvg += renderMonth({ monthIndex: i, year: now.year(), x, y, w: monthW, h: monthH, cfg, theme, labels, now });
+    monthsSvg += renderMonth({ monthIndex: i, year: now.year(), x, y, w: monthW, h: monthH, cfg, theme, labels, now, FONT: FONT_FAMILY });
   }
 
   let quarterLines = '';
@@ -497,18 +540,24 @@ function renderSvg(cfg) {
 
   return `<?xml version="1.0" encoding="UTF-8"?>
   <svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">
+    <defs>${fontDefs}</defs>
     ${renderBackground(cfg, theme, width, height)}
-    ${renderHeader(cfg, theme, labels, now, stats, width, padding, padding)}
+    ${renderHeader(cfg, theme, labels, now, stats, width, padding, padding, FONT_FAMILY)}
     ${quarterLines}
     ${monthsSvg}
-    ${renderFooter(cfg, theme, labels, now, stats, width, footerBox)}
+    ${renderFooter(cfg, theme, labels, now, stats, width, footerBox, FONT_FAMILY)}
   </svg>`;
 }
 
 app.use(express.static(path.join(__dirname, 'public')));
 
 app.get('/api/options', (req, res) => {
-  res.json({ presets: PHONE_PRESETS, themes: THEMES, bgStyles: BG_STYLES });
+  res.json({ 
+    presets: PHONE_PRESETS, 
+    themes: THEMES, 
+    bgStyles: BG_STYLES, 
+    fonts: Object.fromEntries(Object.entries(FONTS).map(([k,v]) => [k, v.name])) 
+  });
 });
 
 app.get('/wallpaper.svg', (req, res) => {
