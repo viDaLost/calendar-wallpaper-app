@@ -20,7 +20,8 @@ const PORT = process.env.PORT || 3000;
 
 // In-memory Кеш PNG картинок (Очистка каждый час)
 const pngCache = new Map();
-setInterval(() => pngCache.clear(), 1000 * 60 * 60);
+const cacheSweepTimer = setInterval(() => pngCache.clear(), 1000 * 60 * 60);
+if (cacheSweepTimer.unref) cacheSweepTimer.unref();
 
 const FONTS = {
   inter: { name: 'Inter (Стандарт)', file: 'inter.ttf', family: 'Inter' },
@@ -88,29 +89,47 @@ async function fetchJsonWithTimeout(url, timeoutMs = 2200) {
 }
 
 // Получение погоды по названию города (Open-Meteo Geocoding)
+function weatherIconFromCode(code) {
+  let icon = '☀️';
+  if (code >= 1 && code <= 3) icon = '⛅';
+  if (code >= 45 && code <= 48) icon = '🌫️';
+  if (code >= 51 && code <= 67) icon = '🌧️';
+  if (code >= 71 && code <= 77) icon = '❄️';
+  if (code >= 80 && code <= 82) icon = '🌦️';
+  if (code >= 95) icon = '⛈️';
+  return icon;
+}
+
 async function fetchWeatherByCity(city) {
   const normalizedCity = String(city || '').split(',')[0].trim();
   if (!normalizedCity) return null;
   try {
-    const geoData = await fetchJsonWithTimeout(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(normalizedCity)}&count=1&language=ru`);
+    const geoData = await fetchJsonWithTimeout(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(normalizedCity)}&count=1&language=ru`, 1800);
     if (!geoData.results || geoData.results.length === 0) return null;
 
     const place = geoData.results[0];
-    const { latitude, longitude } = place;
-    const data = await fetchJsonWithTimeout(`https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current=temperature_2m,weather_code`);
+    const { latitude, longitude, timezone } = place;
+    const data = await fetchJsonWithTimeout(`https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current=temperature_2m,weather_code&hourly=temperature_2m,weather_code&forecast_days=1&timezone=${encodeURIComponent(timezone || 'auto')}`, 2200);
     if (!data.current || typeof data.current.temperature_2m !== 'number') return null;
 
     const temp = Math.round(data.current.temperature_2m);
     const code = data.current.weather_code;
-    let icon = '☀️';
-    if(code >= 1 && code <= 3) icon = '⛅';
-    if(code >= 45 && code <= 48) icon = '🌫️';
-    if(code >= 51 && code <= 67) icon = '🌧️';
-    if(code >= 71 && code <= 77) icon = '❄️';
-    if(code >= 80 && code <= 82) icon = '🌦️';
-    if(code >= 95) icon = '⛈️';
     const cityLabel = String(place.name || normalizedCity).trim();
-    return { temp: temp > 0 ? `+${temp}` : temp, icon, cityLabel };
+
+    const preferredHours = [6, 9, 12, 15, 18, 21];
+    const hourly = [];
+    if (data.hourly && Array.isArray(data.hourly.time) && Array.isArray(data.hourly.temperature_2m)) {
+      for (const targetHour of preferredHours) {
+        const idx = data.hourly.time.findIndex((t) => Number(String(t).slice(11, 13)) === targetHour);
+        if (idx >= 0) {
+          const t = Math.round(data.hourly.temperature_2m[idx]);
+          const hourlyCode = Array.isArray(data.hourly.weather_code) ? data.hourly.weather_code[idx] : code;
+          hourly.push({ hour: `${String(targetHour).padStart(2, '0')}:00`, temp: t > 0 ? `+${t}` : `${t}`, icon: weatherIconFromCode(hourlyCode) });
+        }
+      }
+    }
+
+    return { temp: temp > 0 ? `+${temp}` : `${temp}`, icon: weatherIconFromCode(code), cityLabel, hourly };
   } catch (e) {
     return null;
   }
@@ -165,7 +184,10 @@ function getConfig(query) {
     showWeekdays: String(query.show_weekdays || '1') === '1', accentToday: String(query.accent_today || '1') === '1',
     showProgressRing: String(query.show_progress_ring || '1') === '1', showWeekNumbers: String(query.show_week_numbers || '0') === '1',
     quarterDividers: String(query.quarter_dividers || '1') === '1', monthBadges: String(query.month_badges || '1') === '1',
-    focusCurrentMonth: String(query.focus_current_month || '1') === '1', lockscreenSafe: String(query.lockscreen_safe || '1') === '1'
+    focusCurrentMonth: String(query.focus_current_month || '1') === '1', lockscreenSafe: String(query.lockscreen_safe || '1') === '1',
+    showHeaderMeta: String(query.show_header_meta || '1') === '1',
+    strongWeekendTint: String(query.strong_weekend_tint || '1') === '1',
+    glassPanels: String(query.glass_panels || '1') === '1'
   };
 }
 
@@ -199,10 +221,7 @@ app.get('/wallpaper.png', async (req, res) => {
     if (b64Font) fontBuffers.push(Buffer.from(b64Font, 'base64'));
     if (defaultFontBuffer) fontBuffers.push(defaultFontBuffer);
 
-    const allFontBuffers = [
-      ...Object.values(fontCache).map(v => Buffer.from(v, 'base64')),
-      ...fontBuffers
-    ];
+    const allFontBuffers = fontBuffers.length ? fontBuffers : (defaultFontBuffer ? [defaultFontBuffer] : []);
 
     let png;
     try {
@@ -232,4 +251,9 @@ app.get('/wallpaper.png', async (req, res) => {
 });
 
 app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'public', 'index.html')));
-app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+
+if (require.main === module) {
+  app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+}
+
+module.exports = app;
