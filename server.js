@@ -437,12 +437,12 @@ function renderMonthGrid({ monthIndex, year, x, y, w, h, cfg, theme, labels, now
   const weekdayVisible = opts.showWeekdays;
   const titleLabel = pickMonthLabel(labels, monthIndex, w, focusHero ? 'focus' : (opts.skinny ? 'skinny' : 'grid'));
   const showInlineTitle = focusHero;
-  const titleY = showInlineTitle ? (y + pad + titleSize * 0.92) : (y + pad + titleSize * 0.75);
   const titleSize = Math.min(Math.round(h * (focusHero ? 0.11 : opts.sixWide ? 0.09 : dense ? 0.10 : 0.12)), Math.round(w * (focusHero ? 0.13 : opts.sixWide ? 0.11 : dense ? 0.14 : 0.16))) * emphasis;
+  const titleY = showInlineTitle ? (y + pad + titleSize * 0.80) : (y + pad + titleSize * 0.75);
   const weekdaySize = Math.min(Math.round(cellW * (focusHero ? 0.34 : opts.sixWide ? 0.30 : dense ? 0.4 : 0.5)), Math.round(h * (focusHero ? 0.044 : opts.sixWide ? 0.032 : dense ? 0.048 : 0.058)));
   const numberSize = Math.min(Math.round(cellW * (focusHero ? 0.5 : opts.sixWide ? 0.34 : dense ? 0.52 : 0.6)), Math.round(cellH = 0));
   const topBand = weekdayVisible
-    ? h * (focusHero ? 0.34 : opts.sixWide ? 0.20 : dense ? 0.245 : 0.285)
+    ? h * (focusHero ? 0.40 : opts.sixWide ? 0.20 : dense ? 0.245 : 0.285)
     : h * (focusHero ? 0.18 : opts.sixWide ? 0.14 : dense ? 0.17 : 0.20);
   const bottomPad = h * (focusHero ? 0.06 : opts.sixWide ? 0.06 : dense ? 0.06 : 0.075);
   const cellHReal = Math.max(8, (h - topBand - bottomPad) / rows);
@@ -462,7 +462,7 @@ function renderMonthGrid({ monthIndex, year, x, y, w, h, cfg, theme, labels, now
       <rect x="${x + w - pad - badgeW}" y="${y + pad * (focusHero ? 0.9 : 0.55)}" width="${badgeW}" height="${badgeH}" rx="${badgeH / 2}" fill="${isCurrent ? alpha(theme.accent, 0.18) : alpha('#ffffff', 0.05)}" />
       <text x="${x + w - pad - badgeW / 2}" y="${y + pad * (focusHero ? 0.9 : 0.55) + badgeH * 0.65}" text-anchor="middle" fill="${isCurrent ? theme.accent2 : theme.muted}" font-size="${Math.round(badgeH * (focusHero ? 0.50 : 0.56))}" font-family="${FONT}" font-weight="700">${daysInMonth}${cfg.lang === 'ru' ? 'д' : 'd'}</text>`;
   }
-  const weekdayY = focusHero ? (y + pad + titleSize + h * 0.035) : (y + (opts.sixWide ? h * 0.18 : h * 0.23));
+  const weekdayY = focusHero ? (y + pad + titleSize + h * 0.065) : (y + (opts.sixWide ? h * 0.18 : h * 0.23));
   const gridTop = y + topBand;
   const startX = x + pad + (weekNumberCol ? cellW : 0);
   if (weekdayVisible) {
