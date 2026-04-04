@@ -118,7 +118,9 @@
 
   function weatherSummary(cfg, lang) {
     if (!cfg.weatherData) return lang === 'ru' ? 'Погода не выбрана' : 'No city weather';
-    return `${cfg.weatherData.icon} ${cfg.weatherData.temp}°C · ${cfg.weatherData.cityLabel || ''}`.replace(/·\s*$/, '').trim();
+    const city = String(cfg.weatherData.cityLabel || '').trim();
+    const hiLo = cfg.weatherData.dailyMax && cfg.weatherData.dailyMin ? ` · ${cfg.weatherData.dailyMax} / ${cfg.weatherData.dailyMin}` : '';
+    return `${cfg.weatherData.icon} ${cfg.weatherData.temp}°C${hiLo}${city ? ` · ${city}` : ''}`.trim();
   }
 
   function getHourlyWeatherLine(cfg) {
@@ -229,9 +231,9 @@
       const weatherY = yearY - yearSize * 0.42;
       const cityLineY = weatherY + subtitleSize * 1.15;
       const rawCity = String(cfg.weatherData.cityLabel || '').split(',')[0].trim();
-      const cityLabel = rawCity.length > 11 ? `${rawCity.slice(0, 10)}…` : rawCity;
+      const cityLabel = rawCity.length > 18 ? `${rawCity.slice(0, 17)}…` : rawCity;
       rightSvg += `<text x="${weatherX}" y="${weatherY}" text-anchor="end" fill="${theme.text}" font-size="${subtitleSize * 1.42}" font-family="${FONT}" font-weight="700">${cfg.weatherData.temp}°C ${cfg.weatherData.icon}</text>`;
-      if (cityLabel) rightSvg += `<text x="${weatherX}" y="${cityLineY}" text-anchor="end" fill="${theme.muted}" font-size="${Math.round(subtitleSize * 0.82)}" font-family="${FONT}" font-weight="600">${escapeXml(cityLabel)}</text>`;
+      if (cityLabel) rightSvg += `<text x="${weatherX}" y="${cityLineY}" text-anchor="end" fill="${theme.muted}" font-size="${Math.round(subtitleSize * 0.9)}" font-family="${FONT}" font-weight="600">${escapeXml(cityLabel)}</text>`;
     } else if (cfg.showProgressRing && stats) {
       const ringCx = width - padding - ringR;
       const ringCy = yearY - yearSize * 0.25;
@@ -463,23 +465,32 @@
     if (cfg.footer === 'day_weather') {
       const items = (cfg.weatherData && Array.isArray(cfg.weatherData.hourly) ? cfg.weatherData.hourly.slice(0, 6) : []);
       const title = cfg.lang === 'ru' ? 'Прогноз на день' : 'Day forecast';
+      const city = cfg.weatherData && cfg.weatherData.cityLabel ? String(cfg.weatherData.cityLabel).split(',')[0].trim() : '';
+      const hiLo = cfg.weatherData && cfg.weatherData.dailyMax && cfg.weatherData.dailyMin ? `${cfg.weatherData.dailyMax} / ${cfg.weatherData.dailyMin}` : '';
       if (!items.length) {
         return base + `<text x="${x + pad}" y="${y + h * 0.34}" fill="${theme.accent2}" font-size="${subSize}" font-family="${FONT}" font-weight="700">${title}</text><text x="${x + pad}" y="${y + h * 0.66}" fill="${theme.text}" font-size="${textSize * 0.8}" font-family="${FONT}" font-weight="700">${cfg.lang === 'ru' ? 'Добавь город для погодного блока' : 'Add a city for forecast'}</text>`;
       }
-      const gap = Math.round(w * 0.014);
+      const titleY = y + h * 0.23;
+      const metaY = y + h * 0.40;
+      const stripTop = y + h * 0.50;
+      const stripH = h * 0.30;
+      const gap = Math.max(10, Math.round(w * 0.012));
       const chipW = (w - pad * 2 - gap * (items.length - 1)) / items.length;
-      const chipY = y + h * 0.37;
-      const chipH = h * 0.44;
-      let chips = `<text x="${x + pad}" y="${y + h * 0.24}" fill="${theme.accent2}" font-size="${subSize}" font-family="${FONT}" font-weight="700">${title}</text>`;
+      let chips = `<text x="${x + pad}" y="${titleY}" fill="${theme.accent2}" font-size="${subSize}" font-family="${FONT}" font-weight="700">${title}</text>`;
+      if (city || hiLo) {
+        const meta = [city, hiLo].filter(Boolean).join(' · ');
+        chips += `<text x="${x + pad}" y="${metaY}" fill="${theme.muted}" font-size="${subSize * 0.88}" font-family="${FONT}" font-weight="600">${escapeXml(meta)}</text>`;
+      }
       items.forEach((item, i) => {
         const cx = x + pad + i * (chipW + gap);
-        chips += `<rect x="${cx}" y="${chipY}" width="${chipW}" height="${chipH}" rx="${chipH * 0.26}" fill="${alpha(theme.bg, 0.18)}" stroke="${alpha(theme.accent2, 0.09)}"/>`;
-        chips += `<text x="${cx + chipW / 2}" y="${chipY + chipH * 0.24}" text-anchor="middle" fill="${theme.muted}" font-size="${subSize * 0.80}" font-family="${FONT}" font-weight="700">${escapeXml(item.hour)}</text>`;
-        chips += `<text x="${cx + chipW / 2}" y="${chipY + chipH * 0.68}" text-anchor="middle" fill="${theme.text}" font-size="${textSize * 0.74}" font-family="${FONT}" font-weight="800">${escapeXml(item.temp)}° ${item.icon}</text>`;
+        chips += `<rect x="${cx}" y="${stripTop}" width="${chipW}" height="${stripH}" rx="${stripH * 0.24}" fill="${alpha(theme.bg, 0.18)}" stroke="${alpha(theme.accent2, 0.10)}"/>`;
+        chips += `<text x="${cx + chipW / 2}" y="${stripTop + stripH * 0.28}" text-anchor="middle" fill="${theme.muted}" font-size="${subSize * 0.72}" font-family="${FONT}" font-weight="700">${escapeXml(item.hour)}</text>`;
+        chips += `<text x="${cx + chipW / 2}" y="${stripTop + stripH * 0.56}" text-anchor="middle" fill="${theme.text}" font-size="${subSize * 0.95}" font-family="${FONT}" font-weight="700">${item.icon}</text>`;
+        chips += `<text x="${cx + chipW / 2}" y="${stripTop + stripH * 0.82}" text-anchor="middle" fill="${theme.text}" font-size="${textSize * 0.64}" font-family="${FONT}" font-weight="800">${escapeXml(item.temp)}°</text>`;
       });
       return base + chips;
     }
-    if (cfg.footer === 'custom_note' && cfg.note) {
+    if (cfg.footer === 'custom_note'  && cfg.note) {
       const lines = wrap(cfg.note, 36).slice(0, 2);
       return base + lines.map((line, i) => `<text x="${x + pad}" y="${y + h * 0.38 + i * subSize * 1.6}" fill="${theme.text}" font-size="${subSize}" font-family="${FONT}" font-weight="700">${escapeXml(line)}</text>`).join('');
     }
@@ -505,11 +516,12 @@
     const selectedB64 = fontMap.selected || '';
     const interB64 = fontMap.inter || '';
     const ubuntuB64 = fontMap.ubuntu || '';
+    const browserFamily = fontMap.browserFamily || cfg.fontFamily || 'Inter';
     const extraFaces = [];
-    if (selectedB64) extraFaces.push(`@font-face { font-family: '${cfg.fontFamily}'; src: url(data:font/ttf;base64,${selectedB64}) format('truetype'); font-style: normal; font-weight: 100 900; }`);
-    if (interB64) extraFaces.push(`@font-face { font-family: 'Inter'; src: url(data:font/ttf;base64,${interB64}) format('truetype'); font-style: normal; font-weight: 100 900; }`);
-    if (ubuntuB64) extraFaces.push(`@font-face { font-family: 'Ubuntu'; src: url(data:font/ttf;base64,${ubuntuB64}) format('truetype'); font-style: normal; font-weight: 300 800; }`);
-    const FONT_FAMILY = `'${cfg.fontFamily}','Ubuntu','Inter','Helvetica','Arial','DejaVu Sans',sans-serif`;
+    if (selectedB64) extraFaces.push(`@font-face { font-family: 'AppPrimary'; src: url(data:font/ttf;base64,${selectedB64}) format('truetype'); font-style: normal; font-weight: 400; }`);
+    if (interB64) extraFaces.push(`@font-face { font-family: 'AppInter'; src: url(data:font/ttf;base64,${interB64}) format('truetype'); font-style: normal; font-weight: 400; }`);
+    if (ubuntuB64) extraFaces.push(`@font-face { font-family: 'AppUbuntu'; src: url(data:font/ttf;base64,${ubuntuB64}) format('truetype'); font-style: normal; font-weight: 400; }`);
+    const FONT_FAMILY = `AppPrimary, ${browserFamily}, AppUbuntu, Ubuntu, AppInter, Inter, Helvetica, Arial, sans-serif`;
     const fontDefs = `<style>${extraFaces.join(' ')} text, tspan { font-family: ${FONT_FAMILY}; text-rendering: geometricPrecision; }</style>`;
 
     const listLike = isListLayout(cfg.monthLayout);
