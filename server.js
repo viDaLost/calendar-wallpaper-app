@@ -93,7 +93,8 @@ async function fetchWeatherByCity(city) {
     const geoData = await geoRes.json();
     if (!geoData.results || geoData.results.length === 0) return null;
     
-    const { latitude, longitude } = geoData.results[0];
+    const place = geoData.results[0];
+    const { latitude, longitude } = place;
     const res = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current=temperature_2m,weather_code`);
     const data = await res.json();
     const temp = Math.round(data.current.temperature_2m);
@@ -105,7 +106,8 @@ async function fetchWeatherByCity(city) {
     if(code >= 71 && code <= 77) icon = '❄️';
     if(code >= 80 && code <= 82) icon = '🌦️';
     if(code >= 95) icon = '⛈️';
-    return { temp: temp > 0 ? `+${temp}` : temp, icon };
+    const cityLabel = [place.name, place.admin1 || place.country].filter(Boolean).slice(0,2).join(', ');
+    return { temp: temp > 0 ? `+${temp}` : temp, icon, cityLabel };
   } catch (e) { return null; }
 }
 
@@ -114,7 +116,8 @@ app.use(express.static(path.join(__dirname, 'public')));
 app.get('/api/options', (req, res) => {
   res.json({ 
     presets: PHONE_PRESETS, themes: Engine.THEMES, bgStyles: Engine.BG_STYLES, 
-    fonts: Object.fromEntries(Object.entries(FONTS).map(([k, v]) => [k, v.name])) 
+    fonts: Object.fromEntries(Object.entries(FONTS).map(([k, v]) => [k, v.name])),
+    fontFamilies: Object.fromEntries(Object.entries(FONTS).map(([k, v]) => [k, v.family]))
   });
 });
 
@@ -150,9 +153,10 @@ function getConfig(query) {
     bgStyle: Engine.BG_STYLES[rawBg] ? rawBg : 'mesh_organic',
     lang: query.lang === 'en' ? 'en' : 'ru',
     timezone: Number(query.timezone) || 3,
-    footer: query.footer || 'year_summary', note: (query.note || '').slice(0, 80),
+    footer: query.footer || 'year_summary', note: (query.note || '').slice(0, 120),
     events: query.events || '',
     city: query.city || '',
+    eventColor: query.c_event || themeObj.accent,
     showWeekdays: String(query.show_weekdays || '1') === '1', accentToday: String(query.accent_today || '1') === '1',
     showProgressRing: String(query.show_progress_ring || '1') === '1', showWeekNumbers: String(query.show_week_numbers || '0') === '1',
     quarterDividers: String(query.quarter_dividers || '1') === '1', monthBadges: String(query.month_badges || '1') === '1',
@@ -188,20 +192,25 @@ app.get('/wallpaper.png', async (req, res) => {
     const defaultFontBuf = await getDefaultFontBuffer();
     if (defaultFontBuf) fontBuffers.push(Buffer.from(defaultFontBuf));
 
+    const allFontBuffers = [
+      ...Object.values(fontCache).map(v => Buffer.from(v, 'base64')),
+      ...fontBuffers
+    ];
+
     let png;
     try {
-      const resvg = new Resvg(svg, { 
+      png = await sharp(Buffer.from(svg), { density: 320 }).png().toBuffer();
+    } catch (sharpErr) {
+      console.error('Sharp SVG render error, falling back to Resvg:', sharpErr);
+      const resvg = new Resvg(svg, {
         fitTo: { mode: 'original' },
         font: {
-          fontBuffers,
+          fontBuffers: allFontBuffers,
           loadSystemFonts: true,
-          defaultFontFamily: 'Inter',
+          defaultFontFamily: 'Arial',
         }
       });
       png = resvg.render().asPng();
-    } catch (renderErr) {
-      console.error('Resvg Error, falling back to sharp:', renderErr);
-      png = await sharp(Buffer.from(svg), { density: 300 }).png().toBuffer();
     }
 
     if (pngCache.size < 1000) pngCache.set(cacheKey, png);
