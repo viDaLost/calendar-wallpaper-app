@@ -12,13 +12,13 @@ dayjs.extend(utc);
 dayjs.extend(isLeapYear);
 dayjs.extend(weekOfYear);
 
-// Импортируем ядро рендеринга
+// Импортируем ядро
 const Engine = require('./public/engine.js');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Кеш PNG в памяти. Очищается раз в час
+// In-memory Кеш PNG картинок (Очистка каждый час)
 const pngCache = new Map();
 setInterval(() => pngCache.clear(), 1000 * 60 * 60);
 
@@ -72,10 +72,29 @@ if (fs.existsSync(fontsDir)) {
   }
 }
 
-async function fetchWeather(lat, lon) {
-  if (!lat || !lon) return null;
+// Защита от пустых шрифтов на Vercel (динамическое скачивание в буфер)
+let fallbackFontBuffer = null;
+async function getDefaultFontBuffer() {
+  if (fallbackFontBuffer) return fallbackFontBuffer;
   try {
-    const res = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,weather_code`);
+    const resp = await fetch('https://raw.githubusercontent.com/rsms/inter/master/docs/font-files/Inter-Regular.ttf');
+    fallbackFontBuffer = await resp.arrayBuffer();
+  } catch (e) {
+    console.error("Failed to fetch fallback font", e);
+  }
+  return fallbackFontBuffer;
+}
+
+// Получение погоды по названию города (Open-Meteo Geocoding)
+async function fetchWeatherByCity(city) {
+  if (!city) return null;
+  try {
+    const geoRes = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(city)}&count=1&language=ru`);
+    const geoData = await geoRes.json();
+    if (!geoData.results || geoData.results.length === 0) return null;
+    
+    const { latitude, longitude } = geoData.results[0];
+    const res = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current=temperature_2m,weather_code`);
     const data = await res.json();
     const temp = Math.round(data.current.temperature_2m);
     const code = data.current.weather_code;
@@ -99,7 +118,9 @@ app.get('/api/options', (req, res) => {
   });
 });
 
-app.get('/api/fonts', (req, res) => res.json(fontCache));
+app.get('/api/fonts', (req, res) => {
+  res.json(fontCache);
+});
 
 function getConfig(query) {
   const preset = PHONE_PRESETS[query.model] || PHONE_PRESETS.iphone_15;
@@ -131,11 +152,11 @@ function getConfig(query) {
     timezone: Number(query.timezone) || 3,
     footer: query.footer || 'year_summary', note: (query.note || '').slice(0, 80),
     events: query.events || '',
+    city: query.city || '',
     showWeekdays: String(query.show_weekdays || '1') === '1', accentToday: String(query.accent_today || '1') === '1',
     showProgressRing: String(query.show_progress_ring || '1') === '1', showWeekNumbers: String(query.show_week_numbers || '0') === '1',
     quarterDividers: String(query.quarter_dividers || '1') === '1', monthBadges: String(query.month_badges || '1') === '1',
-    focusCurrentMonth: String(query.focus_current_month || '1') === '1', lockscreenSafe: String(query.lockscreen_safe || '1') === '1',
-    lat: query.lat, lon: query.lon
+    focusCurrentMonth: String(query.focus_current_month || '1') === '1', lockscreenSafe: String(query.lockscreen_safe || '1') === '1'
   };
 }
 
@@ -149,25 +170,44 @@ app.get('/wallpaper.png', async (req, res) => {
     const cacheKey = req.originalUrl + dayjs().format('YYYY-MM-DD');
     if (pngCache.has(cacheKey)) {
       res.setHeader('Content-Type', 'image/png');
+      res.setHeader('X-Cache', 'HIT');
       return res.send(pngCache.get(cacheKey));
     }
 
     const cfg = getConfig(req.query);
-    cfg.weatherData = await fetchWeather(cfg.lat, cfg.lon);
+    
+    // Запрашиваем погоду по городу (если указан)
+    cfg.weatherData = await fetchWeatherByCity(cfg.city);
 
     const b64Font = fontCache[req.query.font || 'inter'];
     const svg = Engine.renderSvg(cfg, dayjs, b64Font);
 
+    // Подготовка буферов шрифтов для 100% рендера текста в Resvg на Vercel
+    const fontBuffers = [];
+    if (b64Font) fontBuffers.push(Buffer.from(b64Font, 'base64'));
+    const defaultFontBuf = await getDefaultFontBuffer();
+    if (defaultFontBuf) fontBuffers.push(Buffer.from(defaultFontBuf));
+
     let png;
     try {
-      const resvg = new Resvg(svg, { fitTo: { mode: 'original' } });
+      const resvg = new Resvg(svg, { 
+        fitTo: { mode: 'original' },
+        font: {
+          fontBuffers,
+          loadSystemFonts: true,
+          defaultFontFamily: 'Inter',
+        }
+      });
       png = resvg.render().asPng();
     } catch (renderErr) {
+      console.error('Resvg Error, falling back to sharp:', renderErr);
       png = await sharp(Buffer.from(svg), { density: 300 }).png().toBuffer();
     }
 
     if (pngCache.size < 1000) pngCache.set(cacheKey, png);
     res.setHeader('Content-Type', 'image/png');
+    res.setHeader('Cache-Control', 'public, max-age=3600');
+    res.setHeader('X-Cache', 'MISS');
     res.send(png);
   } catch (err) {
     res.status(500).json({ error: 'RENDER_ERROR', details: err.message });
