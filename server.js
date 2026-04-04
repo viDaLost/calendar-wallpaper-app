@@ -1,6 +1,7 @@
 const express = require('express');
 const path = require('path');
 const sharp = require('sharp');
+const { Resvg } = require('@resvg/resvg-js');
 const dayjs = require('dayjs');
 const utc = require('dayjs/plugin/utc');
 const isLeapYear = require('dayjs/plugin/isLeapYear');
@@ -722,8 +723,31 @@ app.get('/wallpaper.png', async (req, res) => {
   try {
     const cfg = getConfig(req.query);
     const svg = renderSvg(cfg);
-    const png = await sharp(Buffer.from(svg), { density: 240 }).png().toBuffer();
+
+    let png;
+    try {
+      const fontFiles = Object.values(FONTS)
+        .map((f) => path.join(fontsDir, f.file))
+        .filter((f) => fs.existsSync(f));
+      const selected = FONTS[cfg.font] || FONTS.inter;
+      const resvg = new Resvg(svg, {
+        fitTo: { mode: 'original' },
+        font: {
+          fontFiles,
+          loadSystemFonts: true,
+          defaultFontFamily: selected.family,
+          sansSerifFamily: selected.family,
+          serifFamily: selected.family,
+          monospaceFamily: selected.family,
+        },
+      });
+      png = resvg.render().asPng();
+    } catch (renderErr) {
+      png = await sharp(Buffer.from(svg), { density: 300 }).png().toBuffer();
+    }
+
     res.setHeader('Content-Type', 'image/png');
+    res.setHeader('Cache-Control', 'no-store');
     res.send(png);
   } catch (err) {
     res.status(500).json({ error: 'ОШИБКА ГЕНЕРАЦИИ ОБОЕВ', details: err.message });
