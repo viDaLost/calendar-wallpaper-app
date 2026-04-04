@@ -320,14 +320,24 @@ function getLayoutMetrics(cfg, width, height, contentH, sidePadding) {
     grid_3x4: { cols: 3, rows: 4, gap: Math.round(width * 0.02), mode: 'grid' },
     grid_4x3: { cols: 4, rows: 3, gap: Math.round(width * 0.018), mode: 'grid' },
     grid_2x6: { cols: 2, rows: 6, gap: Math.round(width * 0.018), mode: 'grid' },
-    grid_6x2: { cols: 6, rows: 2, gap: Math.round(width * 0.012), mode: 'grid' },
+    grid_6x2: { cols: 6, rows: 2, gap: Math.round(width * 0.010), mode: 'grid_6x2' },
     grid_3x4_compact: { cols: 3, rows: 4, gap: Math.round(width * 0.014), mode: 'grid_compact' },
-    list_1x12: { cols: 1, rows: 12, gap: Math.round(width * 0.018), mode: 'list' },
-    list_1x12_compact: { cols: 1, rows: 12, gap: Math.round(width * 0.012), mode: 'list_compact' },
+    list_1x12: { cols: 1, rows: 12, gap: Math.round(width * 0.012), mode: 'list' },
+    list_1x12_compact: { cols: 1, rows: 12, gap: Math.round(width * 0.010), mode: 'list_compact' },
     single_month_focus: { cols: 1, rows: 1, gap: Math.round(width * 0.016), mode: 'focus' },
   };
   const spec = presets[cfg.monthLayout] || presets.grid_3x4;
   if (spec.mode === 'focus') return { ...spec };
+  if (spec.mode === 'grid_6x2') {
+    const monthW = (width - sidePadding * 2 - spec.gap * (spec.cols - 1)) / spec.cols;
+    const monthH = (contentH - spec.gap * (spec.rows - 1)) / spec.rows;
+    return {
+      ...spec,
+      monthW,
+      monthH,
+      skinnyCols: 6,
+    };
+  }
   return {
     ...spec,
     monthW: (width - sidePadding * 2 - spec.gap * (spec.cols - 1)) / spec.cols,
@@ -344,7 +354,9 @@ function pickMonthLabel(labels, monthIndex, width, mode = 'grid') {
   const full = labels.months[monthIndex];
   const medium = (labels.monthsMedium || labels.months)[monthIndex];
   const short = (labels.monthsShort || labels.months)[monthIndex];
-  if (mode === 'list') return width < 520 ? medium : full;
+  if (mode === 'list') return width < 420 ? short : width < 560 ? medium : full;
+  if (mode === 'focus') return width < 520 ? medium : full;
+  if (mode === 'skinny') return short;
   if (width < 180) return short;
   if (width < 240) return medium;
   return full;
@@ -354,21 +366,23 @@ function getMonthCardOptions(cfg, w, h) {
   const sixWide = cfg.monthLayout === 'grid_6x2';
   const twoWide = cfg.monthLayout === 'grid_2x6';
   const compactGrid = cfg.monthLayout === 'grid_3x4_compact';
+  const skinny = sixWide && w < 190;
   const tiny = sixWide || w < 180;
   return {
     tiny,
+    skinny,
     sixWide,
     twoWide,
     compactGrid,
-    showWeekdays: cfg.showWeekdays && !tiny,
+    showWeekdays: cfg.showWeekdays && (!tiny || cfg.monthLayout === 'single_month_focus'),
     showBadge: cfg.monthBadges && !sixWide && w >= 185,
-    padRatio: sixWide ? 0.034 : tiny ? 0.04 : compactGrid ? 0.045 : 0.055,
+    padRatio: sixWide ? 0.028 : tiny ? 0.04 : compactGrid ? 0.045 : 0.055,
     radius: Math.max(14, Math.round(Math.min(w, h) * (sixWide ? 0.09 : 0.1))),
   };
 }
 
 function renderHeader(cfg, theme, labels, now, stats, width, padding, topY, FONT) {
-  const compact = isListLayout(cfg.monthLayout) || isCompactGridLayout(cfg.monthLayout);
+  const compact = isListLayout(cfg.monthLayout) || isCompactGridLayout(cfg.monthLayout) || cfg.monthLayout === 'single_month_focus';
   const titleSize = Math.round(width * (compact ? 0.053 : 0.065));
   const subtitleSize = Math.round(width * (compact ? 0.028 : 0.033));
   const chipWidth = Math.round(width * (compact ? 0.2 : 0.24));
@@ -411,34 +425,44 @@ function renderMonthGrid({ monthIndex, year, x, y, w, h, cfg, theme, labels, now
   const isCurrent = now.month() === monthIndex;
   const dense = isCompactGridLayout(cfg.monthLayout);
   const opts = getMonthCardOptions(cfg, w, h);
+  const focusHero = cfg.monthLayout === 'single_month_focus';
   const emphasis = cfg.focusCurrentMonth && isCurrent ? (dense ? 1.03 : 1.06) : 1;
   const radius = opts.radius;
-  const pad = Math.round(w * opts.padRatio);
+  const pad = Math.round(w * (focusHero ? 0.04 : opts.padRatio));
   const cols = 7;
-  const weekNumberCol = cfg.showWeekNumbers && !opts.tiny ? 1 : 0;
+  const weekNumberCol = cfg.showWeekNumbers && !opts.tiny && !focusHero ? 1 : 0;
   const innerW = w - pad * 2;
   const cellW = innerW / (cols + weekNumberCol);
   const rows = 6;
   const weekdayVisible = opts.showWeekdays;
-  const topBand = weekdayVisible ? h * (opts.sixWide ? 0.24 : dense ? 0.245 : 0.285) : h * (opts.sixWide ? 0.14 : dense ? 0.17 : 0.20);
-  const bottomPad = h * (opts.sixWide ? 0.06 : dense ? 0.06 : 0.075);
-  const cellH = Math.max(8, (h - topBand - bottomPad) / rows);
-  const titleLabel = pickMonthLabel(labels, monthIndex, w, 'grid');
-  const titleSize = Math.min(Math.round(h * (opts.sixWide ? 0.09 : dense ? 0.10 : 0.12)), Math.round(w * (opts.sixWide ? 0.12 : dense ? 0.14 : 0.16))) * emphasis;
-  const weekdaySize = Math.min(Math.round(cellW * (opts.sixWide ? 0.34 : dense ? 0.4 : 0.5)), Math.round(h * (opts.sixWide ? 0.038 : dense ? 0.048 : 0.058)));
-  const numberSize = Math.min(Math.round(cellW * (opts.sixWide ? 0.43 : dense ? 0.52 : 0.6)), Math.round(cellH * (opts.sixWide ? 0.46 : dense ? 0.54 : 0.6))) * emphasis;
-  const badgeW = Math.round(w * (opts.sixWide ? 0.14 : 0.19));
-  const badgeH = Math.round(h * (opts.sixWide ? 0.10 : 0.11));
-  const cardFill = isCurrent ? alpha(theme.panel, 0.98) : alpha(theme.panel, opts.sixWide ? 0.78 : 0.65);
+  const titleLabel = pickMonthLabel(labels, monthIndex, w, focusHero ? 'focus' : (opts.skinny ? 'skinny' : 'grid'));
+  const showInlineTitle = focusHero;
+  const titleY = y + pad + (showInlineTitle ? h * 0.08 : h * 0.06);
+  const titleSize = Math.min(Math.round(h * (focusHero ? 0.11 : opts.sixWide ? 0.09 : dense ? 0.10 : 0.12)), Math.round(w * (focusHero ? 0.13 : opts.sixWide ? 0.11 : dense ? 0.14 : 0.16))) * emphasis;
+  const weekdaySize = Math.min(Math.round(cellW * (focusHero ? 0.34 : opts.sixWide ? 0.30 : dense ? 0.4 : 0.5)), Math.round(h * (focusHero ? 0.044 : opts.sixWide ? 0.032 : dense ? 0.048 : 0.058)));
+  const numberSize = Math.min(Math.round(cellW * (focusHero ? 0.5 : opts.sixWide ? 0.34 : dense ? 0.52 : 0.6)), Math.round(cellH = 0));
+  const topBand = weekdayVisible
+    ? h * (focusHero ? 0.28 : opts.sixWide ? 0.20 : dense ? 0.245 : 0.285)
+    : h * (focusHero ? 0.16 : opts.sixWide ? 0.14 : dense ? 0.17 : 0.20);
+  const bottomPad = h * (focusHero ? 0.06 : opts.sixWide ? 0.06 : dense ? 0.06 : 0.075);
+  const cellHReal = Math.max(8, (h - topBand - bottomPad) / rows);
+  const numSize = Math.min(Math.round(cellW * (focusHero ? 0.5 : opts.sixWide ? 0.34 : dense ? 0.52 : 0.6)), Math.round(cellHReal * (focusHero ? 0.56 : opts.sixWide ? 0.42 : dense ? 0.54 : 0.6))) * emphasis;
+  const badgeW = Math.round(w * (opts.sixWide ? 0.14 : focusHero ? 0.12 : 0.19));
+  const badgeH = Math.round(h * (opts.sixWide ? 0.10 : focusHero ? 0.10 : 0.11));
+  const cardFill = isCurrent ? alpha(theme.panel, focusHero ? 0.98 : 0.98) : alpha(theme.panel, opts.sixWide ? 0.78 : 0.65);
   let out = `
-    <rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${radius}" fill="${cardFill}" stroke="${isCurrent ? alpha(theme.accent2, 0.36) : alpha('#ffffff', 0.06)}" />
-    <text x="${x + pad}" y="${y + pad + titleSize * 0.75}" fill="${theme.text}" font-size="${titleSize}" font-family="${FONT}" font-weight="800">${titleLabel}</text>`;
-  if (opts.showBadge) {
-    out += `
-      <rect x="${x + w - pad - badgeW}" y="${y + pad * 0.55}" width="${badgeW}" height="${badgeH}" rx="${badgeH / 2}" fill="${isCurrent ? alpha(theme.accent, 0.18) : alpha('#ffffff', 0.05)}" />
-      <text x="${x + w - pad - badgeW / 2}" y="${y + pad * 0.55 + badgeH * 0.65}" text-anchor="middle" fill="${isCurrent ? theme.accent2 : theme.muted}" font-size="${Math.round(badgeH * 0.56)}" font-family="${FONT}" font-weight="700">${daysInMonth}${cfg.lang === 'ru' ? 'д' : 'd'}</text>`;
+    <rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${radius}" fill="${cardFill}" stroke="${isCurrent ? alpha(theme.accent2, 0.36) : alpha('#ffffff', 0.06)}" />`;
+  if (showInlineTitle) {
+    out += `<text x="${x + pad}" y="${titleY}" fill="${theme.text}" font-size="${titleSize}" font-family="${FONT}" font-weight="800">${titleLabel}</text>`;
+  } else {
+    out += `<text x="${x + pad}" y="${y + pad + titleSize * 0.75}" fill="${theme.text}" font-size="${titleSize}" font-family="${FONT}" font-weight="800">${titleLabel}</text>`;
   }
-  const weekdayY = y + (opts.sixWide ? h * 0.18 : h * 0.23);
+  if (opts.showBadge || focusHero) {
+    out += `
+      <rect x="${x + w - pad - badgeW}" y="${y + pad * (focusHero ? 0.9 : 0.55)}" width="${badgeW}" height="${badgeH}" rx="${badgeH / 2}" fill="${isCurrent ? alpha(theme.accent, 0.18) : alpha('#ffffff', 0.05)}" />
+      <text x="${x + w - pad - badgeW / 2}" y="${y + pad * (focusHero ? 0.9 : 0.55) + badgeH * 0.65}" text-anchor="middle" fill="${isCurrent ? theme.accent2 : theme.muted}" font-size="${Math.round(badgeH * (focusHero ? 0.50 : 0.56))}" font-family="${FONT}" font-weight="700">${daysInMonth}${cfg.lang === 'ru' ? 'д' : 'd'}</text>`;
+  }
+  const weekdayY = y + (focusHero ? h * 0.19 : opts.sixWide ? h * 0.18 : h * 0.23);
   const gridTop = y + topBand;
   const startX = x + pad + (weekNumberCol ? cellW : 0);
   if (weekdayVisible) {
@@ -457,43 +481,43 @@ function renderMonthGrid({ monthIndex, year, x, y, w, h, cfg, theme, labels, now
     usedWeekRows.add(row);
     const date = dayjs(`${year}-${String(monthIndex + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`);
     const cx = startX + col * cellW + cellW / 2;
-    const cy = gridTop + row * cellH + cellH * 0.68;
+    const cy = gridTop + row * cellHReal + cellHReal * 0.68;
     const isToday = cfg.accentToday && date.isSame(now, 'day');
     const isWeekend = isRestDay(date);
     const isPast = date.isBefore(now, 'day') && now.month() === monthIndex;
     const textColor = isToday ? theme.text : isWeekend ? theme.weekend : isPast ? alpha(theme.text, 0.6) : theme.text;
     if (isToday) {
-      const rect = `<rect x="${cx - cellW * 0.45}" y="${cy - cellH * 0.6}" width="${cellW * 0.9}" height="${cellH * 0.8}" rx="${Math.min(cellW, cellH) * 0.2}"`;
+      const rect = `<rect x="${cx - cellW * 0.45}" y="${cy - cellHReal * 0.6}" width="${cellW * 0.9}" height="${cellHReal * 0.8}" rx="${Math.min(cellW, cellHReal) * 0.2}"`;
       out += cfg.style === 'outline'
         ? `${rect} fill="none" stroke="${theme.accent}" stroke-width="${Math.max(1.2, w * 0.004)}"/>`
         : `${rect} fill="${alpha(theme.accent, cfg.style === 'numbers' ? 0.24 : 0.18)}" stroke="${alpha(theme.accent2, 0.34)}"/>`;
     }
     if (cfg.style === 'dots') {
-      const r = Math.min(cellW, cellH) * (isToday ? 0.18 : 0.12);
-      out += `<circle cx="${cx}" cy="${cy - cellH * 0.2}" r="${r}" fill="${isToday ? theme.accent : isPast ? theme.accent2 : isWeekend ? alpha(theme.weekend, 0.9) : alpha(theme.text, 0.26)}"/>`;
-      out += `<text x="${cx}" y="${cy + cellH * 0.3}" text-anchor="middle" fill="${textColor}" font-size="${Math.round(numberSize * 0.82)}" font-family="${FONT}" font-weight="700">${day}</text>`;
+      const r = Math.min(cellW, cellHReal) * (isToday ? 0.18 : 0.12);
+      out += `<circle cx="${cx}" cy="${cy - cellHReal * 0.2}" r="${r}" fill="${isToday ? theme.accent : isPast ? theme.accent2 : isWeekend ? alpha(theme.weekend, 0.9) : alpha(theme.text, 0.26)}"/>`;
+      out += `<text x="${cx}" y="${cy + cellHReal * 0.3}" text-anchor="middle" fill="${textColor}" font-size="${Math.round(numSize * 0.82)}" font-family="${FONT}" font-weight="700">${day}</text>`;
     } else if (cfg.style === 'focus') {
-      out += `<text x="${cx}" y="${cy}" text-anchor="middle" fill="${textColor}" font-size="${Math.round(numberSize * (isToday ? 1.05 : 1))}" font-family="${FONT}" font-weight="${isToday || isCurrent ? 800 : 600}">${day}</text>`;
-      if (isCurrent && !isToday && !opts.tiny) out += `<line x1="${cx - cellW * 0.15}" y1="${cy + cellH * 0.15}" x2="${cx + cellW * 0.15}" y2="${cy + cellH * 0.15}" stroke="${alpha(theme.accent2, 0.35)}" stroke-linecap="round" stroke-width="2"/>`;
+      out += `<text x="${cx}" y="${cy}" text-anchor="middle" fill="${textColor}" font-size="${Math.round(numSize * (isToday ? 1.05 : 1))}" font-family="${FONT}" font-weight="${isToday || isCurrent ? 800 : 600}">${day}</text>`;
+      if (isCurrent && !isToday && !opts.tiny) out += `<line x1="${cx - cellW * 0.15}" y1="${cy + cellHReal * 0.15}" x2="${cx + cellW * 0.15}" y2="${cy + cellHReal * 0.15}" stroke="${alpha(theme.accent2, 0.35)}" stroke-linecap="round" stroke-width="2"/>`;
     } else if (cfg.style === 'capsule') {
-      if (isToday || isWeekend) out += `<rect x="${cx - cellW * 0.38}" y="${cy - cellH * 0.48}" width="${cellW * 0.76}" height="${cellH * 0.56}" rx="${cellH * 0.28}" fill="${isToday ? alpha(theme.accent, 0.25) : alpha(theme.weekend, 0.12)}"/>`;
-      out += `<text x="${cx}" y="${cy}" text-anchor="middle" fill="${textColor}" font-size="${numberSize}" font-family="${FONT}" font-weight="${isToday ? 800 : 600}">${day}</text>`;
+      if (isToday || isWeekend) out += `<rect x="${cx - cellW * 0.38}" y="${cy - cellHReal * 0.48}" width="${cellW * 0.76}" height="${cellHReal * 0.56}" rx="${cellHReal * 0.28}" fill="${isToday ? alpha(theme.accent, 0.25) : alpha(theme.weekend, 0.12)}"/>`;
+      out += `<text x="${cx}" y="${cy}" text-anchor="middle" fill="${textColor}" font-size="${numSize}" font-family="${FONT}" font-weight="${isToday ? 800 : 600}">${day}</text>`;
     } else if (cfg.style === 'ring') {
-      if (isToday) out += `<circle cx="${cx}" cy="${cy - cellH * 0.2}" r="${Math.min(cellW, cellH) * 0.28}" fill="none" stroke="${theme.accent}" stroke-width="${Math.max(1.2, w * 0.004)}"/>`;
-      out += `<text x="${cx}" y="${cy}" text-anchor="middle" fill="${textColor}" font-size="${numberSize}" font-family="${FONT}" font-weight="${isToday ? 800 : 600}">${day}</text>`;
+      if (isToday) out += `<circle cx="${cx}" cy="${cy - cellHReal * 0.2}" r="${Math.min(cellW, cellHReal) * 0.28}" fill="none" stroke="${theme.accent}" stroke-width="${Math.max(1.2, w * 0.004)}"/>`;
+      out += `<text x="${cx}" y="${cy}" text-anchor="middle" fill="${textColor}" font-size="${numSize}" font-family="${FONT}" font-weight="${isToday ? 800 : 600}">${day}</text>`;
     } else if (cfg.style === 'micro') {
-      out += `<circle cx="${cx}" cy="${cy - cellH * 0.18}" r="${Math.max(1.1, Math.min(cellW, cellH) * 0.08)}" fill="${isToday ? theme.accent : isWeekend ? theme.weekend : alpha(theme.text, 0.24)}"/>`;
-      out += `<text x="${cx}" y="${cy + cellH * 0.24}" text-anchor="middle" fill="${textColor}" font-size="${Math.round(numberSize * 0.72)}" font-family="${FONT}" font-weight="700">${day}</text>`;
+      out += `<circle cx="${cx}" cy="${cy - cellHReal * 0.18}" r="${Math.max(1.1, Math.min(cellW, cellHReal) * 0.08)}" fill="${isToday ? theme.accent : isWeekend ? theme.weekend : alpha(theme.text, 0.24)}"/>`;
+      out += `<text x="${cx}" y="${cy + cellHReal * 0.24}" text-anchor="middle" fill="${textColor}" font-size="${Math.round(numSize * 0.72)}" font-family="${FONT}" font-weight="700">${day}</text>`;
     } else {
-      out += `<text x="${cx}" y="${cy}" text-anchor="middle" fill="${textColor}" font-size="${numberSize}" font-family="${FONT}" font-weight="${isToday ? 800 : 600}">${day}</text>`;
+      out += `<text x="${cx}" y="${cy}" text-anchor="middle" fill="${textColor}" font-size="${numSize}" font-family="${FONT}" font-weight="${isToday ? 800 : 600}">${day}</text>`;
     }
   }
   if (weekNumberCol) {
     [...usedWeekRows].forEach((row) => {
       const date = first.add(row * 7 - firstWeekday, 'day');
       const wx = x + pad + cellW / 2;
-      const wy = gridTop + row * cellH + cellH * 0.68;
-      out += `<text x="${wx}" y="${wy}" text-anchor="middle" fill="${alpha(theme.muted, 0.7)}" font-size="${Math.round(numberSize * 0.68)}" font-family="${FONT}">${dayjs(date).week()}</text>`;
+      const wy = gridTop + row * cellHReal + cellHReal * 0.68;
+      out += `<text x="${wx}" y="${wy}" text-anchor="middle" fill="${alpha(theme.muted, 0.7)}" font-size="${Math.round(numSize * 0.68)}" font-family="${FONT}">${dayjs(date).week()}</text>`;
     });
   }
   return out;
@@ -506,33 +530,34 @@ function renderMonthListRow({ monthIndex, year, x, y, w, h, cfg, theme, labels, 
   const isCurrent = now.month() === monthIndex;
   const isRestDay = isRestDayFactory(cfg, year);
   const compact = cfg.monthLayout === 'list_1x12_compact';
+  const premiumCompact = true;
   const radius = Math.max(14, Math.round(h * (compact ? 0.24 : 0.28)));
   const padX = Math.round(w * (compact ? 0.024 : 0.03));
-  const nameW = Math.round(w * (compact ? 0.12 : 0.15));
-  const badgeW = cfg.monthBadges ? Math.round(w * (compact ? 0.05 : 0.06)) : 0;
+  const nameW = Math.round(w * (compact ? 0.16 : 0.18));
+  const badgeW = cfg.monthBadges ? Math.round(w * (compact ? 0.08 : 0.08)) : 0;
   const weekdayVisible = cfg.showWeekdays;
   const innerX = x + padX + nameW;
-  const innerW = w - padX * 2 - nameW - badgeW;
+  const innerW = Math.max(80, w - padX * 2 - nameW - badgeW);
   const cols = 7;
   const rows = 6;
-  const topPad = weekdayVisible ? h * (compact ? 0.2 : 0.23) : h * (compact ? 0.12 : 0.14);
+  const topPad = weekdayVisible ? h * (compact ? 0.22 : 0.24) : h * (compact ? 0.14 : 0.16);
   const cellW = innerW / cols;
-  const cellH = Math.max(8, (h - topPad - h * (compact ? 0.10 : 0.12)) / rows);
-  const monthTitleSize = Math.max(12, Math.round(Math.min(h * (compact ? 0.18 : 0.21), nameW * 0.32)));
-  const weekdaySize = Math.max(8, Math.round(Math.min(h * (compact ? 0.085 : 0.095), cellW * 0.26)));
-  const numberSize = Math.max(9, Math.round(Math.min(cellW, cellH) * (compact ? 0.40 : 0.44)));
-  const gridTop = y + topPad + (weekdayVisible ? h * (compact ? 0.05 : 0.06) : 0);
+  const cellH = Math.max(8, (h - topPad - h * (compact ? 0.08 : 0.10)) / rows);
+  const monthTitleSize = Math.max(12, Math.round(Math.min(h * (compact ? 0.16 : 0.19), nameW * 0.22)));
+  const weekdaySize = Math.max(8, Math.round(Math.min(h * (compact ? 0.078 : 0.088), cellW * 0.24)));
+  const numberSize = Math.max(8, Math.round(Math.min(cellW, cellH) * (compact ? 0.40 : 0.44)));
+  const gridTop = y + topPad + (weekdayVisible ? h * (compact ? 0.04 : 0.05) : 0);
   const monthLabel = pickMonthLabel(labels, monthIndex, nameW, 'list');
-  let out = `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${radius}" fill="${isCurrent ? alpha(theme.panel, 0.95) : alpha(theme.panel, 0.72)}" stroke="${isCurrent ? alpha(theme.accent2, 0.34) : alpha('#ffffff', 0.05)}"/>`;
-  out += `<text x="${x + padX}" y="${y + h * 0.30}" fill="${theme.text}" font-size="${monthTitleSize}" font-family="${FONT}" font-weight="800">${monthLabel}</text>`;
+  let out = `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${radius}" fill="${isCurrent ? alpha(theme.panel, 0.95) : alpha(theme.panel, premiumCompact ? 0.76 : 0.72)}" stroke="${isCurrent ? alpha(theme.accent2, 0.34) : alpha('#ffffff', 0.05)}"/>`;
+  out += `<text x="${x + padX}" y="${y + h * 0.28}" fill="${theme.text}" font-size="${monthTitleSize}" font-family="${FONT}" font-weight="800">${monthLabel}</text>`;
   if (cfg.monthBadges) {
-    out += `<rect x="${x + w - padX - badgeW}" y="${y + h * 0.18}" width="${badgeW}" height="${h * 0.22}" rx="${h * 0.11}" fill="${isCurrent ? alpha(theme.accent, 0.18) : alpha('#ffffff', 0.05)}"/>`;
-    out += `<text x="${x + w - padX - badgeW / 2}" y="${y + h * 0.33}" text-anchor="middle" fill="${isCurrent ? theme.accent2 : theme.muted}" font-size="${Math.round(h * 0.11)}" font-family="${FONT}" font-weight="700">${daysInMonth}</text>`;
+    out += `<rect x="${x + w - padX - badgeW}" y="${y + h * 0.17}" width="${badgeW}" height="${h * 0.20}" rx="${h * 0.10}" fill="${isCurrent ? alpha(theme.accent, 0.18) : alpha('#ffffff', 0.05)}"/>`;
+    out += `<text x="${x + w - padX - badgeW / 2}" y="${y + h * 0.30}" text-anchor="middle" fill="${isCurrent ? theme.accent2 : theme.muted}" font-size="${Math.round(h * 0.10)}" font-family="${FONT}" font-weight="700">${daysInMonth}${cfg.lang === 'ru' ? 'д' : 'd'}</text>`;
   }
   if (weekdayVisible) {
     labels.weekdays.forEach((wd, i) => {
       const tx = innerX + i * cellW + cellW / 2;
-      out += `<text x="${tx}" y="${y + h * 0.26}" text-anchor="middle" fill="${i >= 5 ? alpha(theme.weekend, 0.95) : theme.muted}" font-size="${weekdaySize}" font-family="${FONT}" font-weight="700">${wd}</text>`;
+      out += `<text x="${tx}" y="${y + h * 0.24}" text-anchor="middle" fill="${i >= 5 ? alpha(theme.weekend, 0.95) : theme.muted}" font-size="${weekdaySize}" font-family="${FONT}" font-weight="700">${wd}</text>`;
     });
   }
   for (let day = 1; day <= daysInMonth; day++) {
@@ -615,7 +640,7 @@ function renderSvg(cfg) {
   if (layout.mode === 'focus') {
     const heroGap = Math.round(width * 0.014);
     const heroH = Math.round(contentH * 0.40);
-    monthsSvg += renderMonthGrid({ monthIndex: now.month(), year: now.year(), x: sidePadding, y: contentTop, w: width - sidePadding * 2, h: heroH, cfg: { ...cfg, monthLayout: 'grid_3x4' }, theme, labels, now, FONT: FONT_FAMILY });
+    monthsSvg += renderMonthGrid({ monthIndex: now.month(), year: now.year(), x: sidePadding, y: contentTop, w: width - sidePadding * 2, h: heroH, cfg: { ...cfg, monthLayout: 'single_month_focus', monthBadges: true, showWeekNumbers: true }, theme, labels, now, FONT: FONT_FAMILY });
 
     const miniTop = contentTop + heroH + heroGap;
     const miniRows = 3, miniCols = 4;
@@ -631,7 +656,7 @@ function renderSvg(cfg) {
         monthIndex,
         year: now.year(),
         x, y, w: miniW, h: miniH,
-        cfg: { ...cfg, monthLayout: 'grid_3x4_compact', focusCurrentMonth: false, monthBadges: false, showWeekNumbers: false },
+        cfg: { ...cfg, monthLayout: 'grid_3x4_compact', focusCurrentMonth: false, monthBadges: false, showWeekNumbers: false, showWeekdays: true },
         theme, labels, now, FONT: FONT_FAMILY
       });
     });
