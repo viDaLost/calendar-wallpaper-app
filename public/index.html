@@ -43,7 +43,6 @@
     .section-title{font-size:13px;letter-spacing:.16em;text-transform:uppercase;color:var(--muted)}
     .tiny{font-size:12px;color:var(--muted)}
     
-    /* Сворачиваемые блоки (Аккордеон) */
     details.group {
       padding:12px; border:1px solid var(--line); background:rgba(255,255,255,.025); border-radius:20px; margin-bottom:10px;
     }
@@ -119,14 +118,13 @@
   <div class="app">
     <section class="hero">
       <h1>Wallpaper Calendar Pro v2</h1>
-      <p>Сгенерируй идеальные обои-календарь для своего смартфона. Улучшенная читаемость шрифтов, удобное меню настроек и полная адаптация под любые экраны.</p>
+      <p>Сгенерируй идеальные обои-календарь для смартфона с поддержкой 10 красивых шрифтов и множеством тем.</p>
     </section>
 
     <div class="layout">
       <aside class="panel controls">
         <div class="section-head">
           <div class="section-title">Настройки</div>
-          <div class="tiny">Интерфейс v2</div>
         </div>
 
         <details class="group" open>
@@ -136,8 +134,14 @@
               <label for="model">Размер iPhone</label>
               <select id="model"></select>
             </div>
+            
+            <div class="field full">
+              <label for="font">Шрифт календаря</label>
+              <select id="font"></select>
+            </div>
+
             <div class="field">
-              <label for="style">Стиль календаря</label>
+              <label for="style">Стиль дат</label>
               <select id="style">
                 <option value="numbers">Только цифры</option>
                 <option value="dots">С точками</option>
@@ -146,15 +150,15 @@
               </select>
             </div>
             <div class="field">
-              <label for="theme">Тема</label>
+              <label for="theme">Тема оформления</label>
               <select id="theme"></select>
             </div>
             <div class="field">
-              <label for="bg_style">Фон</label>
+              <label for="bg_style">Тип фона</label>
               <select id="bg_style"></select>
             </div>
             <div class="field">
-              <label for="calendar_size">Размер композиции</label>
+              <label for="calendar_size">Масштаб</label>
               <select id="calendar_size">
                 <option value="balanced">Сбалансированный</option>
                 <option value="compact">Компактный</option>
@@ -170,7 +174,7 @@
               </select>
             </div>
             <div class="field">
-              <label for="opacity">Светлый слой (наложение)</label>
+              <label for="opacity">Тень / Подложка (%)</label>
               <select id="opacity">
                 <option value="0">0%</option>
                 <option value="4">4%</option>
@@ -182,10 +186,10 @@
               </select>
             </div>
             <div class="field">
-              <label for="weekend_mode">Выходные дни</label>
+              <label for="weekend_mode">Выходные</label>
               <select id="weekend_mode">
                 <option value="weekends_only">Только Сб и Вс</option>
-                <option value="production">Праздники РФ + выходные</option>
+                <option value="production">Праздники РФ + Сб/Вс</option>
                 <option value="none">Не выделять</option>
               </select>
             </div>
@@ -207,10 +211,7 @@
           <div class="grid">
             <div class="field">
               <label for="lang">Язык</label>
-              <select id="lang">
-                <option value="ru">Русский</option>
-                <option value="en">English</option>
-              </select>
+              <select id="lang"><option value="ru">Русский</option><option value="en">English</option></select>
             </div>
             <div class="field">
               <label for="timezone">Часовой пояс UTC</label>
@@ -227,7 +228,7 @@
               </select>
             </div>
             <div class="field full">
-              <label for="note">Текст своей заметки</label>
+              <label for="note">Текст заметки</label>
               <textarea id="note" placeholder="Например: Фокус месяца — дисциплина и спокойный темп"></textarea>
             </div>
           </div>
@@ -236,18 +237,18 @@
         <details class="group">
           <summary>3. Уникальные функции</summary>
           <div class="toggle-grid">
-            <label class="toggle"><input type="checkbox" id="show_weekdays" checked><span class="switch"></span><div><div class="t-main">Подписи дней недели</div><div class="t-sub">Улучшенное чтение сетки (Пн, Вт...)</div></div></label>
-            <label class="toggle"><input type="checkbox" id="accent_today" checked><span class="switch"></span><div><div class="t-main">Выделять сегодня</div><div class="t-sub">Рамка или фон на текущем дне</div></div></label>
-            <label class="toggle"><input type="checkbox" id="show_progress_ring" checked><span class="switch"></span><div><div class="t-main">Круговой прогресс года</div><div class="t-sub">Процент пройденного года сверху</div></div></label>
-            <label class="toggle"><input type="checkbox" id="show_week_numbers"><span class="switch"></span><div><div class="t-main">Номера недель</div><div class="t-sub">Слева от дат (полезно для планирования)</div></div></label>
-            <label class="toggle"><input type="checkbox" id="quarter_dividers" checked><span class="switch"></span><div><div class="t-main">Разделители кварталов</div><div class="t-sub">Тонкие линии между Q1/Q2/Q3/Q4</div></div></label>
-            <label class="toggle"><input type="checkbox" id="month_badges" checked><span class="switch"></span><div><div class="t-main">Бейджи месяцев</div><div class="t-sub">Показывает общее число дней (30д/31д)</div></div></label>
-            <label class="toggle"><input type="checkbox" id="focus_current_month" checked><span class="switch"></span><div><div class="t-main">Акцент на текущем месяце</div><div class="t-sub">Текущий месяц визуально ярче остальных</div></div></label>
+            <label class="toggle"><input type="checkbox" id="show_weekdays" checked><span class="switch"></span><div><div class="t-main">Подписи дней недели</div><div class="t-sub">Пн, Вт, Ср...</div></div></label>
+            <label class="toggle"><input type="checkbox" id="accent_today" checked><span class="switch"></span><div><div class="t-main">Выделять сегодня</div><div class="t-sub">Акцент на текущем дне</div></div></label>
+            <label class="toggle"><input type="checkbox" id="show_progress_ring" checked><span class="switch"></span><div><div class="t-main">Круговой прогресс года</div><div class="t-sub">Процент сверху</div></div></label>
+            <label class="toggle"><input type="checkbox" id="show_week_numbers"><span class="switch"></span><div><div class="t-main">Номера недель</div><div class="t-sub">Полезно для работы</div></div></label>
+            <label class="toggle"><input type="checkbox" id="quarter_dividers" checked><span class="switch"></span><div><div class="t-main">Разделители кварталов</div><div class="t-sub">Линии между Q1/Q2/Q3/Q4</div></div></label>
+            <label class="toggle"><input type="checkbox" id="month_badges" checked><span class="switch"></span><div><div class="t-main">Бейджи месяцев</div><div class="t-sub">Число дней в месяце (30/31)</div></div></label>
+            <label class="toggle"><input type="checkbox" id="focus_current_month" checked><span class="switch"></span><div><div class="t-main">Акцент на текущем месяце</div><div class="t-sub">Визуально ярче других</div></div></label>
           </div>
         </details>
 
         <div class="actions">
-          <button class="primary" id="downloadBtn">Скачать обои</button>
+          <button class="primary" id="downloadBtn">Скачать PNG обои</button>
           <button class="ok" id="savePresetBtn">Сохранить пресет</button>
           <button class="ghost" id="openPngBtn">Открыть PNG</button>
           <button class="ghost" id="openSvgBtn">Открыть SVG</button>
@@ -257,35 +258,27 @@
         </div>
 
         <details class="guide" style="margin-top:10px">
-          <summary class="group-title" style="margin-bottom:0; font-size:14px; color:#fff; cursor:pointer;">Как добавить на экран блокировки</summary>
+          <summary class="group-title" style="margin-bottom:0; font-size:14px; color:#fff; cursor:pointer;">Как добавить на iPhone</summary>
           <ol>
-            <li>Нажми «Скачать обои».</li>
-            <li>Сохрани картинку в приложение «Фото».</li>
-            <li>Удерживай палец на экране блокировки iPhone.</li>
+            <li>Нажми «Скачать PNG обои».</li>
+            <li>Сохрани картинку в «Фото».</li>
+            <li>Удерживай палец на экране блокировки.</li>
             <li>Нажми «+» → выбери «Фото».</li>
-            <li>Выбери сохранённые обои и нажми «Готово» (отключи размытие, если нужно).</li>
+            <li>Выбери сохранённые обои.</li>
           </ol>
         </details>
       </aside>
 
       <main class="panel preview-panel">
         <div class="preview-top">
-          <div>
-            <div class="section-title" style="margin-bottom:6px">Предпросмотр</div>
-            <div class="badge-row">
-              <div class="pill">Live</div>
-              <div class="pill">Auto-save</div>
-            </div>
-          </div>
+          <div><div class="section-title" style="margin-bottom:6px">Предпросмотр</div></div>
           <div class="tiny" id="sizeLabel"></div>
         </div>
-
         <div class="preview-shell">
           <div class="phone-frame"><img id="preview" alt="Wallpaper preview"></div>
         </div>
-
         <div class="preset-list">
-          <div class="group-title" style="margin:0">Мои сохранённые пресеты</div>
+          <div class="group-title" style="margin:0">Сохранённые пресеты</div>
           <div id="presetsContainer" class="footer-note">Пока нет сохранённых пресетов.</div>
         </div>
       </main>
@@ -294,24 +287,20 @@
 
   <script>
     const defaults = {
-      model:'iphone_15', style:'numbers', theme:'graphite_orange', bg_style:'aurora',
+      model:'iphone_15', font:'inter', style:'numbers', theme:'graphite_orange', bg_style:'aurora',
       calendar_size:'balanced', month_layout:'grid_3x4', opacity:'8', weekend_mode:'weekends_only',
       lang:'ru', timezone:'3', footer:'year_summary', note:'', width:'1179', height:'2556',
       show_weekdays:true, accent_today:true, show_progress_ring:true, show_week_numbers:false,
       quarter_dividers:true, month_badges:true, focus_current_month:true
     };
 
-    const fields = ['model','style','theme','bg_style','calendar_size','month_layout','opacity','weekend_mode','lang','timezone','footer','note','width','height'];
+    const fields = ['model','font','style','theme','bg_style','calendar_size','month_layout','opacity','weekend_mode','lang','timezone','footer','note','width','height'];
     const checks = ['show_weekdays','accent_today','show_progress_ring','show_week_numbers','quarter_dividers','month_badges','focus_current_month'];
     const els = Object.fromEntries([...fields, ...checks].map(id => [id, document.getElementById(id)]));
     const preview = document.getElementById('preview');
     const presetsContainer = document.getElementById('presetsContainer');
     const sizeLabel = document.getElementById('sizeLabel');
-    const modelEl = document.getElementById('model');
-    const themeEl = document.getElementById('theme');
-    const bgStyleEl = document.getElementById('bg_style');
-    const customSizeWrap = document.getElementById('customSizeWrap');
-
+    
     let optionsCache = null;
 
     async function loadOptions(){
@@ -319,53 +308,26 @@
       const data = await res.json();
       optionsCache = data;
 
-      Object.entries(data.presets).forEach(([key, value]) => {
-        const opt = document.createElement('option');
-        opt.value = key;
-        opt.textContent = `${value.label} — ${value.width}×${value.height}`;
-        modelEl.appendChild(opt);
-      });
+      Object.entries(data.presets).forEach(([k, v]) => els.model.add(new Option(`${v.label} — ${v.width}×${v.height}`, k)));
+      Object.entries(data.fonts).forEach(([k, name]) => els.font.add(new Option(name, k)));
+      Object.entries(data.themes).forEach(([k, v]) => els.theme.add(new Option(v.name, k)));
+      Object.entries(data.bgStyles).forEach(([k, name]) => els.bg_style.add(new Option(name, k)));
 
-      Object.entries(data.themes).forEach(([key, value]) => {
-        const opt = document.createElement('option');
-        opt.value = key;
-        opt.textContent = value.name;
-        themeEl.appendChild(opt);
-      });
-
-      Object.entries(data.bgStyles).forEach(([key, value]) => {
-        const opt = document.createElement('option');
-        opt.value = key;
-        opt.textContent = value;
-        bgStyleEl.appendChild(opt);
-      });
-
-      for(let i=-12;i<=14;i++){
-        const opt = document.createElement('option');
-        opt.value = i;
-        opt.textContent = `UTC${i>=0?'+'+i:i}`;
-        els.timezone.appendChild(opt);
-      }
+      for(let i=-12;i<=14;i++) els.timezone.add(new Option(`UTC${i>=0?'+'+i:i}`, i));
     }
 
     function applyPresetSize(){
       const current = optionsCache?.presets?.[els.model.value];
       if(!current) return;
-      customSizeWrap.style.display = els.model.value === 'custom' ? 'grid' : 'none';
-      if(els.model.value !== 'custom'){
-        els.width.value = current.width;
-        els.height.value = current.height;
-      }
+      els.width.parentNode.parentNode.style.display = els.model.value === 'custom' ? 'grid' : 'none';
+      if(els.model.value !== 'custom'){ els.width.value = current.width; els.height.value = current.height; }
       sizeLabel.textContent = `${els.width.value} × ${els.height.value}px`;
     }
 
     function paramsFromForm(){
       applyPresetSize();
       const q = new URLSearchParams();
-      fields.forEach(id => {
-        if((id === 'width' || id === 'height') && els.model.value !== 'custom') return;
-        q.set(id, els[id].value);
-      });
+      fields.forEach(id => { if(!((id === 'width' || id === 'height') && els.model.value !== 'custom')) q.set(id, els[id].value); });
       checks.forEach(id => q.set(id, els[id].checked ? '1' : '0'));
       return q;
     }
@@ -382,15 +344,9 @@
       document.getElementById('openSvgBtn').onclick = () => window.open(svg, '_blank');
       
       document.getElementById('downloadBtn').onclick = () => {
-        const a = document.createElement('a');
-        a.href = png;
-        a.download = 'wallpaper-calendar.png';
-        a.click();
+        const a = document.createElement('a'); a.href = png; a.download = 'calendar.png'; a.click();
       };
-      document.getElementById('copyLinkBtn').onclick = async () => {
-        await navigator.clipboard.writeText(page);
-        alert('Ссылка на эти настройки скопирована!');
-      };
+      document.getElementById('copyLinkBtn').onclick = async () => { await navigator.clipboard.writeText(page); alert('Ссылка скопирована!'); };
     }
 
     function fillDefaults(){
@@ -404,94 +360,49 @@
       fillDefaults();
       fields.forEach(id => { if(q.has(id) && els[id]) els[id].value = q.get(id); });
       checks.forEach(id => { if(q.has(id) && els[id]) els[id].checked = q.get(id) === '1'; });
-      applyPresetSize();
-      updatePreview(false);
+      applyPresetSize(); updatePreview(false);
     }
 
-    function getSavedPresets(){
-      try { return JSON.parse(localStorage.getItem('wallpaper-calendar-presets') || '[]'); }
-      catch { return []; }
-    }
-
-    function setSavedPresets(items){
-      localStorage.setItem('wallpaper-calendar-presets', JSON.stringify(items));
-      renderPresets();
-    }
+    function getSavedPresets(){ try { return JSON.parse(localStorage.getItem('cal-presets') || '[]'); } catch { return []; } }
+    function setSavedPresets(items){ localStorage.setItem('cal-presets', JSON.stringify(items)); renderPresets(); }
 
     function renderPresets(){
       const items = getSavedPresets();
-      if(!items.length){
-        presetsContainer.innerHTML = '<div class="footer-note">Пока нет сохранённых пресетов.</div>';
-        return;
-      }
+      if(!items.length) return presetsContainer.innerHTML = '<div class="footer-note">Пока нет пресетов.</div>';
       presetsContainer.innerHTML = '';
       items.forEach((item, idx) => {
-        const row = document.createElement('div');
-        row.className = 'preset-item';
-        row.innerHTML = `
-          <div>
-            <strong>${item.name}</strong>
-            <span>${item.modelLabel}</span>
-          </div>
-          <div class="preset-actions">
-            <button>Открыть</button>
-            <button>Удалить</button>
-          </div>
-        `;
-        const [openBtn, deleteBtn] = row.querySelectorAll('button');
-        openBtn.onclick = () => {
-          history.replaceState({}, '', item.url);
-          loadFromQuery();
-        };
-        deleteBtn.onclick = () => {
-          const next = getSavedPresets().filter((_, i) => i !== idx);
-          setSavedPresets(next);
-        };
+        const row = document.createElement('div'); row.className = 'preset-item';
+        row.innerHTML = `<div><strong>${item.name}</strong></div><div class="preset-actions"><button>Открыть</button><button>Удалить</button></div>`;
+        const btns = row.querySelectorAll('button');
+        btns[0].onclick = () => { history.replaceState({}, '', item.url); loadFromQuery(); };
+        btns[1].onclick = () => { setSavedPresets(getSavedPresets().filter((_, i) => i !== idx)); };
         presetsContainer.appendChild(row);
       });
     }
 
     document.getElementById('savePresetBtn').addEventListener('click', () => {
-      const name = prompt('Название пресета', 'Мои обои');
-      if(!name) return;
+      const name = prompt('Название пресета', 'Мои обои'); if(!name) return;
       const items = getSavedPresets();
-      items.unshift({
-        name,
-        url: location.href,
-        modelLabel: modelEl.options[modelEl.selectedIndex].textContent
-      });
-      setSavedPresets(items.slice(0, 12));
-      alert('Пресет успешно сохранён!');
+      items.unshift({ name, url: location.href });
+      setSavedPresets(items.slice(0, 12)); alert('Пресет сохранён!');
     });
 
     document.getElementById('randomBtn').addEventListener('click', () => {
-      const themeKeys = Object.keys(optionsCache.themes);
-      const bgKeys = Object.keys(optionsCache.bgStyles);
-      const styles = ['numbers','dots','outline','focus'];
-      els.theme.value = themeKeys[Math.floor(Math.random()*themeKeys.length)];
-      els.bg_style.value = bgKeys[Math.floor(Math.random()*bgKeys.length)];
-      els.style.value = styles[Math.floor(Math.random()*styles.length)];
+      const r = o => Object.keys(o)[Math.floor(Math.random() * Object.keys(o).length)];
+      els.theme.value = r(optionsCache.themes); els.bg_style.value = r(optionsCache.bgStyles);
+      els.font.value = r(optionsCache.fonts); els.style.value = ['numbers','dots','outline','focus'][Math.floor(Math.random()*4)];
       updatePreview();
     });
 
-    document.getElementById('resetBtn').addEventListener('click', () => {
-      fillDefaults();
-      updatePreview();
-    });
-
+    document.getElementById('resetBtn').addEventListener('click', () => { fillDefaults(); updatePreview(); });
     [...fields, ...checks].forEach(id => {
       const el = els[id];
       el.addEventListener('change', () => updatePreview());
       if(el.tagName === 'INPUT' || el.tagName === 'TEXTAREA') el.addEventListener('input', () => updatePreview());
     });
+    els.model.addEventListener('change', () => { applyPresetSize(); updatePreview(); });
 
-    modelEl.addEventListener('change', () => { applyPresetSize(); updatePreview(); });
-
-    (async function init(){
-      await loadOptions();
-      loadFromQuery();
-      renderPresets();
-    })();
+    (async function init(){ await loadOptions(); loadFromQuery(); renderPresets(); })();
   </script>
 </body>
 </html>
