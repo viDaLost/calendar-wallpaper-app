@@ -100,12 +100,12 @@
   <div class="app">
     <section class="hero">
       <h1>Wallpaper Calendar Pro v6 SaaS</h1>
-      <p>Live-рендеринг в браузере, новые меш-текстуры, кастомные маркеры и динамическая погода для экрана блокировки.</p>
+      <p>Live-рендеринг 60 FPS в браузере. Выбор города для погоды, центрированный год, новые меш-текстуры и идеальная PNG-ссылка для автоматизации экрана блокировки.</p>
     </section>
 
     <div class="layout">
       <aside class="panel controls">
-        <div class="section-head"><div class="section-title">Атмосфера и Формат</div></div>
+        <div class="section-head"><div class="section-title">Настройки</div></div>
 
         <details class="group" open>
           <summary>1. Устройство и Визуальный стиль</summary>
@@ -168,20 +168,20 @@
         </details>
 
         <details class="group">
-          <summary>2. Контент и Смыслы</summary>
+          <summary>2. События, Погода и Смыслы</summary>
           <div class="grid">
             <div class="field"><label for="lang">Язык</label><select id="lang"><option value="ru">Русский</option><option value="en">English</option></select></div>
             <div class="field"><label for="timezone">Часовой пояс (UTC)</label><select id="timezone"></select></div>
             
             <div class="field full">
-              <label for="events">События и маркеры (ММ-ДД: Название)</label>
-              <textarea id="events" placeholder="04-20: Дедлайн, 12-31: Новый Год"></textarea>
+              <label for="events">События и маркеры</label>
+              <textarea id="events" placeholder="Формат: ММ-ДД: Название&#10;Пример: 04-20: Релиз, 12-31: Новый Год"></textarea>
             </div>
             
             <div class="field full">
-              <label>Динамическая Погода</label>
-              <button id="geoBtn" style="background:linear-gradient(135deg,#3a89ff,#6ba9ff);">📍 Включить гео-локацию</button>
-              <input type="hidden" id="lat"><input type="hidden" id="lon">
+              <label for="city">Город для погоды</label>
+              <input type="text" id="city" placeholder="Например: Москва" />
+              <div style="font-size:11px; color:var(--muted);">Впиши город, чтобы скрипт подтянул погоду в шапку</div>
             </div>
 
             <div class="field full">
@@ -206,7 +206,7 @@
           <div class="toggle-grid">
             <label class="toggle"><input type="checkbox" id="show_weekdays" checked><span class="switch"></span><div><div class="t-main">Ритм недели</div><div class="t-sub">Показывать Пн, Вт, Ср...</div></div></label>
             <label class="toggle"><input type="checkbox" id="accent_today" checked><span class="switch"></span><div><div class="t-main">Пульс времени</div><div class="t-sub">Визуально выделять сегодняшний день</div></div></label>
-            <label class="toggle"><input type="checkbox" id="show_progress_ring" checked><span class="switch"></span><div><div class="t-main">Кольцо эпохи</div><div class="t-sub">Круговой прогресс года сверху</div></div></label>
+            <label class="toggle"><input type="checkbox" id="show_progress_ring" checked><span class="switch"></span><div><div class="t-main">Кольцо эпохи</div><div class="t-sub">Круговой прогресс года (если нет погоды)</div></div></label>
             <label class="toggle"><input type="checkbox" id="show_week_numbers"><span class="switch"></span><div><div class="t-main">Хронология</div><div class="t-sub">Отображать номера недель</div></div></label>
             <label class="toggle"><input type="checkbox" id="quarter_dividers" checked><span class="switch"></span><div><div class="t-main">Смена сезонов</div><div class="t-sub">Тонкие линии между кварталами</div></div></label>
             <label class="toggle"><input type="checkbox" id="month_badges" checked><span class="switch"></span><div><div class="t-main">Метрика месяца</div><div class="t-sub">Счетчик количества дней (30/31)</div></div></label>
@@ -215,10 +215,10 @@
         </details>
 
         <div class="actions">
-          <button class="primary" id="downloadBtn">Скачать обои</button>
+          <button class="primary" id="downloadBtn">Скачать PNG (High Res)</button>
           <button class="ok" id="savePresetBtn">Сохранить пресет</button>
-          <button class="ghost" id="openPngBtn">Открыть PNG</button>
           <button class="accent" id="copyPngUrlBtn">Скопировать PNG‑ссылку</button>
+          <button class="ghost" id="openSvgBtn">Открыть SVG</button>
           <button class="ghost" id="randomBtn">Случайный стиль</button>
           <button class="ghost" id="resetBtn">Сбросить</button>
         </div>
@@ -226,12 +226,14 @@
         <div class="url-box" style="margin-top:10px">
           <div class="group-title" style="margin:0 0 8px">PNG‑ссылка для Команд</div>
           <div class="mono" id="pngUrlBox"></div>
+          <div class="footer-note" style="margin-top:8px">Вставь ссылку в действие "Получить содержимое URL" на iPhone для авто-обновления обоев.</div>
         </div>
+
       </aside>
 
       <main class="panel preview-panel">
         <div class="preview-top">
-          <div><div class="section-title" style="margin-bottom:6px">Предпросмотр</div></div>
+          <div><div class="section-title" style="margin-bottom:6px">Live Preview</div></div>
           <div class="tiny" id="sizeLabel"></div>
         </div>
         <div class="preview-shell">
@@ -254,14 +256,14 @@
       model:'iphone_17_pro', font:'inter', style:'numbers', theme:'graphite_orange', bg_style:'mesh_organic',
       month_layout:'grid_3x4_compact', weekend_mode:'weekends_only',
       lang:'ru', timezone:'3', footer:'year_summary', note:'', width:'1179', height:'2556',
-      events: '', lat:'', lon:'',
+      events: '', city:'',
       show_weekdays:true, accent_today:true, show_progress_ring:true, show_week_numbers:false,
       quarter_dividers:true, month_badges:true, focus_current_month:true,
       c_bg: '#0a0d12', c_panel: '#131823', c_text: '#edf2ff', c_muted: '#8994a7', c_accent: '#ff8f2d', c_accent2: '#ffbc6f', c_weekend: '#ff8f7b'
     };
 
     const colorFields = ['c_bg', 'c_panel', 'c_text', 'c_muted', 'c_accent', 'c_accent2', 'c_weekend'];
-    const fields = ['model','font','style','theme','bg_style','month_layout','weekend_mode','lang','timezone','footer','note','width','height','events','lat','lon', ...colorFields];
+    const fields = ['model','font','style','theme','bg_style','month_layout','weekend_mode','lang','timezone','footer','note','width','height','events','city', ...colorFields];
     const checks = ['show_weekdays','accent_today','show_progress_ring','show_week_numbers','quarter_dividers','month_badges','focus_current_month'];
     const els = Object.fromEntries([...fields, ...checks].map(id => [id, document.getElementById(id)]));
     
@@ -273,20 +275,40 @@
     let optionsCache = null;
     let b64FontsCache = null;
     let mockWeather = null;
+    let weatherDebounceTimer = null;
+
+    async function getCityWeather(city) {
+      if (!city) return null;
+      try {
+        const geoRes = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(city)}&count=1&language=ru`);
+        const geoData = await geoRes.json();
+        if (!geoData.results || geoData.results.length === 0) return null;
+        const { latitude, longitude } = geoData.results[0];
+        const res = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current=temperature_2m,weather_code`);
+        const data = await res.json();
+        const temp = Math.round(data.current.temperature_2m);
+        const code = data.current.weather_code;
+        let icon = '☀️';
+        if(code >= 1 && code <= 3) icon = '⛅';
+        if(code >= 45 && code <= 48) icon = '🌫️';
+        if(code >= 51 && code <= 67) icon = '🌧️';
+        if(code >= 71 && code <= 77) icon = '❄️';
+        if(code >= 80 && code <= 82) icon = '🌦️';
+        if(code >= 95) icon = '⛈️';
+        return { temp: temp > 0 ? `+${temp}` : temp, icon };
+      } catch(e) { return null; }
+    }
 
     async function loadOptions(){
       const res = await fetch('/api/options');
       optionsCache = await res.json();
-      
       const fontRes = await fetch('/api/fonts');
       b64FontsCache = await fontRes.json();
 
       Object.entries(optionsCache.presets).forEach(([k, v]) => els.model.add(new Option(`${v.label} — ${v.width}×${v.height}`, k)));
       Object.entries(optionsCache.fonts).forEach(([k, name]) => els.font.add(new Option(name, k)));
-      
       Object.entries(optionsCache.themes).forEach(([k, v]) => els.theme.add(new Option(v.name, k)));
       els.theme.add(new Option("✨ Создать свою палитру...", "custom_palette"));
-
       Object.entries(optionsCache.bgStyles).forEach(([k, name]) => els.bg_style.add(new Option(name, k)));
 
       for(let i=-12;i<=14;i++) els.timezone.add(new Option(`UTC${i>=0?'+'+i:i}`, i));
@@ -318,25 +340,21 @@
 
     function buildCfgForClient() {
       const q = paramsFromForm();
-      const cfg = {
+      return {
         width: Number(q.get('width')) || 1179, height: Number(q.get('height')) || 2556,
         themeObj: q.get('theme') === 'custom_palette' 
           ? { bg:q.get('c_bg'), panel:q.get('c_panel'), text:q.get('c_text'), muted:q.get('c_muted'), accent:q.get('c_accent'), accent2:q.get('c_accent2'), weekend:q.get('c_weekend') }
           : (window.Engine.THEMES[q.get('theme')] || window.Engine.THEMES.graphite_orange),
         fontFamily: optionsCache.fonts[q.get('font')] || 'Inter',
-        style: q.get('style') || 'numbers',
-        monthLayout: q.get('month_layout') || 'grid_3x4',
-        weekendMode: q.get('weekend_mode') || 'weekends_only',
-        bgStyle: q.get('bg_style') || 'mesh_organic',
+        style: q.get('style') || 'numbers', monthLayout: q.get('month_layout') || 'grid_3x4',
+        weekendMode: q.get('weekend_mode') || 'weekends_only', bgStyle: q.get('bg_style') || 'mesh_organic',
         lang: q.get('lang') || 'ru', timezone: Number(q.get('timezone')) || 3,
         footer: q.get('footer') || 'year_summary', note: q.get('note') || '', events: q.get('events') || '',
         showWeekdays: q.get('show_weekdays') === '1', accentToday: q.get('accent_today') === '1',
         showProgressRing: q.get('show_progress_ring') === '1', showWeekNumbers: q.get('show_week_numbers') === '1',
         quarterDividers: q.get('quarter_dividers') === '1', monthBadges: q.get('month_badges') === '1',
-        focusCurrentMonth: q.get('focus_current_month') === '1', lockscreenSafe: true,
-        weatherData: mockWeather
+        focusCurrentMonth: q.get('focus_current_month') === '1', lockscreenSafe: true, weatherData: mockWeather
       };
-      return cfg;
     }
 
     function updatePreview(push = true){
@@ -348,15 +366,14 @@
       document.getElementById('pngUrlBox').textContent = pngUrl;
       if(push) history.replaceState({}, '', `${location.origin}/?${q.toString()}`);
 
-      // CLIENT SIDE RENDER
+      // LIVE RENDER IN BROWSER 60FPS
       const cfg = buildCfgForClient();
-      const b64Font = b64FontsCache[els.font.value || 'inter'];
-      const svgStr = window.Engine.renderSvg(cfg, dayjs, b64Font);
+      const svgStr = window.Engine.renderSvg(cfg, dayjs, b64FontsCache[els.font.value || 'inter']);
       const blob = new Blob([svgStr], { type: 'image/svg+xml' });
       preview.src = URL.createObjectURL(blob);
 
-      document.getElementById('openPngBtn').onclick = () => window.open(pngUrl, '_blank');
-      document.getElementById('downloadBtn').onclick = () => { const a = document.createElement('a'); a.href = pngUrl; a.download = 'calendar.png'; a.click(); };
+      document.getElementById('downloadBtn').onclick = () => window.open(pngUrl, '_blank');
+      document.getElementById('openSvgBtn').onclick = () => window.open(`${location.origin}/wallpaper.svg?${q.toString()}`, '_blank');
       document.getElementById('copyPngUrlBtn').onclick = async () => { await navigator.clipboard.writeText(pngUrl); alert('PNG‑ссылка скопирована!'); };
     }
 
@@ -373,8 +390,6 @@
       fields.forEach(id => { if(q.has(id) && els[id]) els[id].value = q.get(id); });
       checks.forEach(id => { if(q.has(id) && els[id]) els[id].checked = q.get(id) === '1'; });
       customThemeGroup.style.display = els.theme.value === 'custom_palette' ? 'block' : 'none';
-      
-      if(els.lat.value && els.lon.value) mockWeather = { temp: '+22', icon: '☀️' };
       applyPresetSize(); updatePreview(false);
     }
 
@@ -394,17 +409,6 @@
         presetsContainer.appendChild(row);
       });
     }
-
-    document.getElementById('geoBtn').addEventListener('click', () => {
-      navigator.geolocation.getCurrentPosition(pos => {
-        els.lat.value = pos.coords.latitude;
-        els.lon.value = pos.coords.longitude;
-        document.getElementById('geoBtn').innerText = '✅ Геолокация получена';
-        document.getElementById('geoBtn').style.background = 'linear-gradient(135deg,#37b98a,#5ad0a4)';
-        mockWeather = { temp: '+18', icon: '🌤️' }; // Мокаем для клиента
-        updatePreview();
-      }, () => alert("Ошибка получения гео-данных"));
-    });
 
     document.getElementById('savePresetBtn').addEventListener('click', () => {
       const name = prompt('Название пресета', 'Моя атмосфера'); if(!name) return;
@@ -428,10 +432,26 @@
     
     [...fields, ...checks].forEach(id => {
       const el = els[id];
-      if(id === 'lat' || id === 'lon') return;
+      if (id === 'city') return; // Город обрабатывается отдельно с задержкой
       el.addEventListener('change', () => updatePreview());
       if(el.tagName === 'INPUT' || el.tagName === 'TEXTAREA') el.addEventListener('input', () => updatePreview());
     });
+
+    // Обработка города с задержкой, чтобы не спамить API
+    els.city.addEventListener('input', (e) => {
+      clearTimeout(weatherDebounceTimer);
+      const city = e.target.value.trim();
+      if(city) {
+        weatherDebounceTimer = setTimeout(async () => {
+          mockWeather = await getCityWeather(city);
+          updatePreview();
+        }, 800);
+      } else {
+        mockWeather = null;
+        updatePreview();
+      }
+    });
+
     els.model.addEventListener('change', () => { applyPresetSize(); updatePreview(); });
 
     (async function init(){ await loadOptions(); loadFromQuery(); renderPresets(); })();
