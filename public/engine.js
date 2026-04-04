@@ -121,6 +121,11 @@
     return `${cfg.weatherData.icon} ${cfg.weatherData.temp}°C · ${cfg.weatherData.cityLabel || ''}`.replace(/·\s*$/, '').trim();
   }
 
+  function getHourlyWeatherLine(cfg) {
+    if (!cfg.weatherData || !Array.isArray(cfg.weatherData.hourly) || !cfg.weatherData.hourly.length) return '';
+    return cfg.weatherData.hourly.slice(0, 6).map(item => `${item.hour} ${item.temp}° ${item.icon}`).join('   ');
+  }
+
 
   function renderBackground(cfg, theme, width, height) {
     const bgType = cfg.bgStyle;
@@ -213,8 +218,8 @@
     const badgeY = yearY - yearSize * 0.15;
 
     const yearSvg = `<text x="${width / 2}" y="${yearY}" text-anchor="middle" fill="${theme.text}" font-size="${yearSize}" font-family="${FONT}" font-weight="900" letter-spacing="-0.03em">${now.year()}</text>`;
-    const todaySvg = `<text x="${padding}" y="${leftTextY}" fill="${theme.muted}" font-size="${subtitleSize}" font-family="${FONT}">${escapeXml(dateText)}</text>`;
-    const badgeSvg = `
+    const todaySvg = cfg.showHeaderMeta === false ? '' : `<text x="${padding}" y="${leftTextY}" fill="${theme.muted}" font-size="${subtitleSize}" font-family="${FONT}">${escapeXml(dateText)}</text>`;
+    const badgeSvg = cfg.showHeaderMeta === false ? '' : `
       <rect x="${padding}" y="${badgeY}" width="${chipWidth}" height="${chipHeight}" rx="${chipHeight / 2}" fill="${alpha(theme.panel, 0.92)}" stroke="${alpha(theme.accent2, 0.22)}"/>
       <text x="${padding + chipWidth / 2}" y="${badgeY + chipHeight * 0.66}" text-anchor="middle" fill="${theme.accent2}" font-size="${Math.round(width * 0.024)}" font-family="${FONT}" font-weight="700">${labels.week} ${now.week()}</text>`;
 
@@ -224,7 +229,7 @@
       const weatherY = yearY - yearSize * 0.42;
       const cityLineY = weatherY + subtitleSize * 1.15;
       const rawCity = String(cfg.weatherData.cityLabel || '').split(',')[0].trim();
-      const cityLabel = rawCity.length > 14 ? `${rawCity.slice(0, 13)}…` : rawCity;
+      const cityLabel = rawCity.length > 11 ? `${rawCity.slice(0, 10)}…` : rawCity;
       rightSvg += `<text x="${weatherX}" y="${weatherY}" text-anchor="end" fill="${theme.text}" font-size="${subtitleSize * 1.42}" font-family="${FONT}" font-weight="700">${cfg.weatherData.temp}°C ${cfg.weatherData.icon}</text>`;
       if (cityLabel) rightSvg += `<text x="${weatherX}" y="${cityLineY}" text-anchor="end" fill="${theme.muted}" font-size="${Math.round(subtitleSize * 0.82)}" font-family="${FONT}" font-weight="600">${escapeXml(cityLabel)}</text>`;
     } else if (cfg.showProgressRing && stats) {
@@ -273,8 +278,10 @@
     const badgeW = Math.round(w * (opts.sixWide ? 0.14 : focusHero ? 0.12 : 0.19));
     const badgeH = Math.round(h * (opts.sixWide ? 0.10 : focusHero ? 0.10 : 0.11));
     const cardFill = isCurrent ? alpha(theme.panel, focusHero ? 0.98 : 0.98) : alpha(theme.panel, opts.sixWide ? 0.78 : 0.65);
+    const cardStroke = isCurrent ? alpha(theme.accent2, cfg.glassPanels === false ? 0.26 : 0.42) : alpha('#ffffff', cfg.glassPanels === false ? 0.05 : 0.09);
     
-    let out = `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${radius}" fill="${cardFill}" stroke="${isCurrent ? alpha(theme.accent2, 0.36) : alpha('#ffffff', 0.06)}" />`;
+    let out = `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${radius}" fill="${cardFill}" stroke="${cardStroke}" />`;
+    if (cfg.glassPanels !== false) out += `<rect x="${x + 1.5}" y="${y + 1.5}" width="${Math.max(0, w - 3)}" height="${Math.max(0, h - 3)}" rx="${Math.max(0, radius - 1.5)}" fill="none" stroke="${alpha(theme.accent2, isCurrent ? 0.10 : 0.04)}" />`;
     if (focusHero) { out += `<text x="${x + pad}" y="${titleY}" fill="${theme.text}" font-size="${titleSize}" font-family="${FONT}" font-weight="800">${titleLabel}</text>`; } 
     else { out += `<text x="${x + pad}" y="${y + pad + titleSize * 0.75}" fill="${theme.text}" font-size="${titleSize}" font-family="${FONT}" font-weight="800">${titleLabel}</text>`; }
     
@@ -285,6 +292,12 @@
     const weekdayY = focusHero ? (y + pad + titleSize + h * 0.065) : (y + (opts.sixWide ? h * 0.18 : h * 0.23));
     const gridTop = y + topBand;
     const startX = x + pad + (weekNumberCol ? cellW : 0);
+    if (cfg.strongWeekendTint) {
+      [5, 6].forEach((weekendCol, idx) => {
+        const tintX = startX + weekendCol * cellW + cellW * 0.08;
+        out += `<rect x="${tintX}" y="${gridTop - cellHReal * 0.16}" width="${cellW * 0.84}" height="${cellHReal * 5.2}" rx="${cellW * 0.22}" fill="${alpha(theme.weekend, idx === 0 ? 0.07 : 0.10)}" />`;
+      });
+    }
     if (opts.showWeekdays) {
       if (weekNumberCol) out += `<text x="${x + pad + cellW / 2}" y="${weekdayY}" text-anchor="middle" fill="${theme.muted}" font-size="${weekdaySize}" font-family="${FONT}">#</text>`;
       labels.weekdays.forEach((wd, i) => out += `<text x="${startX + i * cellW + cellW / 2}" y="${weekdayY}" text-anchor="middle" fill="${i >= 5 ? alpha(theme.weekend, 0.95) : theme.muted}" font-size="${weekdaySize}" font-family="${FONT}" font-weight="700">${wd}</text>`);
@@ -366,7 +379,8 @@
     const cellH = Math.max(8, (h - topPad - h * (compact ? 0.08 : 0.10)) / 6);
     const numberSize = Math.max(8, Math.round(Math.min(cellW, cellH) * (compact ? 0.40 : 0.44)));
     
-    let out = `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${radius}" fill="${isCurrent ? alpha(theme.panel, 0.95) : alpha(theme.panel, 0.72)}" stroke="${isCurrent ? alpha(theme.accent2, 0.34) : alpha('#ffffff', 0.05)}"/>`;
+    let out = `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${radius}" fill="${isCurrent ? alpha(theme.panel, 0.95) : alpha(theme.panel, 0.72)}" stroke="${isCurrent ? alpha(theme.accent2, cfg.glassPanels === false ? 0.24 : 0.38) : alpha('#ffffff', cfg.glassPanels === false ? 0.05 : 0.08)}"/>`;
+    if (cfg.glassPanels !== false) out += `<rect x="${x + 1.5}" y="${y + 1.5}" width="${Math.max(0, w - 3)}" height="${Math.max(0, h - 3)}" rx="${Math.max(0, radius - 1.5)}" fill="none" stroke="${alpha(theme.accent2, isCurrent ? 0.09 : 0.04)}"/>`;
     out += `<text x="${x + padX}" y="${y + h * 0.28}" fill="${theme.text}" font-size="${Math.max(12, Math.round(Math.min(h * (compact ? 0.16 : 0.19), nameW * 0.22)))}" font-family="${FONT}" font-weight="800">${pickMonthLabel(labels, monthIndex, nameW, 'list')}</text>`;
     if (cfg.monthBadges) {
       out += `<rect x="${x + w - padX - badgeW}" y="${y + h * 0.17}" width="${badgeW}" height="${h * 0.20}" rx="${h * 0.10}" fill="${isCurrent ? alpha(theme.accent, 0.18) : alpha('#ffffff', 0.05)}"/>`;
@@ -376,6 +390,12 @@
       labels.weekdays.forEach((wd, i) => out += `<text x="${innerX + i * cellW + cellW / 2}" y="${y + h * 0.24}" text-anchor="middle" fill="${i >= 5 ? alpha(theme.weekend, 0.95) : theme.muted}" font-size="${Math.max(8, Math.round(Math.min(h * (compact ? 0.078 : 0.088), cellW * 0.24)))}" font-family="${FONT}" font-weight="700">${wd}</text>`);
     }
     const gridTop = y + topPad + (cfg.showWeekdays ? h * (compact ? 0.04 : 0.05) : 0);
+    if (cfg.strongWeekendTint) {
+      [5, 6].forEach((weekendCol, idx) => {
+        const tintX = innerX + weekendCol * cellW + cellW * 0.08;
+        out += `<rect x="${tintX}" y="${gridTop - cellH * 0.18}" width="${cellW * 0.84}" height="${cellH * 5.2}" rx="${cellW * 0.22}" fill="${alpha(theme.weekend, idx === 0 ? 0.06 : 0.09)}"/>`;
+      });
+    }
     for (let day = 1; day <= daysInMonth; day++) {
       const col = (firstWeekday + day - 1) % 7, row = Math.floor((firstWeekday + day - 1) / 7);
       const date = dayjsInst(`${year}-${String(monthIndex + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`);
@@ -404,7 +424,9 @@
   function renderFooter(cfg, theme, labels, now, stats, width, footerBox, FONT) {
     const { x, y, w, h } = footerBox;
     const pad = Math.round(w * 0.04);
-    const base = `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${Math.round(w * 0.05)}" fill="${alpha(theme.panel, 0.82)}" stroke="${alpha('#ffffff', 0.06)}"/>`;
+    const footerRadius = Math.round(w * 0.05);
+    let base = `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${footerRadius}" fill="${alpha(theme.panel, 0.82)}" stroke="${alpha('#ffffff', cfg.glassPanels === false ? 0.06 : 0.08)}"/>`;
+    if (cfg.glassPanels !== false) base += `<rect x="${x + 1.5}" y="${y + 1.5}" width="${Math.max(0, w - 3)}" height="${Math.max(0, h - 3)}" rx="${Math.max(0, footerRadius - 1.5)}" fill="none" stroke="${alpha(theme.accent2, 0.05)}"/>`; 
     const textSize = Math.round(h * 0.22);
     const subSize = Math.round(h * 0.15);
     const nextEvent = findNearestEvent(cfg, now, labels);
@@ -437,6 +459,25 @@
       const weatherLine = weatherSummary(cfg, cfg.lang);
       const tzLine = `UTC${cfg.timezone >= 0 ? '+' + cfg.timezone : cfg.timezone} · ${labels.months[now.month()]} ${now.date()}`;
       return base + `<text x="${x + pad}" y="${y + h * 0.34}" fill="${theme.accent2}" font-size="${subSize}" font-family="${FONT}" font-weight="700">${cfg.lang === 'ru' ? 'Сводка среды' : 'Ambient summary'}</text><text x="${x + pad}" y="${y + h * 0.62}" fill="${theme.text}" font-size="${textSize}" font-family="${FONT}" font-weight="800">${escapeXml(weatherLine)}</text><text x="${x + pad}" y="${y + h * 0.82}" fill="${theme.muted}" font-size="${subSize}" font-family="${FONT}" font-weight="600">${escapeXml(tzLine)}</text>`;
+    }
+    if (cfg.footer === 'day_weather') {
+      const items = (cfg.weatherData && Array.isArray(cfg.weatherData.hourly) ? cfg.weatherData.hourly.slice(0, 6) : []);
+      const title = cfg.lang === 'ru' ? 'Прогноз на день' : 'Day forecast';
+      if (!items.length) {
+        return base + `<text x="${x + pad}" y="${y + h * 0.34}" fill="${theme.accent2}" font-size="${subSize}" font-family="${FONT}" font-weight="700">${title}</text><text x="${x + pad}" y="${y + h * 0.66}" fill="${theme.text}" font-size="${textSize * 0.8}" font-family="${FONT}" font-weight="700">${cfg.lang === 'ru' ? 'Добавь город для погодного блока' : 'Add a city for forecast'}</text>`;
+      }
+      const gap = Math.round(w * 0.012);
+      const chipW = (w - pad * 2 - gap * (items.length - 1)) / items.length;
+      const chipY = y + h * 0.40;
+      const chipH = h * 0.40;
+      let chips = `<text x="${x + pad}" y="${y + h * 0.24}" fill="${theme.accent2}" font-size="${subSize}" font-family="${FONT}" font-weight="700">${title}</text>`;
+      items.forEach((item, i) => {
+        const cx = x + pad + i * (chipW + gap);
+        chips += `<rect x="${cx}" y="${chipY}" width="${chipW}" height="${chipH}" rx="${chipH * 0.26}" fill="${alpha(theme.bg, 0.18)}" stroke="${alpha(theme.accent2, 0.09)}"/>`;
+        chips += `<text x="${cx + chipW / 2}" y="${chipY + chipH * 0.28}" text-anchor="middle" fill="${theme.muted}" font-size="${subSize * 0.82}" font-family="${FONT}" font-weight="700">${escapeXml(item.hour)}</text>`;
+        chips += `<text x="${cx + chipW / 2}" y="${chipY + chipH * 0.60}" text-anchor="middle" fill="${theme.text}" font-size="${textSize * 0.76}" font-family="${FONT}" font-weight="800">${escapeXml(item.temp)}° ${item.icon}</text>`;
+      });
+      return base + chips;
     }
     if (cfg.footer === 'custom_note' && cfg.note) {
       const lines = wrap(cfg.note, 36).slice(0, 2);

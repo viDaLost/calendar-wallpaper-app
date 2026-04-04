@@ -67,6 +67,11 @@
     .toggle input:checked + .switch:after{content:"✓";position:absolute;inset:0;display:grid;place-items:center;color:#fff;font-size:16px;font-weight:900}
     .toggle .t-main{font-size:14px}
     .toggle .t-sub{font-size:11px;color:var(--muted);margin-top:2px}
+    .toggle-group-head{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:0 2px 6px}
+    .toggle-group-head .mini-note{font-size:11px;color:var(--muted)}
+    .inline-action{display:flex;gap:8px;align-items:center}
+    .inline-action input[type=color]{flex:1}
+    .apply-btn{padding:10px 12px;border-radius:12px;border:1px solid rgba(255,255,255,.08);background:linear-gradient(180deg,#182033,#0f1523);color:var(--text);font-weight:700;cursor:pointer;white-space:nowrap}
     
     .actions{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px}
     button{width:100%;border:none;border-radius:16px;padding:14px 16px;color:#fff;background:rgba(255,255,255,.06);cursor:pointer;transition:.18s transform ease,.18s opacity ease}
@@ -180,8 +185,11 @@
             
             <div class="field">
               <label for="c_event">Цвет пользовательской даты</label>
-              <input type="color" id="c_event" value="#ff8f2d">
-              <div style="font-size:11px; color:var(--muted);">Используется для дат из поля событий</div>
+              <div class="inline-action">
+                <input type="color" id="c_event" value="#ff8f2d">
+                <button type="button" class="apply-btn" id="applyEventColorBtn">Применить</button>
+              </div>
+              <div style="font-size:11px; color:var(--muted);">Выбирает цвет плашки и цифры у пользовательских дат из поля событий</div>
             </div>
 
             <div class="field">
@@ -199,6 +207,7 @@
                 <option value="next_event">Ближайшее событие</option>
                 <option value="seasonal_focus">Сезонный режим</option>
                 <option value="weather_strip">Сводка среды</option>
+                <option value="day_weather">Прогноз погоды на день</option>
                 <option value="quote">Цитата</option>
                 <option value="custom_note">Своя заметка</option>
               </select>
@@ -212,14 +221,21 @@
 
         <details class="group">
           <summary>3. Детализация интерфейса</summary>
+          <div class="toggle-group-head">
+            <div class="group-title" style="margin:0">Усиливаем читаемость и структуру</div>
+            <div class="mini-note">Эти переключатели заметно меняют восприятие макета</div>
+          </div>
           <div class="toggle-grid">
-            <label class="toggle"><input type="checkbox" id="show_weekdays" checked><span class="switch"></span><div><div class="t-main">Навигация по дням</div><div class="t-sub">Подписи дней недели для быстрого считывания сетки</div></div></label>
-            <label class="toggle"><input type="checkbox" id="accent_today" checked><span class="switch"></span><div><div class="t-main">Якорь сегодняшнего дня</div><div class="t-sub">Делает текущую дату главным ориентиром экрана</div></div></label>
-            <label class="toggle"><input type="checkbox" id="show_progress_ring" checked><span class="switch"></span><div><div class="t-main">Год в одном жесте</div><div class="t-sub">Если погода скрыта, справа появляется кольцо прогресса года</div></div></label>
-            <label class="toggle"><input type="checkbox" id="show_week_numbers"><span class="switch"></span><div><div class="t-main">Номера недель</div><div class="t-sub">Подходит для рабочих циклов, спринтов и планирования</div></div></label>
-            <label class="toggle"><input type="checkbox" id="quarter_dividers" checked><span class="switch"></span><div><div class="t-main">Квартальные разрывы</div><div class="t-sub">Разделяют год на четыре смысловых блока без перегруза</div></div></label>
-            <label class="toggle"><input type="checkbox" id="month_badges" checked><span class="switch"></span><div><div class="t-main">Емкость месяца</div><div class="t-sub">Показывает количество дней прямо в карточке месяца</div></div></label>
-            <label class="toggle"><input type="checkbox" id="focus_current_month" checked><span class="switch"></span><div><div class="t-main">Контраст текущего месяца</div><div class="t-sub">Помогает глазу мгновенно найти актуальный месяц</div></div></label>
+            <label class="toggle"><input type="checkbox" id="show_header_meta" checked><span class="switch"></span><div><div class="t-main">Инфо‑шапка ориентира</div><div class="t-sub">Показывает строку «сегодня» и капсулу с номером недели в верхней части</div></div></label>
+            <label class="toggle"><input type="checkbox" id="show_weekdays" checked><span class="switch"></span><div><div class="t-main">Подписи дней недели</div><div class="t-sub">Делают сетку календаря моментально читаемой даже в компактных форматах</div></div></label>
+            <label class="toggle"><input type="checkbox" id="accent_today" checked><span class="switch"></span><div><div class="t-main">Главный акцент на сегодня</div><div class="t-sub">Выделяет текущую дату как основную точку внимания на обоях</div></div></label>
+            <label class="toggle"><input type="checkbox" id="strong_weekend_tint" checked><span class="switch"></span><div><div class="t-main">Выразительные выходные</div><div class="t-sub">Добавляет заметную тонировку столбцов субботы и воскресенья</div></div></label>
+            <label class="toggle"><input type="checkbox" id="show_progress_ring" checked><span class="switch"></span><div><div class="t-main">Кольцо хода года</div><div class="t-sub">Если погода скрыта, справа появляется быстрый индикатор пройденного года</div></div></label>
+            <label class="toggle"><input type="checkbox" id="show_week_numbers"><span class="switch"></span><div><div class="t-main">Рабочие номера недель</div><div class="t-sub">Полезно для спринтов, дедлайнов, учёта смен и недельного планирования</div></div></label>
+            <label class="toggle"><input type="checkbox" id="quarter_dividers" checked><span class="switch"></span><div><div class="t-main">Границы кварталов</div><div class="t-sub">Разбивают год на четыре смысловые части без визуального шума</div></div></label>
+            <label class="toggle"><input type="checkbox" id="month_badges" checked><span class="switch"></span><div><div class="t-main">Бейдж ёмкости месяца</div><div class="t-sub">Показывает число дней внутри карточки каждого месяца</div></div></label>
+            <label class="toggle"><input type="checkbox" id="focus_current_month" checked><span class="switch"></span><div><div class="t-main">Фокус активного месяца</div><div class="t-sub">Поднимает контраст и помогает глазу мгновенно найти текущий месяц</div></div></label>
+            <label class="toggle"><input type="checkbox" id="glass_panels" checked><span class="switch"></span><div><div class="t-main">Глубина карточек</div><div class="t-sub">Добавляет внутренний контур и делает панели объёмнее и премиальнее</div></div></label>
           </div>
         </details>
 
@@ -268,12 +284,13 @@
       events: '', city:'', c_event:'#ff8f2d',
       show_weekdays:true, accent_today:true, show_progress_ring:true, show_week_numbers:false,
       quarter_dividers:true, month_badges:true, focus_current_month:true,
+      show_header_meta:true, strong_weekend_tint:true, glass_panels:true,
       c_bg: '#0a0d12', c_panel: '#131823', c_text: '#edf2ff', c_muted: '#8994a7', c_accent: '#ff8f2d', c_accent2: '#ffbc6f', c_weekend: '#ff8f7b'
     };
 
     const colorFields = ['c_bg', 'c_panel', 'c_text', 'c_muted', 'c_accent', 'c_accent2', 'c_weekend', 'c_event'];
     const fields = ['model','font','style','theme','bg_style','month_layout','weekend_mode','lang','timezone','footer','note','width','height','events','city', ...colorFields];
-    const checks = ['show_weekdays','accent_today','show_progress_ring','show_week_numbers','quarter_dividers','month_badges','focus_current_month'];
+    const checks = ['show_header_meta','show_weekdays','accent_today','strong_weekend_tint','show_progress_ring','show_week_numbers','quarter_dividers','month_badges','focus_current_month','glass_panels'];
     const els = Object.fromEntries([...fields, ...checks].map(id => [id, document.getElementById(id)]));
     
     const preview = document.getElementById('preview');
@@ -293,7 +310,8 @@
         const geoData = await geoRes.json();
         if (!geoData.results || geoData.results.length === 0) return null;
         const { latitude, longitude } = geoData.results[0];
-        const res = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current=temperature_2m,weather_code`);
+        const place = geoData.results[0];
+        const res = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current=temperature_2m,weather_code&hourly=temperature_2m,weather_code&forecast_days=1&timezone=${encodeURIComponent(place.timezone || 'auto')}`);
         const data = await res.json();
         const temp = Math.round(data.current.temperature_2m);
         const code = data.current.weather_code;
@@ -304,9 +322,27 @@
         if(code >= 71 && code <= 77) icon = '❄️';
         if(code >= 80 && code <= 82) icon = '🌦️';
         if(code >= 95) icon = '⛈️';
-        const place = geoData.results[0];
         const cityLabel = String(place.name || city || '').split(',')[0].trim();
-        return { temp: temp > 0 ? `+${temp}` : temp, icon, cityLabel };
+        const preferredHours = [6,9,12,15,18,21];
+        const hourly = [];
+        if (data.hourly && Array.isArray(data.hourly.time) && Array.isArray(data.hourly.temperature_2m)) {
+          for (const targetHour of preferredHours) {
+            const idx = data.hourly.time.findIndex(t => Number(String(t).slice(11,13)) === targetHour);
+            if (idx >= 0) {
+              let hIcon = '☀️';
+              const hCode = Array.isArray(data.hourly.weather_code) ? data.hourly.weather_code[idx] : code;
+              if(hCode >= 1 && hCode <= 3) hIcon = '⛅';
+              if(hCode >= 45 && hCode <= 48) hIcon = '🌫️';
+              if(hCode >= 51 && hCode <= 67) hIcon = '🌧️';
+              if(hCode >= 71 && hCode <= 77) hIcon = '❄️';
+              if(hCode >= 80 && hCode <= 82) hIcon = '🌦️';
+              if(hCode >= 95) hIcon = '⛈️';
+              const hTemp = Math.round(data.hourly.temperature_2m[idx]);
+              hourly.push({ hour: `${String(targetHour).padStart(2,'0')}:00`, temp: hTemp > 0 ? `+${hTemp}` : `${hTemp}`, icon: hIcon });
+            }
+          }
+        }
+        return { temp: temp > 0 ? `+${temp}` : temp, icon, cityLabel, hourly };
       } catch(e) { return null; }
     }
 
@@ -364,7 +400,9 @@
         showWeekdays: q.get('show_weekdays') === '1', accentToday: q.get('accent_today') === '1',
         showProgressRing: q.get('show_progress_ring') === '1', showWeekNumbers: q.get('show_week_numbers') === '1',
         quarterDividers: q.get('quarter_dividers') === '1', monthBadges: q.get('month_badges') === '1',
-        focusCurrentMonth: q.get('focus_current_month') === '1', lockscreenSafe: true, weatherData: mockWeather
+        focusCurrentMonth: q.get('focus_current_month') === '1', lockscreenSafe: true, weatherData: mockWeather,
+        showHeaderMeta: q.get('show_header_meta') === '1', strongWeekendTint: q.get('strong_weekend_tint') === '1',
+        glassPanels: q.get('glass_panels') === '1'
       };
     }
 
@@ -440,10 +478,11 @@
     });
 
     document.getElementById('resetBtn').addEventListener('click', () => { fillDefaults(); mockWeather=null; updatePreview(); });
+    document.getElementById('applyEventColorBtn').addEventListener('click', () => updatePreview());
     
     [...fields, ...checks].forEach(id => {
       const el = els[id];
-      if (id === 'city') return; // Город обрабатывается отдельно с задержкой
+      if (id === 'city' || id === 'c_event') return; // Город и цвет даты обрабатываются отдельно
       el.addEventListener('change', () => updatePreview());
       if(el.tagName === 'INPUT' || el.tagName === 'TEXTAREA') el.addEventListener('input', () => updatePreview());
     });
