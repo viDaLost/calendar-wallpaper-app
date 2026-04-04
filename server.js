@@ -176,6 +176,7 @@ function getConfig(query) {
     quarterDividers: String(query.quarter_dividers || '1') === '1',
     monthBadges: String(query.month_badges || '1') === '1',
     focusCurrentMonth: String(query.focus_current_month || '1') === '1',
+    lockscreenSafe: String(query.lockscreen_safe || '1') === '1',
     pngSafeFont: query.__target === 'png'
   };
 }
@@ -186,6 +187,17 @@ function yearStats(now) {
   const daysLeft = daysInYear - dayOfYear;
   return { dayOfYear, daysInYear, daysLeft, percentPassed: Math.round((dayOfYear / daysInYear) * 100) };
 }
+
+function getSafeInsets(cfg, width, height) {
+  const baseSide = Math.round(width * 0.035);
+  if (!cfg.lockscreenSafe) {
+    return { top: baseSide, bottom: baseSide, side: baseSide };
+  }
+  const top = Math.round(height * 0.165 + width * 0.04);
+  const bottom = Math.round(height * 0.105 + width * 0.03);
+  return { top, bottom, side: baseSide };
+}
+
 function randomQuote(lang, year) { const arr = QUOTES[lang] || QUOTES.ru; return arr[year % arr.length]; }
 function wrap(text, maxLen) {
   const words = String(text).split(/\s+/);
@@ -292,13 +304,40 @@ function renderBackground(cfg, theme, width, height) {
     <rect width="100%" height="100%" fill="url(#bg)"/>${accents}`;
 }
 
+
+function isListLayout(layout) {
+  return ['list_1x12','list_1x12_compact'].includes(layout);
+}
+function isCompactGridLayout(layout) {
+  return ['grid_3x4_compact','grid_2x6','grid_6x2','single_month_focus'].includes(layout);
+}
+function getLayoutMetrics(cfg, width, height, contentH, sidePadding) {
+  const presets = {
+    grid_3x4: { cols: 3, rows: 4, gap: Math.round(width * 0.02), mode: 'grid' },
+    grid_4x3: { cols: 4, rows: 3, gap: Math.round(width * 0.018), mode: 'grid' },
+    grid_2x6: { cols: 2, rows: 6, gap: Math.round(width * 0.018), mode: 'grid' },
+    grid_6x2: { cols: 6, rows: 2, gap: Math.round(width * 0.012), mode: 'grid' },
+    grid_3x4_compact: { cols: 3, rows: 4, gap: Math.round(width * 0.014), mode: 'grid_compact' },
+    list_1x12: { cols: 1, rows: 12, gap: Math.round(width * 0.018), mode: 'list' },
+    list_1x12_compact: { cols: 1, rows: 12, gap: Math.round(width * 0.012), mode: 'list_compact' },
+    single_month_focus: { cols: 1, rows: 1, gap: Math.round(width * 0.016), mode: 'focus' },
+  };
+  const spec = presets[cfg.monthLayout] || presets.grid_3x4;
+  if (spec.mode === 'focus') return { ...spec };
+  return {
+    ...spec,
+    monthW: (width - sidePadding * 2 - spec.gap * (spec.cols - 1)) / spec.cols,
+    monthH: (contentH - spec.gap * (spec.rows - 1)) / spec.rows,
+  };
+}
+
 function getSafeFontStack(selectedFontFamily, pngSafeFont) {
   const safe = `'DejaVu Sans','Noto Sans','Liberation Sans',Arial,sans-serif`;
   return pngSafeFont ? safe : `'${selectedFontFamily}','DejaVu Sans','Noto Sans','Liberation Sans',Arial,sans-serif`;
 }
 
 function renderHeader(cfg, theme, labels, now, stats, width, padding, topY, FONT) {
-  const compact = cfg.monthLayout === 'list_1x12';
+  const compact = isListLayout(cfg.monthLayout) || isCompactGridLayout(cfg.monthLayout);
   const titleSize = Math.round(width * (compact ? 0.053 : 0.065));
   const subtitleSize = Math.round(width * (compact ? 0.028 : 0.033));
   const chipWidth = Math.round(width * (compact ? 0.2 : 0.24));
@@ -339,19 +378,20 @@ function renderMonthGrid({ monthIndex, year, x, y, w, h, cfg, theme, labels, now
   const daysInMonth = first.daysInMonth();
   const firstWeekday = (first.day() + 6) % 7;
   const isCurrent = now.month() === monthIndex;
-  const emphasis = cfg.focusCurrentMonth && isCurrent ? 1.08 : 1;
+  const dense = isCompactGridLayout(cfg.monthLayout);
+  const emphasis = cfg.focusCurrentMonth && isCurrent ? (dense ? 1.04 : 1.08) : 1;
   const radius = Math.max(16, Math.round(w * 0.08));
-  const pad = Math.round(w * 0.06);
+  const pad = Math.round(w * (dense ? 0.045 : 0.06));
   const cols = 7;
   const weekNumberCol = cfg.showWeekNumbers ? 1 : 0;
   const innerW = w - pad * 2;
   const cellW = innerW / (cols + weekNumberCol);
   const rows = 6;
-  const gridTopOffset = cfg.showWeekdays ? h * 0.30 : h * 0.22;
-  const cellH = (h - gridTopOffset - h * 0.07) / rows;
-  const titleSize = Math.min(Math.round(h * 0.12), Math.round(w * 0.14)) * emphasis;
-  const weekdaySize = Math.min(Math.round(cellW * 0.5), Math.round(h * 0.06));
-  const numberSize = Math.min(Math.round(cellW * 0.6), Math.round(cellH * 0.6)) * emphasis;
+  const gridTopOffset = cfg.showWeekdays ? h * (dense ? 0.255 : 0.30) : h * (dense ? 0.19 : 0.22);
+  const cellH = (h - gridTopOffset - h * (dense ? 0.05 : 0.07)) / rows;
+  const titleSize = Math.min(Math.round(h * (dense ? 0.10 : 0.12)), Math.round(w * (dense ? 0.12 : 0.14))) * emphasis;
+  const weekdaySize = Math.min(Math.round(cellW * (dense ? 0.44 : 0.5)), Math.round(h * (dense ? 0.05 : 0.06)));
+  const numberSize = Math.min(Math.round(cellW * (dense ? 0.54 : 0.6)), Math.round(cellH * (dense ? 0.54 : 0.6))) * emphasis;
   const badgeW = Math.round(w * 0.2);
   const badgeH = Math.round(h * 0.11);
   const cardFill = isCurrent ? alpha(theme.panel, 0.98) : alpha(theme.panel, 0.65);
@@ -433,17 +473,17 @@ function renderMonthListRow({ monthIndex, year, x, y, w, h, cfg, theme, labels, 
   const radius = Math.max(16, Math.round(h * 0.28));
   const padX = Math.round(w * 0.03);
   const nameW = Math.round(w * 0.18);
-  const badgeW = cfg.monthBadges ? Math.round(w * 0.07) : 0;
+  const badgeW = cfg.monthBadges ? Math.round(w * (compact ? 0.06 : 0.07)) : 0;
   const innerX = x + padX + nameW;
   const innerW = w - padX * 2 - nameW - badgeW;
   const cols = 7;
   const rows = 6;
-  const topPad = cfg.showWeekdays ? h * 0.18 : h * 0.10;
+  const topPad = cfg.showWeekdays ? h * (compact ? 0.15 : 0.18) : h * (compact ? 0.08 : 0.10);
   const cellW = innerW / cols;
-  const cellH = (h - topPad - h * 0.12) / rows;
-  const monthTitleSize = Math.round(h * 0.2);
-  const weekdaySize = Math.max(10, Math.round(h * 0.11));
-  const numberSize = Math.max(11, Math.round(Math.min(cellW, cellH) * 0.45));
+  const cellH = (h - topPad - h * (compact ? 0.08 : 0.12)) / rows;
+  const monthTitleSize = Math.round(h * (compact ? 0.17 : 0.2));
+  const weekdaySize = Math.max(9, Math.round(h * (compact ? 0.095 : 0.11)));
+  const numberSize = Math.max(10, Math.round(Math.min(cellW, cellH) * (compact ? 0.4 : 0.45)));
   const gridTop = y + topPad + (cfg.showWeekdays ? h * 0.08 : 0);
   let out = `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${radius}" fill="${isCurrent ? alpha(theme.panel, 0.95) : alpha(theme.panel, 0.72)}" stroke="${isCurrent ? alpha(theme.accent2, 0.34) : alpha('#ffffff', 0.05)}"/>`;
   out += `<text x="${x + padX}" y="${y + h * 0.28}" fill="${theme.text}" font-size="${monthTitleSize}" font-family="${FONT}" font-weight="800">${labels.months[monthIndex]}</text>`;
@@ -513,11 +553,17 @@ function renderSvg(cfg) {
   const now = zonedNow(cfg.timezone);
   const stats = yearStats(now);
   const { width, height } = cfg;
-  const padding = Math.round(width * 0.05);
-  const topArea = Math.round(height * (cfg.monthLayout === 'list_1x12' ? 0.12 : cfg.calendarSize === 'compact' ? 0.11 : 0.14));
-  const footerArea = Math.round(height * (cfg.monthLayout === 'list_1x12' ? 0.09 : cfg.calendarSize === 'large' ? 0.1 : 0.11));
-  const contentTop = padding + topArea;
-  const contentBottom = height - padding - footerArea;
+  const safe = getSafeInsets(cfg, width, height);
+  const sidePadding = safe.side;
+  const innerTop = safe.top;
+  const innerBottom = height - safe.bottom;
+
+  const listLike = isListLayout(cfg.monthLayout);
+  const compactLike = isCompactGridLayout(cfg.monthLayout) || listLike;
+  const headerHeight = Math.round(height * (listLike ? 0.088 : compactLike ? 0.09 : 0.095));
+  const footerHeight = Math.round(height * (listLike ? 0.072 : compactLike ? 0.076 : 0.08));
+  const contentTop = innerTop + headerHeight + Math.round(height * 0.012);
+  const contentBottom = innerBottom - footerHeight - Math.round(height * 0.014);
   const contentH = contentBottom - contentTop;
 
   const selectedFontDef = FONTS[cfg.font] || FONTS.inter;
@@ -525,45 +571,70 @@ function renderSvg(cfg) {
   const FONT_FAMILY = getSafeFontStack(selectedFontDef.family, cfg.pngSafeFont);
   const fontDefs = b64Font && !cfg.pngSafeFont ? `<style>@font-face { font-family: '${selectedFontDef.family}'; src: url(data:font/truetype;base64,${b64Font}) format('truetype'); }</style>` : '';
 
-  let cols = 3, rows = 4;
-  if (cfg.monthLayout === 'grid_4x3') { cols = 4; rows = 3; }
-  if (cfg.monthLayout === 'list_1x12') { cols = 1; rows = 12; }
-  const gap = Math.round(width * (cfg.monthLayout === 'list_1x12' ? 0.018 : 0.02));
-  const monthW = (width - padding * 2 - gap * (cols - 1)) / cols;
-  const monthH = (contentH - gap * (rows - 1)) / rows;
+  const layout = getLayoutMetrics(cfg, width, height, contentH, sidePadding);
 
   let monthsSvg = '';
-  for (let i = 0; i < 12; i++) {
-    const col = i % cols;
-    const row = Math.floor(i / cols);
-    const x = padding + col * (monthW + gap);
-    const y = contentTop + row * (monthH + gap);
-    monthsSvg += cfg.monthLayout === 'list_1x12'
-      ? renderMonthListRow({ monthIndex: i, year: now.year(), x, y, w: monthW, h: monthH, cfg, theme, labels, now, FONT: FONT_FAMILY })
-      : renderMonthGrid({ monthIndex: i, year: now.year(), x, y, w: monthW, h: monthH, cfg, theme, labels, now, FONT: FONT_FAMILY });
-  }
+  if (layout.mode === 'focus') {
+    const heroGap = Math.round(width * 0.014);
+    const heroH = Math.round(contentH * 0.40);
+    monthsSvg += renderMonthGrid({ monthIndex: now.month(), year: now.year(), x: sidePadding, y: contentTop, w: width - sidePadding * 2, h: heroH, cfg: { ...cfg, monthLayout: 'grid_3x4' }, theme, labels, now, FONT: FONT_FAMILY });
 
-  let quarterLines = '';
-  if (cfg.quarterDividers) {
-    if (cfg.monthLayout === 'list_1x12') {
-      [3, 6, 9].forEach((idx) => {
-        const ly = contentTop + idx * monthH + (idx - 0.5) * gap;
-        quarterLines += `<line x1="${padding}" y1="${ly}" x2="${width - padding}" y2="${ly}" stroke="${alpha(theme.accent2, 0.12)}" stroke-dasharray="12 12" />`;
+    const miniTop = contentTop + heroH + heroGap;
+    const miniRows = 3, miniCols = 4;
+    const miniH = (contentBottom - miniTop - heroGap * (miniRows - 1)) / miniRows;
+    const miniW = (width - sidePadding * 2 - heroGap * (miniCols - 1)) / miniCols;
+    const otherMonths = Array.from({ length: 12 }, (_, i) => i).filter(i => i !== now.month());
+    otherMonths.forEach((monthIndex, i) => {
+      const col = i % miniCols;
+      const row = Math.floor(i / miniCols);
+      const x = sidePadding + col * (miniW + heroGap);
+      const y = miniTop + row * (miniH + heroGap);
+      monthsSvg += renderMonthGrid({
+        monthIndex,
+        year: now.year(),
+        x, y, w: miniW, h: miniH,
+        cfg: { ...cfg, monthLayout: 'grid_3x4_compact', focusCurrentMonth: false, monthBadges: false, showWeekNumbers: false },
+        theme, labels, now, FONT: FONT_FAMILY
       });
-    } else if (cols === 3 && rows === 4) {
-      for (let r = 1; r < rows; r++) {
-        const ly = contentTop + r * monthH + (r - 0.5) * gap;
-        quarterLines += `<line x1="${padding}" y1="${ly}" x2="${width - padding}" y2="${ly}" stroke="${alpha(theme.accent2, 0.12)}" stroke-dasharray="10 12" />`;
-      }
+    });
+  } else {
+    for (let i = 0; i < 12; i++) {
+      const col = i % layout.cols;
+      const row = Math.floor(i / layout.cols);
+      const x = sidePadding + col * (layout.monthW + layout.gap);
+      const y = contentTop + row * (layout.monthH + layout.gap);
+      monthsSvg += isListLayout(cfg.monthLayout)
+        ? renderMonthListRow({ monthIndex: i, year: now.year(), x, y, w: layout.monthW, h: layout.monthH, cfg, theme, labels, now, FONT: FONT_FAMILY })
+        : renderMonthGrid({ monthIndex: i, year: now.year(), x, y, w: layout.monthW, h: layout.monthH, cfg, theme, labels, now, FONT: FONT_FAMILY });
     }
   }
 
-  const footerBox = { x: padding, y: height - padding - footerArea + Math.round(footerArea * 0.06), w: width - padding * 2, h: Math.round(footerArea * 0.84) };
+  let quarterLines = '';
+  if (cfg.quarterDividers && layout.mode !== 'focus') {
+    if (isListLayout(cfg.monthLayout)) {
+      [3, 6, 9].forEach((idx) => {
+        const ly = contentTop + idx * layout.monthH + (idx - 0.5) * layout.gap;
+        quarterLines += `<line x1="${sidePadding}" y1="${ly}" x2="${width - sidePadding}" y2="${ly}" stroke="${alpha(theme.accent2, 0.12)}" stroke-dasharray="12 12" />`;
+      });
+    } else if (layout.cols === 3 && layout.rows === 4) {
+      for (let r = 1; r < layout.rows; r++) {
+        const ly = contentTop + r * layout.monthH + (r - 0.5) * layout.gap;
+        quarterLines += `<line x1="${sidePadding}" y1="${ly}" x2="${width - sidePadding}" y2="${ly}" stroke="${alpha(theme.accent2, 0.12)}" stroke-dasharray="10 12" />`;
+      }
+    } else if (layout.cols === 2 && layout.rows === 6) {
+      [2, 4].forEach((r) => {
+        const ly = contentTop + r * layout.monthH + (r - 0.5) * layout.gap;
+        quarterLines += `<line x1="${sidePadding}" y1="${ly}" x2="${width - sidePadding}" y2="${ly}" stroke="${alpha(theme.accent2, 0.10)}" stroke-dasharray="10 12" />`;
+      });
+    }
+  }
+
+  const footerBox = { x: sidePadding, y: innerBottom - footerHeight, w: width - sidePadding * 2, h: Math.round(footerHeight * 0.92) };
   return `<?xml version="1.0" encoding="UTF-8"?>
   <svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">
     <defs>${fontDefs}</defs>
     ${renderBackground(cfg, theme, width, height)}
-    ${renderHeader(cfg, theme, labels, now, stats, width, padding, padding, FONT_FAMILY)}
+    ${renderHeader(cfg, theme, labels, now, stats, width, sidePadding, innerTop, FONT_FAMILY)}
     ${quarterLines}
     ${monthsSvg}
     ${renderFooter(cfg, theme, labels, now, stats, width, footerBox, FONT_FAMILY)}
