@@ -517,11 +517,23 @@
     const interB64 = fontMap.inter || '';
     const ubuntuB64 = fontMap.ubuntu || '';
     const browserFamily = fontMap.browserFamily || cfg.fontFamily || 'Inter';
+    
+    // ИСПРАВЛЕНИЕ: Проверяем, рендерим ли мы для сервера
+    const isServer = cfg.isServer === true;
     const extraFaces = [];
-    if (selectedB64) extraFaces.push(`@font-face { font-family: 'AppPrimary'; src: url(data:font/ttf;base64,${selectedB64}) format('truetype'); font-style: normal; font-weight: 400; }`);
-    if (interB64) extraFaces.push(`@font-face { font-family: 'AppInter'; src: url(data:font/ttf;base64,${interB64}) format('truetype'); font-style: normal; font-weight: 400; }`);
-    if (ubuntuB64) extraFaces.push(`@font-face { font-family: 'AppUbuntu'; src: url(data:font/ttf;base64,${ubuntuB64}) format('truetype'); font-style: normal; font-weight: 400; }`);
-    const FONT_FAMILY = `AppPrimary, ${browserFamily}, AppUbuntu, Ubuntu, AppInter, Inter, Helvetica, Arial, sans-serif`;
+    
+    // Вставляем Base64 шрифты ТОЛЬКО для превью в браузере.
+    if (!isServer) {
+      if (selectedB64) extraFaces.push(`@font-face { font-family: 'AppPrimary'; src: url(data:font/ttf;base64,${selectedB64}) format('truetype'); font-style: normal; font-weight: 400; }`);
+      if (interB64) extraFaces.push(`@font-face { font-family: 'AppInter'; src: url(data:font/ttf;base64,${interB64}) format('truetype'); font-style: normal; font-weight: 400; }`);
+      if (ubuntuB64) extraFaces.push(`@font-face { font-family: 'AppUbuntu'; src: url(data:font/ttf;base64,${ubuntuB64}) format('truetype'); font-style: normal; font-weight: 400; }`);
+    }
+
+    // Для сервера используем реальные названия шрифтов, которые Resvg считает из TTF файлов
+    const FONT_FAMILY = isServer 
+      ? `${browserFamily}, Ubuntu, Inter, sans-serif` 
+      : `AppPrimary, ${browserFamily}, AppUbuntu, Ubuntu, AppInter, Inter, Helvetica, Arial, sans-serif`;
+    
     const fontDefs = `<style>${extraFaces.join(' ')} text, tspan { font-family: ${FONT_FAMILY}; text-rendering: geometricPrecision; }</style>`;
 
     const listLike = isListLayout(cfg.monthLayout);
