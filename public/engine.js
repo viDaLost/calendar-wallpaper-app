@@ -466,16 +466,16 @@
       if (!items.length) {
         return base + `<text x="${x + pad}" y="${y + h * 0.34}" fill="${theme.accent2}" font-size="${subSize}" font-family="${FONT}" font-weight="700">${title}</text><text x="${x + pad}" y="${y + h * 0.66}" fill="${theme.text}" font-size="${textSize * 0.8}" font-family="${FONT}" font-weight="700">${cfg.lang === 'ru' ? 'Добавь город для погодного блока' : 'Add a city for forecast'}</text>`;
       }
-      const gap = Math.round(w * 0.012);
+      const gap = Math.round(w * 0.014);
       const chipW = (w - pad * 2 - gap * (items.length - 1)) / items.length;
-      const chipY = y + h * 0.40;
-      const chipH = h * 0.40;
+      const chipY = y + h * 0.37;
+      const chipH = h * 0.44;
       let chips = `<text x="${x + pad}" y="${y + h * 0.24}" fill="${theme.accent2}" font-size="${subSize}" font-family="${FONT}" font-weight="700">${title}</text>`;
       items.forEach((item, i) => {
         const cx = x + pad + i * (chipW + gap);
         chips += `<rect x="${cx}" y="${chipY}" width="${chipW}" height="${chipH}" rx="${chipH * 0.26}" fill="${alpha(theme.bg, 0.18)}" stroke="${alpha(theme.accent2, 0.09)}"/>`;
-        chips += `<text x="${cx + chipW / 2}" y="${chipY + chipH * 0.28}" text-anchor="middle" fill="${theme.muted}" font-size="${subSize * 0.82}" font-family="${FONT}" font-weight="700">${escapeXml(item.hour)}</text>`;
-        chips += `<text x="${cx + chipW / 2}" y="${chipY + chipH * 0.60}" text-anchor="middle" fill="${theme.text}" font-size="${textSize * 0.76}" font-family="${FONT}" font-weight="800">${escapeXml(item.temp)}° ${item.icon}</text>`;
+        chips += `<text x="${cx + chipW / 2}" y="${chipY + chipH * 0.24}" text-anchor="middle" fill="${theme.muted}" font-size="${subSize * 0.80}" font-family="${FONT}" font-weight="700">${escapeXml(item.hour)}</text>`;
+        chips += `<text x="${cx + chipW / 2}" y="${chipY + chipH * 0.68}" text-anchor="middle" fill="${theme.text}" font-size="${textSize * 0.74}" font-family="${FONT}" font-weight="800">${escapeXml(item.temp)}° ${item.icon}</text>`;
       });
       return base + chips;
     }
@@ -486,7 +486,7 @@
     return base + `<text x="${x + pad}" y="${y + h * 0.36}" fill="${theme.text}" font-size="${textSize}" font-family="${FONT}" font-weight="800">${stats.daysLeft} ${labels.daysLeft}</text><text x="${x + pad}" y="${y + h * 0.66}" fill="${theme.muted}" font-size="${subSize}" font-family="${FONT}">${stats.percentPassed}% ${labels.passed}</text>`;
   }
 
-  Engine.renderSvg = function(cfg, dayjsInst, b64FontStr) {
+  Engine.renderSvg = function(cfg, dayjsInst, fontPayload) {
     const theme = cfg.themeObj;
     const labels = getLabels(cfg.lang);
     const now = dayjsInst.utc().add(cfg.timezone, 'hour');
@@ -498,9 +498,19 @@
     const padTop = cfg.lockscreenSafe ? Math.round(height * 0.165 + width * 0.04) : padSide;
     const padBottom = height - (cfg.lockscreenSafe ? Math.round(height * 0.105 + width * 0.03) : padSide);
     
-    // Безопасный фоллбек шрифта для облачных платформ (Arial/sans-serif)
-    const FONT_FAMILY = `'${cfg.fontFamily}','Inter','Helvetica','Arial','DejaVu Sans',sans-serif`;
-    const fontDefs = b64FontStr ? `<style>@font-face { font-family: '${cfg.fontFamily}'; src: url(data:font/ttf;base64,${b64FontStr}) format('truetype'); font-style: normal; font-weight: 400; } text, tspan { font-family: ${FONT_FAMILY}; text-rendering: geometricPrecision; }</style>` : `<style>text, tspan { font-family: ${FONT_FAMILY}; text-rendering: geometricPrecision; }</style>`;
+    // Безопасный стек шрифтов для браузера и PNG-рендера
+    const fontMap = (fontPayload && typeof fontPayload === 'object' && !Array.isArray(fontPayload))
+      ? fontPayload
+      : (fontPayload ? { selected: fontPayload } : {});
+    const selectedB64 = fontMap.selected || '';
+    const interB64 = fontMap.inter || '';
+    const ubuntuB64 = fontMap.ubuntu || '';
+    const extraFaces = [];
+    if (selectedB64) extraFaces.push(`@font-face { font-family: '${cfg.fontFamily}'; src: url(data:font/ttf;base64,${selectedB64}) format('truetype'); font-style: normal; font-weight: 100 900; }`);
+    if (interB64) extraFaces.push(`@font-face { font-family: 'Inter'; src: url(data:font/ttf;base64,${interB64}) format('truetype'); font-style: normal; font-weight: 100 900; }`);
+    if (ubuntuB64) extraFaces.push(`@font-face { font-family: 'Ubuntu'; src: url(data:font/ttf;base64,${ubuntuB64}) format('truetype'); font-style: normal; font-weight: 300 800; }`);
+    const FONT_FAMILY = `'${cfg.fontFamily}','Ubuntu','Inter','Helvetica','Arial','DejaVu Sans',sans-serif`;
+    const fontDefs = `<style>${extraFaces.join(' ')} text, tspan { font-family: ${FONT_FAMILY}; text-rendering: geometricPrecision; }</style>`;
 
     const listLike = isListLayout(cfg.monthLayout);
     const compactLike = isCompactGridLayout(cfg.monthLayout) || listLike;
