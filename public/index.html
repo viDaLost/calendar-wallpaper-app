@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-  <title>Wallpaper Calendar Pro v2</title>
+  <title>Wallpaper Calendar Pro v5</title>
   <style>
     :root{
       --bg:#071018;
@@ -68,6 +68,22 @@
     }
     select{background-image:linear-gradient(45deg, transparent 50%, rgba(255,255,255,.7) 50%),linear-gradient(135deg, rgba(255,255,255,.7) 50%, transparent 50%);background-position:calc(100% - 22px) calc(50% - 3px),calc(100% - 16px) calc(50% - 3px);background-size:6px 6px,6px 6px;background-repeat:no-repeat;padding-right:34px}
     textarea{min-height:82px;resize:vertical}
+    
+    /* Стили для кастомной палитры */
+    input[type="color"] {
+      padding: 0;
+      height: 42px;
+      cursor: pointer;
+      overflow: hidden;
+    }
+    input[type="color"]::-webkit-color-swatch-wrapper {
+      padding: 4px;
+    }
+    input[type="color"]::-webkit-color-swatch {
+      border: none;
+      border-radius: 8px;
+    }
+
     .toggle-grid{display:grid;grid-template-columns:1fr;gap:8px}
     .toggle{display:flex;align-items:center;gap:12px;padding:12px 14px;border-radius:14px;background:var(--panel2);border:1px solid rgba(255,255,255,.07);cursor:pointer}
     .toggle input{display:none}
@@ -118,17 +134,17 @@
   <div class="app">
     <section class="hero">
       <h1>Wallpaper Calendar Pro v5</h1>
-      <p>Более аккуратные обои-календарь для iPhone: новые сетки месяцев, safe-layout для экрана блокировки, PNG-ссылка для Команд и расширенный список моделей вплоть до линейки iPhone 17.</p>
+      <p>Более аккуратные обои-календарь для iPhone: глубокие палитры, эстетичная сетка, safe-layout для экрана блокировки и PNG-ссылка для автоматизации через Команды.</p>
     </section>
 
     <div class="layout">
       <aside class="panel controls">
         <div class="section-head">
-          <div class="section-title">Настройки</div>
+          <div class="section-title">Атмосфера и Формат</div>
         </div>
 
         <details class="group" open>
-          <summary>1. Устройство и вид</summary>
+          <summary>1. Устройство и Визуальный стиль</summary>
           <div class="grid">
             <div class="field full">
               <label for="model">Размер iPhone</label>
@@ -136,32 +152,32 @@
             </div>
             
             <div class="field full">
-              <label for="font">Шрифт календаря</label>
+              <label for="font">Типографика календаря</label>
               <select id="font"></select>
             </div>
 
             <div class="field">
-              <label for="style">Стиль дат</label>
+              <label for="style">Стиль индикации (Дни)</label>
               <select id="style">
-                <option value="numbers">Только цифры</option>
-                <option value="dots">Точки + цифры</option>
-                <option value="outline">Контур сегодня</option>
-                <option value="focus">Акцент на месяце</option>
-                <option value="capsule">Капсулы</option>
-                <option value="ring">Кольцо у даты</option>
-                <option value="micro">Минимализм</option>
+                <option value="numbers">Чистый минимализм</option>
+                <option value="dots">Скрытый паттерн</option>
+                <option value="outline">Архитектурный контур</option>
+                <option value="focus">Типографический вес</option>
+                <option value="capsule">Мягкая форма</option>
+                <option value="ring">Орбита дня</option>
+                <option value="micro">Микро-акцент</option>
               </select>
             </div>
             <div class="field">
-              <label for="theme">Тема оформления</label>
+              <label for="theme">Цветовая палитра</label>
               <select id="theme"></select>
             </div>
             <div class="field">
-              <label for="bg_style">Тип фона</label>
+              <label for="bg_style">Текстура фона</label>
               <select id="bg_style"></select>
             </div>
             <div class="field">
-              <label for="calendar_size">Масштаб</label>
+              <label for="calendar_size">Масштаб сетки</label>
               <select id="calendar_size">
                 <option value="balanced">Сбалансированный</option>
                 <option value="compact">Компактный</option>
@@ -169,36 +185,36 @@
               </select>
             </div>
             <div class="field">
-              <label for="month_layout">Сетка месяцев</label>
+              <label for="month_layout">Архитектура месяцев</label>
               <select id="month_layout">
                 <option value="grid_3x4">3 колонки × 4 ряда</option>
                 <option value="grid_4x3">4 колонки × 3 ряда</option>
                 <option value="grid_2x6">2 колонки × 6 рядов</option>
                 <option value="grid_6x2">6 колонок × 2 ряда</option>
-                <option value="grid_3x4_compact">3 × 4 compact</option>
-                <option value="list_1x12">1 колонка (аккуратный список)</option>
-                <option value="list_1x12_compact">1 × 12 compact</option>
-                <option value="single_month_focus">Single month focus</option>
+                <option value="grid_3x4_compact">3 × 4 компактно</option>
+                <option value="list_1x12">1 колонка (список)</option>
+                <option value="list_1x12_compact">1 × 12 компактно</option>
+                <option value="single_month_focus">Фокус на одном месяце</option>
               </select>
             </div>
             <div class="field">
-              <label for="opacity">Тень / Подложка (%)</label>
+              <label for="opacity">Плотность подложек (%)</label>
               <select id="opacity">
-                <option value="0">0%</option>
-                <option value="4">4%</option>
-                <option value="8">8%</option>
-                <option value="12">12%</option>
-                <option value="18">18%</option>
-                <option value="24">24%</option>
-                <option value="32">32%</option>
+                <option value="0">0% (Невидимые)</option>
+                <option value="4">4% (Легкая дымка)</option>
+                <option value="8">8% (Воздушные)</option>
+                <option value="12">12% (Мягкие)</option>
+                <option value="18">18% (Плотные)</option>
+                <option value="24">24% (Стекло)</option>
+                <option value="32">32% (Выраженные)</option>
               </select>
             </div>
             <div class="field">
-              <label for="weekend_mode">Выходные</label>
+              <label for="weekend_mode">Индикация выходных</label>
               <select id="weekend_mode">
                 <option value="weekends_only">Только Сб и Вс</option>
                 <option value="production">Праздники РФ + Сб/Вс</option>
-                <option value="none">Не выделять</option>
+                <option value="none">Монохром (Не выделять)</option>
               </select>
             </div>
           </div>
@@ -214,54 +230,88 @@
           </div>
         </details>
 
+        <details class="group" id="customThemeGroup" style="border-color: rgba(255,141,47,.4); display: none;">
+          <summary>🎨 Своя палитра (Тонкая настройка)</summary>
+          <div class="grid">
+            <div class="field">
+              <label for="c_bg">Фон (Background)</label>
+              <input type="color" id="c_bg" value="#0a0d12">
+            </div>
+            <div class="field">
+              <label for="c_panel">Панели (Panel)</label>
+              <input type="color" id="c_panel" value="#131823">
+            </div>
+            <div class="field">
+              <label for="c_text">Текст (Text)</label>
+              <input type="color" id="c_text" value="#edf2ff">
+            </div>
+            <div class="field">
+              <label for="c_muted">Второстепенный (Muted)</label>
+              <input type="color" id="c_muted" value="#8994a7">
+            </div>
+            <div class="field">
+              <label for="c_accent">Акцент 1 (Accent)</label>
+              <input type="color" id="c_accent" value="#ff8f2d">
+            </div>
+            <div class="field">
+              <label for="c_accent2">Акцент 2 (Accent 2)</label>
+              <input type="color" id="c_accent2" value="#ffbc6f">
+            </div>
+            <div class="field full">
+              <label for="c_weekend">Выходные (Weekend)</label>
+              <input type="color" id="c_weekend" value="#ff8f7b">
+            </div>
+          </div>
+        </details>
+
         <details class="group">
-          <summary>2. Язык и инфо-блоки</summary>
+          <summary>2. Контент и Смыслы</summary>
           <div class="grid">
             <div class="field">
               <label for="lang">Язык</label>
               <select id="lang"><option value="ru">Русский</option><option value="en">English</option></select>
             </div>
             <div class="field">
-              <label for="timezone">Часовой пояс UTC</label>
+              <label for="timezone">Часовой пояс (UTC)</label>
               <select id="timezone"></select>
             </div>
             <div class="field full">
-              <label for="footer">Нижний блок</label>
+              <label for="footer">Информационный подвал</label>
               <select id="footer">
-                <option value="year_summary">Дни до конца года</option>
-                <option value="progress_bar">Прогресс-бар года</option>
+                <option value="year_summary">Таймер года (Дни до конца)</option>
+                <option value="progress_bar">Линия времени (Прогресс-бар)</option>
                 <option value="today_card">Карточка сегодняшнего дня</option>
                 <option value="quote">Мотивационная цитата</option>
-                <option value="custom_note">Своя заметка</option>
+                <option value="custom_note">Собственная мысль (Заметка)</option>
               </select>
             </div>
             <div class="field full">
-              <label for="note">Текст заметки</label>
+              <label for="note">Текст мысли/заметки</label>
               <textarea id="note" placeholder="Например: Фокус месяца — дисциплина и спокойный темп"></textarea>
             </div>
           </div>
         </details>
 
         <details class="group">
-          <summary>3. Уникальные функции</summary>
+          <summary>3. Детализация интерфейса</summary>
           <div class="toggle-grid">
-            <label class="toggle"><input type="checkbox" id="show_weekdays" checked><span class="switch"></span><div><div class="t-main">Подписи дней недели</div><div class="t-sub">Пн, Вт, Ср...</div></div></label>
-            <label class="toggle"><input type="checkbox" id="accent_today" checked><span class="switch"></span><div><div class="t-main">Выделять сегодня</div><div class="t-sub">Акцент на текущем дне</div></div></label>
-            <label class="toggle"><input type="checkbox" id="show_progress_ring" checked><span class="switch"></span><div><div class="t-main">Круговой прогресс года</div><div class="t-sub">Процент сверху</div></div></label>
-            <label class="toggle"><input type="checkbox" id="show_week_numbers"><span class="switch"></span><div><div class="t-main">Номера недель</div><div class="t-sub">Полезно для работы</div></div></label>
-            <label class="toggle"><input type="checkbox" id="quarter_dividers" checked><span class="switch"></span><div><div class="t-main">Разделители кварталов</div><div class="t-sub">Линии между Q1/Q2/Q3/Q4</div></div></label>
-            <label class="toggle"><input type="checkbox" id="month_badges" checked><span class="switch"></span><div><div class="t-main">Бейджи месяцев</div><div class="t-sub">Число дней в месяце (30/31)</div></div></label>
-            <label class="toggle"><input type="checkbox" id="focus_current_month" checked><span class="switch"></span><div><div class="t-main">Акцент на текущем месяце</div><div class="t-sub">Визуально ярче других</div></div></label>
+            <label class="toggle"><input type="checkbox" id="show_weekdays" checked><span class="switch"></span><div><div class="t-main">Ритм недели</div><div class="t-sub">Показывать Пн, Вт, Ср...</div></div></label>
+            <label class="toggle"><input type="checkbox" id="accent_today" checked><span class="switch"></span><div><div class="t-main">Пульс времени</div><div class="t-sub">Визуально выделять сегодняшний день</div></div></label>
+            <label class="toggle"><input type="checkbox" id="show_progress_ring" checked><span class="switch"></span><div><div class="t-main">Кольцо эпохи</div><div class="t-sub">Круговой прогресс года сверху</div></div></label>
+            <label class="toggle"><input type="checkbox" id="show_week_numbers"><span class="switch"></span><div><div class="t-main">Хронология</div><div class="t-sub">Отображать номера недель</div></div></label>
+            <label class="toggle"><input type="checkbox" id="quarter_dividers" checked><span class="switch"></span><div><div class="t-main">Смена сезонов</div><div class="t-sub">Тонкие линии между кварталами</div></div></label>
+            <label class="toggle"><input type="checkbox" id="month_badges" checked><span class="switch"></span><div><div class="t-main">Метрика месяца</div><div class="t-sub">Счетчик количества дней (30/31)</div></div></label>
+            <label class="toggle"><input type="checkbox" id="focus_current_month" checked><span class="switch"></span><div><div class="t-main">Глубина фокуса</div><div class="t-sub">Текущий месяц ярче остальных</div></div></label>
           </div>
         </details>
 
         <div class="actions">
-          <button class="primary" id="downloadBtn">Скачать PNG обои</button>
+          <button class="primary" id="downloadBtn">Скачать обои</button>
           <button class="ok" id="savePresetBtn">Сохранить пресет</button>
           <button class="ghost" id="openPngBtn">Открыть PNG</button>
           <button class="ghost" id="openSvgBtn">Открыть SVG</button>
           <button class="accent" id="copyPngUrlBtn">Скопировать PNG‑ссылку</button>
-          <button class="ghost" id="copyLinkBtn">Скопировать ссылку</button>
+          <button class="ghost" id="copyLinkBtn">Поделиться стилем</button>
           <button class="ghost" id="randomBtn">Случайный стиль</button>
           <button class="ghost" id="resetBtn">Сбросить</button>
         </div>
@@ -269,28 +319,18 @@
         <div class="url-box" style="margin-top:10px">
           <div class="group-title" style="margin:0 0 8px">PNG‑ссылка для Команд</div>
           <div class="mono" id="pngUrlBox"></div>
-          <div class="footer-note" style="margin-top:8px">Эту ссылку нужно вставлять в iPhone «Команды», чтобы дата и выделение текущего дня обновлялись автоматически.</div>
+          <div class="footer-note" style="margin-top:8px">Эту ссылку нужно вставлять в приложение «Команды», чтобы дата и выделение текущего дня обновлялись на экране iPhone автоматически каждый день.</div>
         </div>
 
         <details class="guide" style="margin-top:10px" open>
-          <summary class="group-title" style="margin-bottom:0; font-size:14px; color:#fff; cursor:pointer;">Автообновление на iPhone через Команды</summary>
+          <summary class="group-title" style="margin-bottom:0; font-size:14px; color:#fff; cursor:pointer;">Автообновление на iPhone (Инструкция)</summary>
           <ol>
             <li>Открой <strong>Команды</strong> → <strong>Автоматизация</strong> → <strong>Новая автоматизация</strong> → <strong>Время суток</strong>.</li>
             <li>Выбери, например, <strong>06:00</strong> → <strong>Ежедневно</strong> → включи <strong>Запускать немедленно</strong>.</li>
             <li>Создай быструю команду с действиями: <strong>Получить содержимое URL</strong> → <strong>Сохранить в Фото</strong> → <strong>Установить фото как обои</strong>.</li>
             <li>Нажми кнопку <strong>Скопировать PNG‑ссылку</strong> и вставь адрес в действие <strong>Получить содержимое URL</strong>.</li>
             <li>В «Установить фото как обои» выбери <strong>Экран блокировки</strong>, затем отключи <strong>Показать предпросмотр</strong> и <strong>Обрезать до объекта</strong>.</li>
-            <li>После этого дата и выделение сегодняшнего дня будут обновляться автоматически каждый день по этой PNG‑ссылке.</li>
-          </ol>
-        </details>
-
-        <details class="guide" style="margin-top:10px">
-          <summary class="group-title" style="margin-bottom:0; font-size:14px; color:#fff; cursor:pointer;">Обычная установка вручную</summary>
-          <ol>
-            <li>Нажми «Скачать PNG обои» или «Открыть PNG».</li>
-            <li>Сохрани картинку в «Фото».</li>
-            <li>На iPhone удерживай экран блокировки и нажми «Настроить» или «+».</li>
-            <li>Выбери «Фото» и укажи сохранённые обои.</li>
+            <li>Готово! Календарь будет обновляться сам каждое утро.</li>
           </ol>
         </details>
       </aside>
@@ -317,15 +357,18 @@
       calendar_size:'balanced', month_layout:'grid_3x4_compact', opacity:'8', weekend_mode:'weekends_only',
       lang:'ru', timezone:'3', footer:'year_summary', note:'', width:'1179', height:'2556',
       show_weekdays:true, accent_today:true, show_progress_ring:true, show_week_numbers:false,
-      quarter_dividers:true, month_badges:true, focus_current_month:true
+      quarter_dividers:true, month_badges:true, focus_current_month:true,
+      c_bg: '#0a0d12', c_panel: '#131823', c_text: '#edf2ff', c_muted: '#8994a7', c_accent: '#ff8f2d', c_accent2: '#ffbc6f', c_weekend: '#ff8f7b'
     };
 
-    const fields = ['model','font','style','theme','bg_style','calendar_size','month_layout','opacity','weekend_mode','lang','timezone','footer','note','width','height'];
+    const colorFields = ['c_bg', 'c_panel', 'c_text', 'c_muted', 'c_accent', 'c_accent2', 'c_weekend'];
+    const fields = ['model','font','style','theme','bg_style','calendar_size','month_layout','opacity','weekend_mode','lang','timezone','footer','note','width','height', ...colorFields];
     const checks = ['show_weekdays','accent_today','show_progress_ring','show_week_numbers','quarter_dividers','month_badges','focus_current_month'];
     const els = Object.fromEntries([...fields, ...checks].map(id => [id, document.getElementById(id)]));
     const preview = document.getElementById('preview');
     const presetsContainer = document.getElementById('presetsContainer');
     const sizeLabel = document.getElementById('sizeLabel');
+    const customThemeGroup = document.getElementById('customThemeGroup');
     
     let optionsCache = null;
 
@@ -336,10 +379,18 @@
 
       Object.entries(data.presets).forEach(([k, v]) => els.model.add(new Option(`${v.label} — ${v.width}×${v.height}`, k)));
       Object.entries(data.fonts).forEach(([k, name]) => els.font.add(new Option(name, k)));
+      
       Object.entries(data.themes).forEach(([k, v]) => els.theme.add(new Option(v.name, k)));
+      els.theme.add(new Option("✨ Создать свою палитру...", "custom_palette")); // Новая опция
+
       Object.entries(data.bgStyles).forEach(([k, name]) => els.bg_style.add(new Option(name, k)));
 
       for(let i=-12;i<=14;i++) els.timezone.add(new Option(`UTC${i>=0?'+'+i:i}`, i));
+      
+      // Логика отображения блока кастомных цветов
+      els.theme.addEventListener('change', () => {
+        customThemeGroup.style.display = els.theme.value === 'custom_palette' ? 'block' : 'none';
+      });
     }
 
     function applyPresetSize(){
@@ -353,7 +404,14 @@
     function paramsFromForm(){
       applyPresetSize();
       const q = new URLSearchParams();
-      fields.forEach(id => { if(!((id === 'width' || id === 'height') && els.model.value !== 'custom')) q.set(id, els[id].value); });
+      fields.forEach(id => { 
+        // Не передаем width/height если не custom
+        if((id === 'width' || id === 'height') && els.model.value !== 'custom') return;
+        // Не передаем кастомные цвета, если тема не custom_palette
+        if(colorFields.includes(id) && els.theme.value !== 'custom_palette') return;
+        
+        q.set(id, els[id].value); 
+      });
       checks.forEach(id => q.set(id, els[id].checked ? '1' : '0'));
       return q;
     }
@@ -381,6 +439,7 @@
     function fillDefaults(){
       fields.forEach(id => { if(els[id]) els[id].value = defaults[id]; });
       checks.forEach(id => { if(els[id]) els[id].checked = defaults[id]; });
+      customThemeGroup.style.display = els.theme.value === 'custom_palette' ? 'block' : 'none';
       applyPresetSize();
     }
 
@@ -389,11 +448,12 @@
       fillDefaults();
       fields.forEach(id => { if(q.has(id) && els[id]) els[id].value = q.get(id); });
       checks.forEach(id => { if(q.has(id) && els[id]) els[id].checked = q.get(id) === '1'; });
+      customThemeGroup.style.display = els.theme.value === 'custom_palette' ? 'block' : 'none';
       applyPresetSize(); updatePreview(false);
     }
 
-    function getSavedPresets(){ try { return JSON.parse(localStorage.getItem('cal-presets') || '[]'); } catch { return []; } }
-    function setSavedPresets(items){ localStorage.setItem('cal-presets', JSON.stringify(items)); renderPresets(); }
+    function getSavedPresets(){ try { return JSON.parse(localStorage.getItem('cal-presets-v5') || '[]'); } catch { return []; } }
+    function setSavedPresets(items){ localStorage.setItem('cal-presets-v5', JSON.stringify(items)); renderPresets(); }
 
     function renderPresets(){
       const items = getSavedPresets();
@@ -410,7 +470,7 @@
     }
 
     document.getElementById('savePresetBtn').addEventListener('click', () => {
-      const name = prompt('Название пресета', 'Мои обои'); if(!name) return;
+      const name = prompt('Название пресета', 'Моя атмосфера'); if(!name) return;
       const items = getSavedPresets();
       items.unshift({ name, url: location.href });
       setSavedPresets(items.slice(0, 12)); alert('Пресет сохранён!');
@@ -418,12 +478,19 @@
 
     document.getElementById('randomBtn').addEventListener('click', () => {
       const r = o => Object.keys(o)[Math.floor(Math.random() * Object.keys(o).length)];
-      els.theme.value = r(optionsCache.themes); els.bg_style.value = r(optionsCache.bgStyles);
-      els.font.value = r(optionsCache.fonts); els.style.value = ['numbers','dots','outline','focus','capsule','ring','micro'][Math.floor(Math.random()*7)];
+      
+      const themeKeys = Object.keys(optionsCache.themes);
+      els.theme.value = themeKeys[Math.floor(Math.random() * themeKeys.length)]; // Не ставим рандомно custom_palette
+      customThemeGroup.style.display = 'none';
+
+      els.bg_style.value = r(optionsCache.bgStyles);
+      els.font.value = r(optionsCache.fonts); 
+      els.style.value = ['numbers','dots','outline','focus','capsule','ring','micro'][Math.floor(Math.random()*7)];
       updatePreview();
     });
 
     document.getElementById('resetBtn').addEventListener('click', () => { fillDefaults(); updatePreview(); });
+    
     [...fields, ...checks].forEach(id => {
       const el = els[id];
       el.addEventListener('change', () => updatePreview());
