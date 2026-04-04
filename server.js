@@ -22,17 +22,19 @@ const pngCache = new Map();
 const cacheSweepTimer = setInterval(() => pngCache.clear(), 1000 * 60 * 60);
 if (cacheSweepTimer.unref) cacheSweepTimer.unref();
 
+const RENDER_VERSION = '2026-04-05-font-weather-fix-1';
+
 const FONTS = {
-  inter: { name: 'Inter (Стандарт)', file: 'inter.ttf', family: 'Inter' },
-  montserrat: { name: 'Montserrat (Геометрия)', file: 'montserrat.ttf', family: 'Montserrat' },
-  roboto_mono: { name: 'Roboto Mono (Код)', file: 'roboto-mono.ttf', family: 'Roboto Mono' },
-  playfair: { name: 'Playfair Display (Журнал)', file: 'playfair.ttf', family: 'Playfair Display' },
-  comfortaa: { name: 'Comfortaa (Круглый)', file: 'comfortaa.ttf', family: 'Comfortaa' },
-  jura: { name: 'Jura (Футуристичный)', file: 'jura.ttf', family: 'Jura' },
-  caveat: { name: 'Caveat (Рукописный)', file: 'caveat.ttf', family: 'Caveat' },
-  russo_one: { name: 'Russo One (Плакатный)', file: 'russo-one.ttf', family: 'Russo One' },
-  lora: { name: 'Lora (Книжный)', file: 'lora.ttf', family: 'Lora' },
-  ubuntu: { name: 'Ubuntu (Мягкий)', file: 'ubuntu.ttf', family: 'Ubuntu' }
+  inter: { name: 'Inter (Стандарт)', file: 'inter.ttf', family: 'Inter', resvgFamily: 'Inter 24pt' },
+  montserrat: { name: 'Montserrat (Геометрия)', file: 'montserrat.ttf', family: 'Montserrat', resvgFamily: 'Montserrat' },
+  roboto_mono: { name: 'Roboto Mono (Код)', file: 'roboto-mono.ttf', family: 'Roboto Mono', resvgFamily: 'Roboto Mono' },
+  playfair: { name: 'Playfair Display (Журнал)', file: 'playfair.ttf', family: 'Playfair Display', resvgFamily: 'Playfair Display' },
+  comfortaa: { name: 'Comfortaa (Круглый)', file: 'comfortaa.ttf', family: 'Comfortaa', resvgFamily: 'Comfortaa' },
+  jura: { name: 'Jura (Футуристичный)', file: 'jura.ttf', family: 'Jura', resvgFamily: 'Jura' },
+  caveat: { name: 'Caveat (Рукописный)', file: 'caveat.ttf', family: 'Caveat', resvgFamily: 'Caveat' },
+  russo_one: { name: 'Russo One (Плакатный)', file: 'russo-one.ttf', family: 'Russo One', resvgFamily: 'Russo One' },
+  lora: { name: 'Lora (Книжный)', file: 'lora.ttf', family: 'Lora', resvgFamily: 'Lora' },
+  ubuntu: { name: 'Ubuntu (Мягкий)', file: 'ubuntu.ttf', family: 'Ubuntu', resvgFamily: 'Ubuntu' }
 };
 
 const PHONE_PRESETS = {
@@ -75,18 +77,28 @@ if (fs.existsSync(fontsDir)) {
 
 
 function buildFontPayload(fontKey) {
+  const selectedDef = FONTS[fontKey] || FONTS.inter;
   return {
     selected: fontCache[fontKey] || fontCache.inter || '',
     inter: fontCache.inter || '',
-    ubuntu: fontCache.ubuntu || ''
+    ubuntu: fontCache.ubuntu || '',
+    browserFamily: selectedDef.family,
+    resvgFamily: selectedDef.resvgFamily || selectedDef.family || 'Ubuntu'
   };
 }
 
+function getResvgDefaultFontFamily(fontKey) {
+  const selectedDef = FONTS[fontKey] || FONTS.inter;
+  return selectedDef.resvgFamily || selectedDef.family || 'Ubuntu';
+}
+
 function buildResvgFontBuffers(fontKey) {
-  const keys = [fontKey, 'inter', 'ubuntu'];
+  const preferred = [fontKey, 'inter', 'ubuntu'];
+  const remaining = Object.keys(fontCache).filter((key) => !preferred.includes(key));
+  const order = [...preferred, ...remaining];
   const seen = new Set();
   const buffers = [];
-  for (const key of keys) {
+  for (const key of order) {
     if (!key || seen.has(key) || !fontCache[key]) continue;
     seen.add(key);
     buffers.push(Buffer.from(fontCache[key], 'base64'));
@@ -122,32 +134,59 @@ async function fetchWeatherByCity(city) {
   const normalizedCity = String(city || '').split(',')[0].trim();
   if (!normalizedCity) return null;
   try {
-    const geoData = await fetchJsonWithTimeout(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(normalizedCity)}&count=1&language=ru`, 1800);
+    const geoData = await fetchJsonWithTimeout(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(normalizedCity)}&count=1&language=ru`, 2200);
     if (!geoData.results || geoData.results.length === 0) return null;
 
     const place = geoData.results[0];
     const { latitude, longitude, timezone } = place;
-    const data = await fetchJsonWithTimeout(`https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current=temperature_2m,weather_code&hourly=temperature_2m,weather_code&forecast_days=1&timezone=${encodeURIComponent(timezone || 'auto')}`, 2200);
+    const tz = timezone || 'auto';
+    const data = await fetchJsonWithTimeout(`https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current=temperature_2m,weather_code,is_day,time&hourly=temperature_2m,weather_code&daily=temperature_2m_max,temperature_2m_min,weather_code&forecast_days=2&timezone=${encodeURIComponent(tz)}`, 3000);
     if (!data.current || typeof data.current.temperature_2m !== 'number') return null;
 
     const temp = Math.round(data.current.temperature_2m);
     const code = data.current.weather_code;
     const cityLabel = String(place.name || normalizedCity).trim();
 
-    const preferredHours = [6, 9, 12, 15, 18, 21];
     const hourly = [];
-    if (data.hourly && Array.isArray(data.hourly.time) && Array.isArray(data.hourly.temperature_2m)) {
-      for (const targetHour of preferredHours) {
-        const idx = data.hourly.time.findIndex((t) => Number(String(t).slice(11, 13)) === targetHour);
-        if (idx >= 0) {
-          const t = Math.round(data.hourly.temperature_2m[idx]);
-          const hourlyCode = Array.isArray(data.hourly.weather_code) ? data.hourly.weather_code[idx] : code;
-          hourly.push({ hour: `${String(targetHour).padStart(2, '0')}:00`, temp: t > 0 ? `+${t}` : `${t}`, icon: weatherIconFromCode(hourlyCode) });
-        }
+    const times = Array.isArray(data.hourly?.time) ? data.hourly.time : [];
+    const temps = Array.isArray(data.hourly?.temperature_2m) ? data.hourly.temperature_2m : [];
+    const codes = Array.isArray(data.hourly?.weather_code) ? data.hourly.weather_code : [];
+    if (times.length && temps.length) {
+      const nowIso = String(data.current.time || '');
+      const nowIndexRaw = times.findIndex((t) => t === nowIso);
+      const nowIndex = nowIndexRaw >= 0 ? nowIndexRaw : 0;
+      const preferredHours = new Set([6, 9, 12, 15, 18, 21]);
+      const preferredIndexes = [];
+      for (let i = 0; i < times.length && preferredIndexes.length < 8; i++) {
+        const hour = Number(String(times[i]).slice(11, 13));
+        if (preferredHours.has(hour)) preferredIndexes.push(i);
+      }
+      const futurePreferred = preferredIndexes.filter((i) => i >= nowIndex);
+      const finalIndexes = (futurePreferred.length >= 4 ? futurePreferred : preferredIndexes).slice(0, 6);
+      for (const idx of finalIndexes) {
+        const t = Math.round(temps[idx]);
+        const hourlyCode = codes[idx] ?? code;
+        hourly.push({
+          hour: `${String(times[idx]).slice(11, 13)}:00`,
+          temp: t > 0 ? `+${t}` : `${t}`,
+          icon: weatherIconFromCode(hourlyCode)
+        });
       }
     }
 
-    return { temp: temp > 0 ? `+${temp}` : `${temp}`, icon: weatherIconFromCode(code), cityLabel, hourly };
+    const dailyMax = Array.isArray(data.daily?.temperature_2m_max) ? Math.round(data.daily.temperature_2m_max[0]) : null;
+    const dailyMin = Array.isArray(data.daily?.temperature_2m_min) ? Math.round(data.daily.temperature_2m_min[0]) : null;
+
+    return {
+      temp: temp > 0 ? `+${temp}` : `${temp}`,
+      icon: weatherIconFromCode(code),
+      cityLabel,
+      timezone: tz,
+      isDay: Boolean(data.current.is_day),
+      dailyMax: typeof dailyMax === 'number' ? (dailyMax > 0 ? `+${dailyMax}` : `${dailyMax}`) : null,
+      dailyMin: typeof dailyMin === 'number' ? (dailyMin > 0 ? `+${dailyMin}` : `${dailyMin}`) : null,
+      hourly
+    };
   } catch (e) {
     return null;
   }
@@ -219,10 +258,11 @@ app.get('/wallpaper.svg', async (req, res) => {
 
 app.get('/wallpaper.png', async (req, res) => {
   try {
-    const cacheKey = req.originalUrl + dayjs().format('YYYY-MM-DD');
+    const cacheKey = `${RENDER_VERSION}:${req.originalUrl}:${dayjs().format('YYYY-MM-DD')}`;
     if (pngCache.has(cacheKey)) {
       res.setHeader('Content-Type', 'image/png');
       res.setHeader('X-Cache', 'HIT');
+      res.setHeader('X-Render-Version', RENDER_VERSION);
       return res.send(pngCache.get(cacheKey));
     }
 
@@ -234,13 +274,14 @@ app.get('/wallpaper.png', async (req, res) => {
     const fontKey = req.query.font || 'inter';
     const svg = Engine.renderSvg(cfg, dayjs, buildFontPayload(fontKey));
     const fontBuffers = buildResvgFontBuffers(fontKey);
+    const defaultFontFamily = getResvgDefaultFontFamily(fontKey);
 
     const resvg = new Resvg(svg, {
       fitTo: { mode: 'original' },
       font: {
         fontBuffers,
         loadSystemFonts: false,
-        defaultFontFamily: 'Ubuntu',
+        defaultFontFamily,
       }
     });
     const png = Buffer.from(resvg.render().asPng());
@@ -249,6 +290,7 @@ app.get('/wallpaper.png', async (req, res) => {
     res.setHeader('Content-Type', 'image/png');
     res.setHeader('Cache-Control', 'public, max-age=3600');
     res.setHeader('X-Cache', 'MISS');
+    res.setHeader('X-Render-Version', RENDER_VERSION);
     res.send(png);
   } catch (err) {
     console.error('WALLPAPER_PNG_ERROR', err);
