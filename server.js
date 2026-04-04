@@ -1,8 +1,6 @@
 const express = require('express');
 const path = require('path');
 const sharp = require('sharp');
-let Resvg = null;
-try { ({ Resvg } = require('@resvg/resvg-js')); } catch (e) { /* optional fallback */ }
 const dayjs = require('dayjs');
 const utc = require('dayjs/plugin/utc');
 const isLeapYear = require('dayjs/plugin/isLeapYear');
@@ -18,7 +16,6 @@ dayjs.extend(advancedFormat);
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// --- ШРИФТЫ ---
 const FONTS = {
   inter: { name: 'Inter (Стандарт)', file: 'inter.ttf', family: 'Inter' },
   montserrat: { name: 'Montserrat (Геометрия)', file: 'montserrat.ttf', family: 'Montserrat' },
@@ -34,19 +31,13 @@ const FONTS = {
 
 const fontCache = {};
 const fontsDir = path.join(__dirname, 'fonts');
-
 if (fs.existsSync(fontsDir)) {
   for (const [key, fontDef] of Object.entries(FONTS)) {
     const fontPath = path.join(fontsDir, fontDef.file);
     if (fs.existsSync(fontPath)) {
       fontCache[key] = fs.readFileSync(fontPath).toString('base64');
-      console.log(`✅ Шрифт загружен: ${fontDef.file}`);
-    } else {
-      console.warn(`⚠️ Файл не найден: fonts/${fontDef.file}`);
     }
   }
-} else {
-  console.warn('⚠️ Папка "fonts" не найдена. Создайте её и добавьте .ttf файлы для шрифтов.');
 }
 
 const PHONE_PRESETS = {
@@ -62,10 +53,18 @@ const PHONE_PRESETS = {
   iphone_12_pro_max: { label: 'iPhone 12/13 Pro Max / 14 Plus', width: 1284, height: 2778, family: 'Крупный 6.7"' },
   iphone_14_pro: { label: 'iPhone 14 Pro', width: 1179, height: 2556, family: 'Pro 6.1"' },
   iphone_14_pro_max: { label: 'iPhone 14 Pro Max', width: 1290, height: 2796, family: 'Pro Max 6.7"' },
-  iphone_15: { label: 'iPhone 15 / 16 / Pro', width: 1179, height: 2556, family: '6.1" новый' },
-  iphone_15_plus: { label: 'iPhone 15/16 Plus', width: 1290, height: 2796, family: '6.7" новый' },
+  iphone_15: { label: 'iPhone 15', width: 1179, height: 2556, family: '6.1"' },
+  iphone_15_plus: { label: 'iPhone 15 Plus', width: 1290, height: 2796, family: '6.7"' },
+  iphone_15_pro: { label: 'iPhone 15 Pro', width: 1179, height: 2556, family: 'Pro 6.1"' },
+  iphone_15_pro_max: { label: 'iPhone 15 Pro Max', width: 1290, height: 2796, family: 'Pro Max 6.7"' },
+  iphone_16: { label: 'iPhone 16', width: 1179, height: 2556, family: '6.1" новый' },
+  iphone_16_plus: { label: 'iPhone 16 Plus', width: 1290, height: 2796, family: '6.7" новый' },
   iphone_16_pro: { label: 'iPhone 16 Pro', width: 1206, height: 2622, family: 'Pro 6.3"' },
   iphone_16_pro_max: { label: 'iPhone 16 Pro Max', width: 1320, height: 2868, family: 'Pro Max 6.9"' },
+  iphone_17: { label: 'iPhone 17', width: 1206, height: 2622, family: '6.3"' },
+  iphone_air: { label: 'iPhone Air', width: 1260, height: 2736, family: 'Air 6.5"' },
+  iphone_17_pro: { label: 'iPhone 17 Pro', width: 1206, height: 2622, family: 'Pro 6.3"' },
+  iphone_17_pro_max: { label: 'iPhone 17 Pro Max', width: 1320, height: 2868, family: 'Pro Max 6.9"' },
   custom: { label: 'Свой размер', width: 1179, height: 2556, family: 'Custom' }
 };
 
@@ -77,16 +76,28 @@ const THEMES = {
   olive_linen: { name: 'Оливковый Лен', bg: '#161812', panel: '#202419', text: '#f3f4ea', muted: '#a5aa95', accent: '#b4c86a', accent2: '#dbe8a1', weekend: '#c7ad86' },
   rose_sunset: { name: 'Розовый Закат', bg: '#1b1014', panel: '#291920', text: '#fff0f5', muted: '#c2a4af', accent: '#ff6d96', accent2: '#ffb1c4', weekend: '#ff9f90' },
   oled_gold: { name: 'OLED Золото', bg: '#000000', panel: '#0a0a0a', text: '#fff7df', muted: '#a39063', accent: '#ffc44e', accent2: '#ffe49a', weekend: '#ffd07b' },
-  mint_air: { name: 'Мятный Воздух', bg: '#0a1512', panel: '#10211c', text: '#ebfff8', muted: '#8db4a8', accent: '#57d2ab', accent2: '#aef2da', weekend: '#88e0ca' }
+  mint_air: { name: 'Мятный Воздух', bg: '#0a1512', panel: '#10211c', text: '#ebfff8', muted: '#8db4a8', accent: '#57d2ab', accent2: '#aef2da', weekend: '#88e0ca' },
+  sapphire_ink: { name: 'Сапфировые чернила', bg: '#050814', panel: '#0c1630', text: '#edf3ff', muted: '#8ea5d3', accent: '#6da8ff', accent2: '#a8c7ff', weekend: '#89b0ff' },
+  copper_noir: { name: 'Медный нуар', bg: '#0b0908', panel: '#181311', text: '#fff1e8', muted: '#b59a8a', accent: '#d9814f', accent2: '#f0b08b', weekend: '#d7a47d' },
+  emerald_smoke: { name: 'Изумрудный дым', bg: '#081311', panel: '#10211e', text: '#ecfff7', muted: '#89b7aa', accent: '#4ec9a2', accent2: '#93edd0', weekend: '#74d7b8' },
+  pearl_mist: { name: 'Жемчужный туман', bg: '#f5f4f2', panel: '#ebe8e3', text: '#2a2a2a', muted: '#7a7a7a', accent: '#6d8cff', accent2: '#9fb2ff', weekend: '#8c77ff' },
+  ruby_velvet: { name: 'Рубиновый бархат', bg: '#12070b', panel: '#220d15', text: '#ffeef3', muted: '#c8a1ad', accent: '#ff5a7c', accent2: '#ff9db4', weekend: '#ff8d9f' },
+  moon_silver: { name: 'Лунное серебро', bg: '#0d1118', panel: '#161c27', text: '#f0f4fb', muted: '#99a4b7', accent: '#c8d2e5', accent2: '#eef3ff', weekend: '#b7c3da' }
 };
 
 const BG_STYLES = {
-  aurora: 'Аврора (Градиент)',
-  glass: 'Стекло (Блики)',
-  paper: 'Бумага (Шум)',
+  aurora: 'Аврора',
+  glass: 'Стекло',
+  paper: 'Бумага',
   spotlight: 'Прожектор',
   waves: 'Мягкие волны',
-  noir: 'Нуар (Глубокий темный)'
+  noir: 'Нуар',
+  mesh: 'Глубокая сетка',
+  bloom: 'Сияние',
+  diagonal: 'Диагональные лучи',
+  orbit: 'Орбиты',
+  velvet: 'Бархат',
+  grain_light: 'Светлое зерно'
 };
 
 const QUOTES = {
@@ -108,7 +119,6 @@ function num(v, fallback) {
   const n = Number(v);
   return Number.isFinite(n) ? n : fallback;
 }
-
 function escapeXml(str) {
   return String(str)
     .replace(/&/g, '&amp;')
@@ -117,11 +127,7 @@ function escapeXml(str) {
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&apos;');
 }
-
-function clamp(v, min, max) {
-  return Math.max(min, Math.min(max, v));
-}
-
+function clamp(v, min, max) { return Math.max(min, Math.min(max, v)); }
 function alpha(hex, opacity) {
   const clean = hex.replace('#', '');
   const bigint = parseInt(clean, 16);
@@ -130,29 +136,21 @@ function alpha(hex, opacity) {
   const b = bigint & 255;
   return `rgba(${r},${g},${b},${opacity})`;
 }
-
 function getLabels(lang) {
   return lang === 'ru'
     ? {
         months: ['Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь', 'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь'],
         weekdays: ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'],
-        today: 'Сегодня',
-        year: 'год',
-        daysLeft: 'дн. осталось',
-        passed: 'пройдено',
-        week: 'Неделя',
+        weekdaysFull: ['понедельник', 'вторник', 'среда', 'четверг', 'пятница', 'суббота', 'воскресенье'],
+        today: 'Сегодня', year: 'год', daysLeft: 'дн. осталось', passed: 'пройдено', week: 'Неделя',
       }
     : {
         months: ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'],
         weekdays: ['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su'],
-        today: 'Today',
-        year: 'year',
-        daysLeft: 'days left',
-        passed: 'passed',
-        week: 'Week',
+        weekdaysFull: ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'],
+        today: 'Today', year: 'year', daysLeft: 'days left', passed: 'passed', week: 'Week',
       };
 }
-
 function getConfig(query) {
   const preset = PHONE_PRESETS[query.model] || PHONE_PRESETS.iphone_15;
   return {
@@ -178,243 +176,204 @@ function getConfig(query) {
     quarterDividers: String(query.quarter_dividers || '1') === '1',
     monthBadges: String(query.month_badges || '1') === '1',
     focusCurrentMonth: String(query.focus_current_month || '1') === '1',
-    lockscreenSafe: String(query.lockscreen_safe || '1') === '1'
+    pngSafeFont: query.__target === 'png'
   };
 }
-
-function zonedNow(offsetHours) {
-  return dayjs.utc().add(offsetHours, 'hour');
-}
-
+function zonedNow(offsetHours) { return dayjs.utc().add(offsetHours, 'hour'); }
 function yearStats(now) {
   const daysInYear = now.isLeapYear() ? 366 : 365;
   const dayOfYear = now.diff(dayjs(`${now.year()}-01-01`), 'day') + 1;
   const daysLeft = daysInYear - dayOfYear;
-  return {
-    dayOfYear,
-    daysInYear,
-    daysLeft,
-    percentPassed: Math.round((dayOfYear / daysInYear) * 100)
-  };
+  return { dayOfYear, daysInYear, daysLeft, percentPassed: Math.round((dayOfYear / daysInYear) * 100) };
 }
-
-
-function getSafeInsets(cfg, width, height) {
-  if (!cfg.lockscreenSafe) {
-    const base = Math.round(width * 0.05);
-    return { top: base, bottom: base };
-  }
-
-  const top = Math.round(height * 0.16 + width * 0.06);
-  const bottom = Math.round(height * 0.11 + width * 0.035);
-  return { top, bottom };
-}
-
-function randomQuote(lang, year) {
-  const arr = QUOTES[lang] || QUOTES.ru;
-  return arr[year % arr.length];
-}
-
-function renderBackground(cfg, theme, width, height) {
-  const overlayOpacity = cfg.opacity / 100;
-  let bgCode = '';
-  if (cfg.bgStyle === 'paper') {
-    bgCode = `
-      <defs>
-        <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0%" stop-color="${theme.bg}" />
-          <stop offset="100%" stop-color="${theme.panel}" />
-        </linearGradient>
-        <filter id="noise">
-          <feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="2" stitchTiles="stitch" />
-          <feColorMatrix type="saturate" values="0" />
-          <feComponentTransfer><feFuncA type="table" tableValues="0 0 .035 .05"/></feComponentTransfer>
-        </filter>
-      </defs>
-      <rect width="100%" height="100%" fill="url(#bg)"/>
-      <rect width="100%" height="100%" filter="url(#noise)" opacity="0.55"/>`;
-  } else if (cfg.bgStyle === 'glass') {
-    bgCode = `
-      <defs>
-        <radialGradient id="bg" cx="25%" cy="15%" r="85%">
-          <stop offset="0%" stop-color="${alpha(theme.accent, 0.42)}" />
-          <stop offset="35%" stop-color="${alpha(theme.bg, 0.95)}" />
-          <stop offset="100%" stop-color="${theme.bg}" />
-        </radialGradient>
-      </defs>
-      <rect width="100%" height="100%" fill="url(#bg)"/>
-      <circle cx="${width * 0.18}" cy="${height * 0.14}" r="${width * 0.22}" fill="${alpha(theme.accent2, 0.18)}"/>
-      <circle cx="${width * 0.83}" cy="${height * 0.18}" r="${width * 0.2}" fill="${alpha(theme.accent, 0.12)}"/>
-      <circle cx="${width * 0.58}" cy="${height * 0.82}" r="${width * 0.3}" fill="${alpha(theme.accent2, 0.08)}"/>`;
-  } else if (cfg.bgStyle === 'spotlight') {
-    bgCode = `
-      <defs>
-        <radialGradient id="bg" cx="50%" cy="12%" r="90%">
-          <stop offset="0%" stop-color="${alpha(theme.accent2, 0.3)}" />
-          <stop offset="18%" stop-color="${alpha(theme.accent, 0.18)}" />
-          <stop offset="55%" stop-color="${alpha(theme.bg, 0.97)}" />
-          <stop offset="100%" stop-color="${theme.bg}" />
-        </radialGradient>
-      </defs>
-      <rect width="100%" height="100%" fill="url(#bg)"/>`;
-  } else if (cfg.bgStyle === 'waves') {
-    bgCode = `
-      <defs>
-        <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stop-color="${theme.bg}" />
-          <stop offset="100%" stop-color="${theme.panel}" />
-        </linearGradient>
-      </defs>
-      <rect width="100%" height="100%" fill="url(#bg)"/>
-      <path d="M 0 ${height * 0.22} C ${width * 0.12} ${height * 0.18}, ${width * 0.28} ${height * 0.28}, ${width * 0.42} ${height * 0.24} S ${width * 0.74} ${height * 0.14}, ${width} ${height * 0.22}" fill="none" stroke="${alpha(theme.accent2, 0.16)}" stroke-width="${width * 0.01}"/>
-      <path d="M 0 ${height * 0.62} C ${width * 0.18} ${height * 0.56}, ${width * 0.34} ${height * 0.69}, ${width * 0.56} ${height * 0.64} S ${width * 0.82} ${height * 0.58}, ${width} ${height * 0.65}" fill="none" stroke="${alpha(theme.accent, 0.14)}" stroke-width="${width * 0.013}"/>`;
-  } else if (cfg.bgStyle === 'noir') {
-    bgCode = `
-      <defs>
-        <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0%" stop-color="#020202" />
-          <stop offset="100%" stop-color="#0c1017" />
-        </linearGradient>
-      </defs>
-      <rect width="100%" height="100%" fill="url(#bg)"/>
-      <circle cx="${width * 0.84}" cy="${height * 0.12}" r="${width * 0.16}" fill="${alpha(theme.accent, 0.12)}"/>
-      <circle cx="${width * 0.24}" cy="${height * 0.76}" r="${width * 0.2}" fill="${alpha(theme.accent2, 0.08)}"/>`;
-  } else {
-    bgCode = `
-      <defs>
-        <radialGradient id="bg1" cx="18%" cy="10%" r="80%">
-          <stop offset="0%" stop-color="${alpha(theme.accent, 0.36)}"/>
-          <stop offset="35%" stop-color="${alpha(theme.bg, 0.94)}"/>
-          <stop offset="100%" stop-color="${theme.bg}"/>
-        </radialGradient>
-        <radialGradient id="bg2" cx="82%" cy="78%" r="78%">
-          <stop offset="0%" stop-color="${alpha(theme.accent2, 0.14)}"/>
-          <stop offset="100%" stop-color="${alpha(theme.panel, 0)}"/>
-        </radialGradient>
-      </defs>
-      <rect width="100%" height="100%" fill="url(#bg1)"/>
-      <rect width="100%" height="100%" fill="url(#bg2)"/>`;
-  }
-  return bgCode + `<rect width="100%" height="100%" fill="${alpha('#ffffff', overlayOpacity)}"/>`;
-}
-
-function wrap(text, max) {
+function randomQuote(lang, year) { const arr = QUOTES[lang] || QUOTES.ru; return arr[year % arr.length]; }
+function wrap(text, maxLen) {
   const words = String(text).split(/\s+/);
   const lines = [];
   let line = '';
   for (const word of words) {
-    const attempt = line ? `${line} ${word}` : word;
-    if (attempt.length > max && line) {
-      lines.push(line);
-      line = word;
-    } else {
-      line = attempt;
-    }
+    if ((line + ' ' + word).trim().length <= maxLen) line = (line + ' ' + word).trim();
+    else { if (line) lines.push(line); line = word; }
   }
   if (line) lines.push(line);
   return lines;
 }
-
-function renderHeader(cfg, theme, labels, now, stats, width, padding, topY, headerHeight, FONT) {
-  const dateText = cfg.lang === 'ru'
-    ? `${labels.today}: ${now.format('D MMMM')}`
-    : `${labels.today}: ${now.format('MMM D')}`;
-
-  const chipHeight = Math.round(headerHeight * 0.42);
-  const chipPadX = Math.round(width * 0.02);
-  const weekChipW = Math.round(width * 0.26);
-  const dateChipW = Math.round(width * 0.38);
-  const ringR = Math.round(Math.min(width, headerHeight) * 0.18);
-  const ringCx = width - padding - ringR - 2;
-  const ringCy = topY + headerHeight * 0.34;
-  const circumference = 2 * Math.PI * ringR;
-  const dash = circumference * (stats.percentPassed / 100);
-  const labelSize = Math.round(headerHeight * 0.22);
-  const smallSize = Math.round(headerHeight * 0.2);
-  const rowY = topY + headerHeight * 0.12;
-
-  let out = `
-    <text x="${padding}" y="${topY + labelSize * 0.95}" fill="${theme.muted}" font-size="${labelSize}" font-family="${FONT}" font-weight="700">${now.year()}</text>
-    <rect x="${padding}" y="${rowY + labelSize * 0.55}" width="${dateChipW}" height="${chipHeight}" rx="${chipHeight / 2}" fill="${alpha(theme.panel, 0.92)}" stroke="${alpha(theme.accent2, 0.18)}" />
-    <text x="${padding + chipPadX}" y="${rowY + labelSize * 0.55 + chipHeight * 0.64}" fill="${theme.text}" font-size="${smallSize}" font-family="${FONT}" font-weight="700">${escapeXml(dateText)}</text>
-    <rect x="${padding}" y="${rowY + labelSize * 0.55 + chipHeight + Math.round(headerHeight * 0.08)}" width="${weekChipW}" height="${chipHeight}" rx="${chipHeight / 2}" fill="${alpha(theme.panel, 0.92)}" stroke="${alpha(theme.accent2, 0.18)}" />
-    <text x="${padding + weekChipW / 2}" y="${rowY + labelSize * 0.55 + chipHeight + Math.round(headerHeight * 0.08) + chipHeight * 0.64}" text-anchor="middle" fill="${theme.accent2}" font-size="${smallSize}" font-family="${FONT}" font-weight="700">${labels.week} ${now.week()}</text>
-  `;
-
-  if (cfg.showProgressRing) {
-    out += `
-      <circle cx="${ringCx}" cy="${ringCy}" r="${ringR}" fill="none" stroke="${alpha(theme.panel, 0.92)}" stroke-width="${ringR * 0.24}" />
-      <circle cx="${ringCx}" cy="${ringCy}" r="${ringR}" fill="none" stroke="${theme.accent}" stroke-width="${ringR * 0.24}" stroke-linecap="round" stroke-dasharray="${dash} ${circumference}" transform="rotate(-90 ${ringCx} ${ringCy})" />
-      <text x="${ringCx}" y="${ringCy + smallSize * 0.35}" text-anchor="middle" fill="${theme.text}" font-size="${smallSize}" font-family="${FONT}" font-weight="800">${stats.percentPassed}%</text>
-    `;
-  }
-
-  return out;
+function formatDateLine(now, labels, lang) {
+  return lang === 'ru'
+    ? `${labels.today}: ${now.date()} ${labels.months[now.month()].toLowerCase()}`
+    : `${labels.today}: ${labels.months[now.month()]} ${now.date()}`;
+}
+function formatLongToday(now, labels, lang) {
+  const wd = labels.weekdaysFull[(now.day() + 6) % 7];
+  return lang === 'ru'
+    ? `${wd}, ${now.date()} ${labels.months[now.month()].toLowerCase()}`
+    : `${wd}, ${labels.months[now.month()]} ${now.date()}`;
 }
 
-function renderMonth({ monthIndex, year, x, y, w, h, cfg, theme, labels, now, FONT }) {
-  const first = dayjs(`${year}-${String(monthIndex + 1).padStart(2, '0')}-01`);
-  const daysInMonth = first.daysInMonth();
-  const firstWeekday = (first.day() + 6) % 7;
-  const isCurrent = now.month() === monthIndex;
-  const emphasis = cfg.focusCurrentMonth && isCurrent ? 1.08 : 1;
-  const radius = Math.max(16, Math.round(w * 0.07));
-  const pad = Math.round(w * 0.055);
-  
-  const cols = 7;
-  const weekNumberCol = cfg.showWeekNumbers ? 1 : 0;
-  const innerW = w - pad * 2;
-  const cellW = innerW / (cols + weekNumberCol);
-  const rows = 6;
-  const gridTopOffset = cfg.showWeekdays ? h * 0.28 : h * 0.2;
-  const cellH = (h - gridTopOffset - h * 0.055) / rows;
+function renderBackground(cfg, theme, width, height) {
+  const overlayOpacity = cfg.opacity / 100;
+  const accents = `
+    <circle cx="${width * 0.83}" cy="${height * 0.18}" r="${width * 0.16}" fill="${alpha(theme.accent, 0.10)}"/>
+    <circle cx="${width * 0.22}" cy="${height * 0.78}" r="${width * 0.20}" fill="${alpha(theme.accent2, 0.07)}"/>`;
+  if (cfg.bgStyle === 'paper' || cfg.bgStyle === 'grain_light') {
+    const bgA = cfg.bgStyle === 'grain_light' ? '#f3f0ea' : theme.bg;
+    const bgB = cfg.bgStyle === 'grain_light' ? '#e7e1d8' : theme.panel;
+    return `
+      <defs>
+        <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0%" stop-color="${bgA}" />
+          <stop offset="100%" stop-color="${bgB}" />
+        </linearGradient>
+        <filter id="noise"><feTurbulence type="fractalNoise" baseFrequency="0.8" numOctaves="2" stitchTiles="stitch"/><feColorMatrix type="saturate" values="0"/><feComponentTransfer><feFuncA type="table" tableValues="0 0 .02 .05"/></feComponentTransfer></filter>
+      </defs>
+      <rect width="100%" height="100%" fill="url(#bg)"/>
+      <rect width="100%" height="100%" filter="url(#noise)" opacity="0.65"/>`;
+  }
+  if (cfg.bgStyle === 'glass') {
+    return `
+      <defs><radialGradient id="bg" cx="25%" cy="15%" r="85%"><stop offset="0%" stop-color="${alpha(theme.accent, 0.42)}"/><stop offset="35%" stop-color="${alpha(theme.bg, 0.95)}"/><stop offset="100%" stop-color="${theme.bg}"/></radialGradient></defs>
+      <rect width="100%" height="100%" fill="url(#bg)"/>
+      ${accents}`;
+  }
+  if (cfg.bgStyle === 'spotlight') {
+    return `
+      <defs><radialGradient id="bg" cx="50%" cy="20%" r="85%"><stop offset="0%" stop-color="${alpha(theme.accent2, 0.32)}"/><stop offset="20%" stop-color="${alpha(theme.accent, 0.15)}"/><stop offset="55%" stop-color="${alpha(theme.bg, 0.97)}"/><stop offset="100%" stop-color="${theme.bg}"/></radialGradient></defs>
+      <rect width="100%" height="100%" fill="url(#bg)"/>`;
+  }
+  if (cfg.bgStyle === 'waves') {
+    return `
+      <defs><linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="${theme.bg}"/><stop offset="100%" stop-color="${theme.panel}"/></linearGradient></defs>
+      <rect width="100%" height="100%" fill="url(#bg)"/>
+      <path d="M 0 ${height * 0.22} C ${width * 0.12} ${height * 0.18}, ${width * 0.28} ${height * 0.28}, ${width * 0.42} ${height * 0.24} S ${width * 0.74} ${height * 0.14}, ${width} ${height * 0.22}" fill="none" stroke="${alpha(theme.accent2, 0.16)}" stroke-width="${width * 0.01}"/>
+      <path d="M 0 ${height * 0.62} C ${width * 0.18} ${height * 0.56}, ${width * 0.34} ${height * 0.69}, ${width * 0.56} ${height * 0.64} S ${width * 0.82} ${height * 0.58}, ${width} ${height * 0.65}" fill="none" stroke="${alpha(theme.accent, 0.14)}" stroke-width="${width * 0.013}"/>`;
+  }
+  if (cfg.bgStyle === 'mesh') {
+    let lines='';
+    const step = Math.max(44, Math.round(width * 0.065));
+    for (let x = -height; x < width + height; x += step) lines += `<line x1="${x}" y1="0" x2="${x + height}" y2="${height}" stroke="${alpha(theme.accent2, 0.05)}"/>`;
+    for (let x = 0; x < width + height; x += step) lines += `<line x1="${x}" y1="0" x2="${x - height}" y2="${height}" stroke="${alpha(theme.accent, 0.035)}"/>`;
+    return `<rect width="100%" height="100%" fill="${theme.bg}"/>${lines}${accents}`;
+  }
+  if (cfg.bgStyle === 'bloom') {
+    return `
+      <defs>
+        <radialGradient id="b1" cx="20%" cy="18%" r="55%"><stop offset="0%" stop-color="${alpha(theme.accent2, 0.33)}"/><stop offset="100%" stop-color="${alpha(theme.bg, 0)}"/></radialGradient>
+        <radialGradient id="b2" cx="80%" cy="72%" r="50%"><stop offset="0%" stop-color="${alpha(theme.accent, 0.26)}"/><stop offset="100%" stop-color="${alpha(theme.bg, 0)}"/></radialGradient>
+      </defs>
+      <rect width="100%" height="100%" fill="${theme.bg}"/>
+      <rect width="100%" height="100%" fill="url(#b1)"/>
+      <rect width="100%" height="100%" fill="url(#b2)"/>`;
+  }
+  if (cfg.bgStyle === 'diagonal') {
+    let rays='';
+    const step = Math.max(26, Math.round(width * 0.03));
+    for (let i = -height; i < width; i += step) rays += `<line x1="${i}" y1="0" x2="${i + height * 0.5}" y2="${height}" stroke="${alpha(theme.accent, 0.03)}" stroke-width="${Math.max(1, width * 0.002)}"/>`;
+    return `<rect width="100%" height="100%" fill="${theme.bg}"/>${rays}${accents}`;
+  }
+  if (cfg.bgStyle === 'orbit') {
+    return `
+      <rect width="100%" height="100%" fill="${theme.bg}"/>
+      <ellipse cx="${width * 0.72}" cy="${height * 0.22}" rx="${width * 0.28}" ry="${width * 0.14}" fill="none" stroke="${alpha(theme.accent2, 0.08)}" stroke-width="${width * 0.008}"/>
+      <ellipse cx="${width * 0.3}" cy="${height * 0.74}" rx="${width * 0.26}" ry="${width * 0.1}" fill="none" stroke="${alpha(theme.accent, 0.06)}" stroke-width="${width * 0.012}"/>
+      ${accents}`;
+  }
+  if (cfg.bgStyle === 'velvet') {
+    return `
+      <defs><linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="${theme.bg}"/><stop offset="55%" stop-color="${alpha(theme.panel, 0.95)}"/><stop offset="100%" stop-color="${theme.bg}"/></linearGradient></defs>
+      <rect width="100%" height="100%" fill="url(#bg)"/>${accents}`;
+  }
+  if (cfg.bgStyle === 'noir') {
+    return `
+      <defs><radialGradient id="bg" cx="50%" cy="-10%" r="120%"><stop offset="0%" stop-color="${alpha(theme.accent, 0.22)}"/><stop offset="35%" stop-color="${alpha(theme.bg, 0.95)}"/><stop offset="100%" stop-color="${theme.bg}"/></radialGradient></defs>
+      <rect width="100%" height="100%" fill="url(#bg)"/>${accents}`;
+  }
+  return `
+    <defs><radialGradient id="bg" cx="15%" cy="10%" r="120%"><stop offset="0%" stop-color="${alpha(theme.accent2, 0.26)}"/><stop offset="20%" stop-color="${alpha(theme.accent, 0.18)}"/><stop offset="60%" stop-color="${alpha(theme.bg, 0.96)}"/><stop offset="100%" stop-color="${theme.bg}"/></radialGradient></defs>
+    <rect width="100%" height="100%" fill="url(#bg)"/>${accents}`;
+}
 
-  const titleSize = Math.min(Math.round(h * 0.105), Math.round(w * 0.13)) * emphasis;
-  const weekdaySize = Math.min(Math.round(cellW * 0.42), Math.round(h * 0.048));
-  const numberSize = Math.min(Math.round(cellW * 0.5), Math.round(cellH * 0.52)) * emphasis;
-  
-  const badgeW = Math.round(w * 0.2);
-  const badgeH = Math.round(h * 0.11);
-  const cardFill = isCurrent ? alpha(theme.panel, 0.98) : alpha(theme.panel, 0.65);
-  
-  let out = `
-    <rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${radius}" fill="${cardFill}" stroke="${isCurrent ? alpha(theme.accent2, 0.36) : alpha('#ffffff', 0.06)}" />
-    <text x="${x + pad}" y="${y + pad + titleSize * 0.75}" fill="${theme.text}" font-size="${titleSize}" font-family="${FONT}" font-weight="800">${labels.months[monthIndex]}</text>
+function getSafeFontStack(selectedFontFamily, pngSafeFont) {
+  const safe = `'DejaVu Sans','Noto Sans','Liberation Sans',Arial,sans-serif`;
+  return pngSafeFont ? safe : `'${selectedFontFamily}','DejaVu Sans','Noto Sans','Liberation Sans',Arial,sans-serif`;
+}
+
+function renderHeader(cfg, theme, labels, now, stats, width, padding, topY, FONT) {
+  const compact = cfg.monthLayout === 'list_1x12';
+  const titleSize = Math.round(width * (compact ? 0.053 : 0.065));
+  const subtitleSize = Math.round(width * (compact ? 0.028 : 0.033));
+  const chipWidth = Math.round(width * (compact ? 0.2 : 0.24));
+  const chipHeight = Math.round(width * (compact ? 0.07 : 0.076));
+  const ringR = Math.round(width * (compact ? 0.03 : 0.04));
+  const ringCx = width - padding - ringR * 1.2;
+  const ringCy = topY + titleSize * 1.2;
+  const circumference = Math.PI * 2 * ringR;
+  const dash = circumference * (stats.percentPassed / 100);
+  const dateText = formatDateLine(now, labels, cfg.lang);
+  return `
+    <text x="${padding}" y="${topY + titleSize}" fill="${theme.text}" font-size="${titleSize}" font-family="${FONT}" font-weight="900" letter-spacing="-0.03em">${now.year()}</text>
+    <text x="${padding}" y="${topY + titleSize + subtitleSize * 1.8}" fill="${theme.muted}" font-size="${subtitleSize}" font-family="${FONT}">${escapeXml(dateText)}</text>
+    <rect x="${padding}" y="${topY + titleSize + subtitleSize * 2.55}" width="${chipWidth}" height="${chipHeight}" rx="${chipHeight / 2}" fill="${alpha(theme.panel, 0.92)}" stroke="${alpha(theme.accent2, 0.22)}"/>
+    <text x="${padding + chipWidth / 2}" y="${topY + titleSize + subtitleSize * 2.55 + chipHeight * 0.66}" text-anchor="middle" fill="${theme.accent2}" font-size="${Math.round(width * (compact ? 0.024 : 0.026))}" font-family="${FONT}" font-weight="700">${labels.week} ${now.week()}</text>
+    ${cfg.showProgressRing ? `
+      <circle cx="${ringCx}" cy="${ringCy}" r="${ringR}" fill="none" stroke="${alpha(theme.panel, 0.92)}" stroke-width="${ringR * 0.28}" />
+      <circle cx="${ringCx}" cy="${ringCy}" r="${ringR}" fill="none" stroke="${theme.accent}" stroke-width="${ringR * 0.28}" stroke-linecap="round" stroke-dasharray="${dash} ${circumference}" transform="rotate(-90 ${ringCx} ${ringCy})" />
+      <text x="${ringCx}" y="${ringCy + width * 0.01}" text-anchor="middle" fill="${theme.text}" font-size="${Math.round(width * 0.022)}" font-family="${FONT}" font-weight="800">${stats.percentPassed}%</text>` : ''}
   `;
+}
 
-  if (cfg.monthBadges) {
-    out += `
-      <rect x="${x + w - pad - badgeW}" y="${y + pad * 0.6}" width="${badgeW}" height="${badgeH}" rx="${badgeH / 2}" fill="${isCurrent ? alpha(theme.accent, 0.18) : alpha('#ffffff', 0.05)}" />
-      <text x="${x + w - pad - badgeW / 2}" y="${y + pad * 0.6 + badgeH * 0.65}" text-anchor="middle" fill="${isCurrent ? theme.accent2 : theme.muted}" font-size="${Math.round(badgeH * 0.6)}" font-family="${FONT}" font-weight="700">${daysInMonth}</text>
-    `;
-  }
-
-  const weekdayY = y + h * 0.24;
-  const gridTop = y + gridTopOffset;
-  const startX = x + pad + (cfg.showWeekNumbers ? cellW : 0);
-
-  if (cfg.showWeekdays) {
-    if (cfg.showWeekNumbers) {
-      out += `<text x="${x + pad + cellW / 2}" y="${weekdayY}" text-anchor="middle" fill="${theme.muted}" font-size="${weekdaySize}" font-family="${FONT}">#</text>`;
-    }
-    labels.weekdays.forEach((wd, i) => {
-      const weekend = i >= 5;
-      out += `<text x="${startX + i * cellW + cellW / 2}" y="${weekdayY}" text-anchor="middle" fill="${weekend ? alpha(theme.weekend, 0.95) : theme.muted}" font-size="${weekdaySize}" font-family="${FONT}" font-weight="700">${wd}</text>`;
-    });
-  }
-
+function isRestDayFactory(cfg, year) {
   const productionHolidays = new Set([
     `${year}-01-01`, `${year}-01-02`, `${year}-01-03`, `${year}-01-04`, `${year}-01-05`, `${year}-01-06`, `${year}-01-07`, `${year}-01-08`,
     `${year}-02-23`, `${year}-03-08`, `${year}-05-01`, `${year}-05-09`, `${year}-06-12`, `${year}-11-04`
   ]);
-
-  const isRestDay = (date) => {
+  return (date) => {
     if (cfg.weekendMode === 'none') return false;
     const weekend = date.day() === 0 || date.day() === 6;
     if (cfg.weekendMode === 'production') return weekend || productionHolidays.has(date.format('YYYY-MM-DD'));
     return weekend;
   };
+}
 
+function renderMonthGrid({ monthIndex, year, x, y, w, h, cfg, theme, labels, now, FONT }) {
+  const first = dayjs(`${year}-${String(monthIndex + 1).padStart(2, '0')}-01`);
+  const daysInMonth = first.daysInMonth();
+  const firstWeekday = (first.day() + 6) % 7;
+  const isCurrent = now.month() === monthIndex;
+  const emphasis = cfg.focusCurrentMonth && isCurrent ? 1.08 : 1;
+  const radius = Math.max(16, Math.round(w * 0.08));
+  const pad = Math.round(w * 0.06);
+  const cols = 7;
+  const weekNumberCol = cfg.showWeekNumbers ? 1 : 0;
+  const innerW = w - pad * 2;
+  const cellW = innerW / (cols + weekNumberCol);
+  const rows = 6;
+  const gridTopOffset = cfg.showWeekdays ? h * 0.30 : h * 0.22;
+  const cellH = (h - gridTopOffset - h * 0.07) / rows;
+  const titleSize = Math.min(Math.round(h * 0.12), Math.round(w * 0.14)) * emphasis;
+  const weekdaySize = Math.min(Math.round(cellW * 0.5), Math.round(h * 0.06));
+  const numberSize = Math.min(Math.round(cellW * 0.6), Math.round(cellH * 0.6)) * emphasis;
+  const badgeW = Math.round(w * 0.2);
+  const badgeH = Math.round(h * 0.11);
+  const cardFill = isCurrent ? alpha(theme.panel, 0.98) : alpha(theme.panel, 0.65);
+  let out = `
+    <rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${radius}" fill="${cardFill}" stroke="${isCurrent ? alpha(theme.accent2, 0.36) : alpha('#ffffff', 0.06)}" />
+    <text x="${x + pad}" y="${y + pad + titleSize * 0.75}" fill="${theme.text}" font-size="${titleSize}" font-family="${FONT}" font-weight="800">${labels.months[monthIndex]}</text>`;
+  if (cfg.monthBadges) {
+    out += `
+      <rect x="${x + w - pad - badgeW}" y="${y + pad * 0.6}" width="${badgeW}" height="${badgeH}" rx="${badgeH / 2}" fill="${isCurrent ? alpha(theme.accent, 0.18) : alpha('#ffffff', 0.05)}" />
+      <text x="${x + w - pad - badgeW / 2}" y="${y + pad * 0.6 + badgeH * 0.65}" text-anchor="middle" fill="${isCurrent ? theme.accent2 : theme.muted}" font-size="${Math.round(badgeH * 0.56)}" font-family="${FONT}" font-weight="700">${daysInMonth}${cfg.lang === 'ru' ? 'д' : 'd'}</text>`;
+  }
+  const weekdayY = y + h * 0.24;
+  const gridTop = y + gridTopOffset;
+  const startX = x + pad + (cfg.showWeekNumbers ? cellW : 0);
+  if (cfg.showWeekdays) {
+    if (cfg.showWeekNumbers) out += `<text x="${x + pad + cellW / 2}" y="${weekdayY}" text-anchor="middle" fill="${theme.muted}" font-size="${weekdaySize}" font-family="${FONT}">#</text>`;
+    labels.weekdays.forEach((wd, i) => {
+      const weekend = i >= 5;
+      out += `<text x="${startX + i * cellW + cellW / 2}" y="${weekdayY}" text-anchor="middle" fill="${weekend ? alpha(theme.weekend, 0.95) : theme.muted}" font-size="${weekdaySize}" font-family="${FONT}" font-weight="700">${wd}</text>`;
+    });
+  }
+  const isRestDay = isRestDayFactory(cfg, year);
   const usedWeekRows = new Set();
   for (let day = 1; day <= daysInMonth; day++) {
     const index = firstWeekday + day - 1;
@@ -428,29 +387,32 @@ function renderMonth({ monthIndex, year, x, y, w, h, cfg, theme, labels, now, FO
     const isWeekend = isRestDay(date);
     const isPast = date.isBefore(now, 'day') && now.month() === monthIndex;
     const textColor = isToday ? theme.text : isWeekend ? theme.weekend : isPast ? alpha(theme.text, 0.6) : theme.text;
-
     if (isToday) {
-      if (cfg.style === 'outline') {
-        out += `<rect x="${cx - cellW * 0.45}" y="${cy - cellH * 0.6}" width="${cellW * 0.9}" height="${cellH * 0.8}" rx="${Math.min(cellW, cellH) * 0.2}" fill="none" stroke="${theme.accent}" stroke-width="${Math.max(1.5, w * 0.005)}"/>`;
-      } else {
-        out += `<rect x="${cx - cellW * 0.45}" y="${cy - cellH * 0.6}" width="${cellW * 0.9}" height="${cellH * 0.8}" rx="${Math.min(cellW, cellH) * 0.2}" fill="${alpha(theme.accent, cfg.style === 'numbers' ? 0.24 : 0.18)}" stroke="${alpha(theme.accent2, 0.34)}"/>`;
-      }
+      const rect = `<rect x="${cx - cellW * 0.45}" y="${cy - cellH * 0.6}" width="${cellW * 0.9}" height="${cellH * 0.8}" rx="${Math.min(cellW, cellH) * 0.2}"`;
+      out += cfg.style === 'outline'
+        ? `${rect} fill="none" stroke="${theme.accent}" stroke-width="${Math.max(1.5, w * 0.005)}"/>`
+        : `${rect} fill="${alpha(theme.accent, cfg.style === 'numbers' ? 0.24 : 0.18)}" stroke="${alpha(theme.accent2, 0.34)}"/>`;
     }
-
     if (cfg.style === 'dots') {
       const r = Math.min(cellW, cellH) * (isToday ? 0.18 : 0.12);
       out += `<circle cx="${cx}" cy="${cy - cellH * 0.2}" r="${r}" fill="${isToday ? theme.accent : isPast ? theme.accent2 : isWeekend ? alpha(theme.weekend, 0.9) : alpha(theme.text, 0.26)}"/>`;
       out += `<text x="${cx}" y="${cy + cellH * 0.3}" text-anchor="middle" fill="${textColor}" font-size="${Math.round(numberSize * 0.85)}" font-family="${FONT}" font-weight="700">${day}</text>`;
     } else if (cfg.style === 'focus') {
       out += `<text x="${cx}" y="${cy}" text-anchor="middle" fill="${textColor}" font-size="${Math.round(numberSize * (isToday ? 1.05 : 1))}" font-family="${FONT}" font-weight="${isToday || isCurrent ? 800 : 600}">${day}</text>`;
-      if (isCurrent && !isToday) {
-        out += `<line x1="${cx - cellW * 0.15}" y1="${cy + cellH * 0.15}" x2="${cx + cellW * 0.15}" y2="${cy + cellH * 0.15}" stroke="${alpha(theme.accent2, 0.35)}" stroke-linecap="round" stroke-width="2"/>`;
-      }
+      if (isCurrent && !isToday) out += `<line x1="${cx - cellW * 0.15}" y1="${cy + cellH * 0.15}" x2="${cx + cellW * 0.15}" y2="${cy + cellH * 0.15}" stroke="${alpha(theme.accent2, 0.35)}" stroke-linecap="round" stroke-width="2"/>`;
+    } else if (cfg.style === 'capsule') {
+      if (isToday || isWeekend) out += `<rect x="${cx - cellW * 0.38}" y="${cy - cellH * 0.48}" width="${cellW * 0.76}" height="${cellH * 0.56}" rx="${cellH * 0.28}" fill="${isToday ? alpha(theme.accent, 0.25) : alpha(theme.weekend, 0.12)}"/>`;
+      out += `<text x="${cx}" y="${cy}" text-anchor="middle" fill="${textColor}" font-size="${numberSize}" font-family="${FONT}" font-weight="${isToday ? 800 : 600}">${day}</text>`;
+    } else if (cfg.style === 'ring') {
+      if (isToday) out += `<circle cx="${cx}" cy="${cy - cellH * 0.2}" r="${Math.min(cellW, cellH) * 0.28}" fill="none" stroke="${theme.accent}" stroke-width="${Math.max(1.5, w * 0.005)}"/>`;
+      out += `<text x="${cx}" y="${cy}" text-anchor="middle" fill="${textColor}" font-size="${numberSize}" font-family="${FONT}" font-weight="${isToday ? 800 : 600}">${day}</text>`;
+    } else if (cfg.style === 'micro') {
+      out += `<circle cx="${cx}" cy="${cy - cellH * 0.18}" r="${Math.max(1.2, Math.min(cellW, cellH) * 0.08)}" fill="${isToday ? theme.accent : isWeekend ? theme.weekend : alpha(theme.text, 0.24)}"/>`;
+      out += `<text x="${cx}" y="${cy + cellH * 0.24}" text-anchor="middle" fill="${textColor}" font-size="${Math.round(numberSize * 0.72)}" font-family="${FONT}" font-weight="700">${day}</text>`;
     } else {
       out += `<text x="${cx}" y="${cy}" text-anchor="middle" fill="${textColor}" font-size="${numberSize}" font-family="${FONT}" font-weight="${isToday ? 800 : 600}">${day}</text>`;
     }
   }
-
   if (cfg.showWeekNumbers) {
     [...usedWeekRows].forEach((row) => {
       const date = first.add(row * 7 - firstWeekday, 'day');
@@ -459,7 +421,57 @@ function renderMonth({ monthIndex, year, x, y, w, h, cfg, theme, labels, now, FO
       out += `<text x="${wx}" y="${wy}" text-anchor="middle" fill="${alpha(theme.muted, 0.7)}" font-size="${Math.round(numberSize * 0.7)}" font-family="${FONT}">${dayjs(date).week()}</text>`;
     });
   }
+  return out;
+}
 
+function renderMonthListRow({ monthIndex, year, x, y, w, h, cfg, theme, labels, now, FONT }) {
+  const first = dayjs(`${year}-${String(monthIndex + 1).padStart(2, '0')}-01`);
+  const daysInMonth = first.daysInMonth();
+  const firstWeekday = (first.day() + 6) % 7;
+  const isCurrent = now.month() === monthIndex;
+  const isRestDay = isRestDayFactory(cfg, year);
+  const radius = Math.max(16, Math.round(h * 0.28));
+  const padX = Math.round(w * 0.03);
+  const nameW = Math.round(w * 0.18);
+  const badgeW = cfg.monthBadges ? Math.round(w * 0.07) : 0;
+  const innerX = x + padX + nameW;
+  const innerW = w - padX * 2 - nameW - badgeW;
+  const cols = 7;
+  const rows = 6;
+  const topPad = cfg.showWeekdays ? h * 0.18 : h * 0.10;
+  const cellW = innerW / cols;
+  const cellH = (h - topPad - h * 0.12) / rows;
+  const monthTitleSize = Math.round(h * 0.2);
+  const weekdaySize = Math.max(10, Math.round(h * 0.11));
+  const numberSize = Math.max(11, Math.round(Math.min(cellW, cellH) * 0.45));
+  const gridTop = y + topPad + (cfg.showWeekdays ? h * 0.08 : 0);
+  let out = `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${radius}" fill="${isCurrent ? alpha(theme.panel, 0.95) : alpha(theme.panel, 0.72)}" stroke="${isCurrent ? alpha(theme.accent2, 0.34) : alpha('#ffffff', 0.05)}"/>`;
+  out += `<text x="${x + padX}" y="${y + h * 0.28}" fill="${theme.text}" font-size="${monthTitleSize}" font-family="${FONT}" font-weight="800">${labels.months[monthIndex]}</text>`;
+  if (cfg.monthBadges) {
+    out += `<rect x="${x + w - padX - badgeW}" y="${y + h * 0.18}" width="${badgeW}" height="${h * 0.22}" rx="${h * 0.11}" fill="${isCurrent ? alpha(theme.accent, 0.18) : alpha('#ffffff', 0.05)}"/>`;
+    out += `<text x="${x + w - padX - badgeW / 2}" y="${y + h * 0.33}" text-anchor="middle" fill="${isCurrent ? theme.accent2 : theme.muted}" font-size="${Math.round(h * 0.11)}" font-family="${FONT}" font-weight="700">${daysInMonth}</text>`;
+  }
+  if (cfg.showWeekdays) {
+    labels.weekdays.forEach((wd, i) => {
+      const tx = innerX + i * cellW + cellW / 2;
+      out += `<text x="${tx}" y="${y + h * 0.23}" text-anchor="middle" fill="${i >= 5 ? alpha(theme.weekend, 0.95) : theme.muted}" font-size="${weekdaySize}" font-family="${FONT}" font-weight="700">${wd}</text>`;
+    });
+  }
+  for (let day = 1; day <= daysInMonth; day++) {
+    const index = firstWeekday + day - 1;
+    const col = index % 7;
+    const row = Math.floor(index / 7);
+    const date = dayjs(`${year}-${String(monthIndex + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`);
+    const cx = innerX + col * cellW + cellW / 2;
+    const cy = gridTop + row * cellH + cellH * 0.72;
+    const isToday = cfg.accentToday && date.isSame(now, 'day');
+    const isWeekend = isRestDay(date);
+    const isPast = date.isBefore(now, 'day') && now.month() === monthIndex;
+    const textColor = isToday ? theme.text : isWeekend ? theme.weekend : isPast ? alpha(theme.text, 0.64) : theme.text;
+    if (isToday) out += `<rect x="${cx - cellW * 0.34}" y="${cy - cellH * 0.58}" width="${cellW * 0.68}" height="${cellH * 0.72}" rx="${Math.min(cellW, cellH) * 0.22}" fill="${alpha(theme.accent, 0.24)}" stroke="${alpha(theme.accent2, 0.28)}"/>`;
+    if (cfg.style === 'dots' || cfg.style === 'micro') out += `<circle cx="${cx}" cy="${cy - cellH * 0.24}" r="${Math.max(1.2, Math.min(cellW, cellH) * 0.08)}" fill="${isToday ? theme.accent : isWeekend ? theme.weekend : alpha(theme.text, 0.22)}"/>`;
+    out += `<text x="${cx}" y="${cy + (cfg.style === 'dots' || cfg.style === 'micro' ? cellH * 0.18 : 0)}" text-anchor="middle" fill="${textColor}" font-size="${numberSize}" font-family="${FONT}" font-weight="${isToday ? 800 : 600}">${day}</text>`;
+  }
   return out;
 }
 
@@ -467,30 +479,24 @@ function renderFooter(cfg, theme, labels, now, stats, width, footerBox, FONT) {
   const { x, y, w, h } = footerBox;
   const pad = Math.round(w * 0.04);
   const base = `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${Math.round(w * 0.05)}" fill="${alpha(theme.panel, 0.82)}" stroke="${alpha('#ffffff', 0.06)}"/>`;
-  const textSize = Math.round(h * 0.2);
-  const subSize = Math.round(h * 0.14);
-
+  const textSize = Math.round(h * 0.22);
+  const subSize = Math.round(h * 0.15);
   if (cfg.footer === 'quote') {
     const lines = wrap(cfg.note || randomQuote(cfg.lang, now.year()), 34);
     return base + lines.map((line, i) => `<text x="${x + w / 2}" y="${y + h * 0.38 + i * subSize * 1.45}" text-anchor="middle" fill="${theme.text}" font-size="${subSize}" font-family="${FONT}" font-weight="700">${escapeXml(line)}</text>`).join('');
   }
   if (cfg.footer === 'progress_bar') {
-    const barX = x + pad;
-    const barY = y + h * 0.55;
-    const barW = w - pad * 2;
-    const barH = h * 0.12;
+    const barX = x + pad; const barY = y + h * 0.55; const barW = w - pad * 2; const barH = h * 0.12;
     return base + `
       <text x="${x + pad}" y="${y + h * 0.32}" fill="${theme.text}" font-size="${textSize}" font-family="${FONT}" font-weight="800">${stats.percentPassed}% ${labels.passed}</text>
       <rect x="${barX}" y="${barY}" width="${barW}" height="${barH}" rx="${barH / 2}" fill="${alpha(theme.bg, 0.7)}" />
-      <rect x="${barX}" y="${barY}" width="${barW * stats.percentPassed / 100}" height="${barH}" rx="${barH / 2}" fill="${theme.accent}" />
-    `;
+      <rect x="${barX}" y="${barY}" width="${barW * stats.percentPassed / 100}" height="${barH}" rx="${barH / 2}" fill="${theme.accent}" />`;
   }
   if (cfg.footer === 'today_card') {
-    const dateLabel = cfg.lang === 'ru' ? now.format('dddd, D MMMM') : now.format('dddd, MMMM D');
+    const dateLabel = formatLongToday(now, labels, cfg.lang);
     return base + `
       <text x="${x + pad}" y="${y + h * 0.34}" fill="${theme.accent2}" font-size="${subSize}" font-family="${FONT}" font-weight="700">${labels.today}</text>
-      <text x="${x + pad}" y="${y + h * 0.68}" fill="${theme.text}" font-size="${textSize}" font-family="${FONT}" font-weight="800">${escapeXml(dateLabel)}</text>
-    `;
+      <text x="${x + pad}" y="${y + h * 0.68}" fill="${theme.text}" font-size="${textSize}" font-family="${FONT}" font-weight="800">${escapeXml(dateLabel)}</text>`;
   }
   if (cfg.footer === 'custom_note' && cfg.note) {
     const lines = wrap(cfg.note, 36).slice(0, 2);
@@ -498,8 +504,7 @@ function renderFooter(cfg, theme, labels, now, stats, width, footerBox, FONT) {
   }
   return base + `
     <text x="${x + pad}" y="${y + h * 0.36}" fill="${theme.text}" font-size="${textSize}" font-family="${FONT}" font-weight="800">${stats.daysLeft} ${labels.daysLeft}</text>
-    <text x="${x + pad}" y="${y + h * 0.66}" fill="${theme.muted}" font-size="${subSize}" font-family="${FONT}">${stats.percentPassed}% ${labels.passed}</text>
-  `;
+    <text x="${x + pad}" y="${y + h * 0.66}" fill="${theme.muted}" font-size="${subSize}" font-family="${FONT}">${stats.percentPassed}% ${labels.passed}</text>`;
 }
 
 function renderSvg(cfg) {
@@ -508,63 +513,57 @@ function renderSvg(cfg) {
   const now = zonedNow(cfg.timezone);
   const stats = yearStats(now);
   const { width, height } = cfg;
-  const sidePadding = Math.round(width * 0.03);
-  const safe = getSafeInsets(cfg, width, height);
-  const innerTop = safe.top;
-  const innerBottom = height - safe.bottom;
-  const headerHeight = Math.round(height * 0.095);
-  const footerHeight = Math.round(height * 0.08);
-  const contentTop = innerTop + headerHeight + Math.round(height * 0.012);
-  const contentBottom = innerBottom - footerHeight - Math.round(height * 0.014);
+  const padding = Math.round(width * 0.05);
+  const topArea = Math.round(height * (cfg.monthLayout === 'list_1x12' ? 0.12 : cfg.calendarSize === 'compact' ? 0.11 : 0.14));
+  const footerArea = Math.round(height * (cfg.monthLayout === 'list_1x12' ? 0.09 : cfg.calendarSize === 'large' ? 0.1 : 0.11));
+  const contentTop = padding + topArea;
+  const contentBottom = height - padding - footerArea;
   const contentH = contentBottom - contentTop;
 
-  // --- ЛОГИКА ВСТАВКИ ШРИФТА ---
   const selectedFontDef = FONTS[cfg.font] || FONTS.inter;
   const b64Font = fontCache[cfg.font];
-  const FONT_FAMILY = b64Font ? `'${selectedFontDef.family}', sans-serif` : `${selectedFontDef.family}, system-ui, sans-serif`;
-  const fontDefs = b64Font ? `
-    <style>
-      @font-face {
-        font-family: '${selectedFontDef.family}';
-        src: url(data:font/truetype;base64,${b64Font}) format('truetype');
-      }
-    </style>
-  ` : '';
+  const FONT_FAMILY = getSafeFontStack(selectedFontDef.family, cfg.pngSafeFont);
+  const fontDefs = b64Font && !cfg.pngSafeFont ? `<style>@font-face { font-family: '${selectedFontDef.family}'; src: url(data:font/truetype;base64,${b64Font}) format('truetype'); }</style>` : '';
 
   let cols = 3, rows = 4;
   if (cfg.monthLayout === 'grid_4x3') { cols = 4; rows = 3; }
   if (cfg.monthLayout === 'list_1x12') { cols = 1; rows = 12; }
-
-  const gap = Math.round(width * (cfg.monthLayout === 'list_1x12' ? 0.026 : 0.018));
-  const monthW = (width - sidePadding * 2 - gap * (cols - 1)) / cols;
+  const gap = Math.round(width * (cfg.monthLayout === 'list_1x12' ? 0.018 : 0.02));
+  const monthW = (width - padding * 2 - gap * (cols - 1)) / cols;
   const monthH = (contentH - gap * (rows - 1)) / rows;
 
   let monthsSvg = '';
   for (let i = 0; i < 12; i++) {
     const col = i % cols;
     const row = Math.floor(i / cols);
-    const x = sidePadding + col * (monthW + gap);
+    const x = padding + col * (monthW + gap);
     const y = contentTop + row * (monthH + gap);
-    monthsSvg += renderMonth({ monthIndex: i, year: now.year(), x, y, w: monthW, h: monthH, cfg, theme, labels, now, FONT: FONT_FAMILY });
+    monthsSvg += cfg.monthLayout === 'list_1x12'
+      ? renderMonthListRow({ monthIndex: i, year: now.year(), x, y, w: monthW, h: monthH, cfg, theme, labels, now, FONT: FONT_FAMILY })
+      : renderMonthGrid({ monthIndex: i, year: now.year(), x, y, w: monthW, h: monthH, cfg, theme, labels, now, FONT: FONT_FAMILY });
   }
 
   let quarterLines = '';
-  if (cfg.quarterDividers && cfg.monthLayout !== 'list_1x12') {
-    if (cols === 3 && rows === 4) {
+  if (cfg.quarterDividers) {
+    if (cfg.monthLayout === 'list_1x12') {
+      [3, 6, 9].forEach((idx) => {
+        const ly = contentTop + idx * monthH + (idx - 0.5) * gap;
+        quarterLines += `<line x1="${padding}" y1="${ly}" x2="${width - padding}" y2="${ly}" stroke="${alpha(theme.accent2, 0.12)}" stroke-dasharray="12 12" />`;
+      });
+    } else if (cols === 3 && rows === 4) {
       for (let r = 1; r < rows; r++) {
         const ly = contentTop + r * monthH + (r - 0.5) * gap;
-        quarterLines += `<line x1="${sidePadding}" y1="${ly}" x2="${width - sidePadding}" y2="${ly}" stroke="${alpha(theme.accent2, 0.12)}" stroke-dasharray="10 12" />`;
+        quarterLines += `<line x1="${padding}" y1="${ly}" x2="${width - padding}" y2="${ly}" stroke="${alpha(theme.accent2, 0.12)}" stroke-dasharray="10 12" />`;
       }
     }
   }
 
-  const footerBox = { x: sidePadding, y: innerBottom - footerHeight, w: width - sidePadding * 2, h: footerHeight };
-
+  const footerBox = { x: padding, y: height - padding - footerArea + Math.round(footerArea * 0.06), w: width - padding * 2, h: Math.round(footerArea * 0.84) };
   return `<?xml version="1.0" encoding="UTF-8"?>
   <svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">
     <defs>${fontDefs}</defs>
     ${renderBackground(cfg, theme, width, height)}
-    ${renderHeader(cfg, theme, labels, now, stats, width, sidePadding, innerTop, headerHeight, FONT_FAMILY)}
+    ${renderHeader(cfg, theme, labels, now, stats, width, padding, padding, FONT_FAMILY)}
     ${quarterLines}
     ${monthsSvg}
     ${renderFooter(cfg, theme, labels, now, stats, width, footerBox, FONT_FAMILY)}
@@ -572,58 +571,23 @@ function renderSvg(cfg) {
 }
 
 app.use(express.static(path.join(__dirname, 'public')));
-
 app.get('/api/options', (req, res) => {
-  res.json({ 
-    presets: PHONE_PRESETS, 
-    themes: THEMES, 
-    bgStyles: BG_STYLES, 
-    fonts: Object.fromEntries(Object.entries(FONTS).map(([k,v]) => [k, v.name])) 
-  });
+  res.json({ presets: PHONE_PRESETS, themes: THEMES, bgStyles: BG_STYLES, fonts: Object.fromEntries(Object.entries(FONTS).map(([k, v]) => [k, v.name])) });
 });
-
 app.get('/wallpaper.svg', (req, res) => {
   const cfg = getConfig(req.query);
   res.type('image/svg+xml').send(renderSvg(cfg));
 });
-
 app.get('/wallpaper.png', async (req, res) => {
   try {
-    const cfg = getConfig(req.query);
+    const cfg = getConfig({ ...req.query, __target: 'png' });
     const svg = renderSvg(cfg);
-    let png;
-
-    if (Resvg) {
-      const fontFiles = Object.values(FONTS)
-        .map((fontDef) => path.join(fontsDir, fontDef.file))
-        .filter((fontPath) => fs.existsSync(fontPath));
-
-      const selectedFontDef = FONTS[cfg.font] || FONTS.inter;
-      const resvg = new Resvg(svg, {
-        fitTo: { mode: 'width', value: cfg.width },
-        background: 'rgba(0,0,0,0)',
-        font: {
-          loadSystemFonts: true,
-          defaultFontFamily: selectedFontDef.family,
-          fontFiles,
-        },
-      });
-      png = Buffer.from(resvg.render().asPng());
-    } else {
-      png = await sharp(Buffer.from(svg)).png().toBuffer();
-    }
-
+    const png = await sharp(Buffer.from(svg)).png().toBuffer();
     res.setHeader('Content-Type', 'image/png');
     res.send(png);
   } catch (err) {
     res.status(500).json({ error: 'ОШИБКА ГЕНЕРАЦИИ ОБОЕВ', details: err.message });
   }
 });
-
-app.get('/', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'index.html'));
-});
-
-app.listen(PORT, () => {
-  console.log(`Сервер запущен на http://localhost:${PORT}`);
-});
+app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'public', 'index.html')));
+app.listen(PORT, () => console.log(`Сервер запущен на http://localhost:${PORT}`));
