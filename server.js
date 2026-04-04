@@ -1,6 +1,7 @@
 const express = require('express');
 const path = require('path');
-const sharp = require('sharp');
+let sharp = null;
+try { sharp = require('sharp'); } catch (_) {}
 const { Resvg } = require('@resvg/resvg-js');
 const dayjs = require('dayjs');
 const utc = require('dayjs/plugin/utc');
@@ -224,19 +225,24 @@ app.get('/wallpaper.png', async (req, res) => {
     const allFontBuffers = fontBuffers.length ? fontBuffers : (defaultFontBuffer ? [defaultFontBuffer] : []);
 
     let png;
-    try {
-      png = await sharp(Buffer.from(svg), { density: 320 }).png().toBuffer();
-    } catch (sharpErr) {
-      console.error('Sharp SVG render error, falling back to Resvg:', sharpErr);
+    if (sharp) {
+      try {
+        png = await sharp(Buffer.from(svg), { density: 320 }).png().toBuffer();
+      } catch (sharpErr) {
+        console.error('Sharp SVG render error, switching to Resvg:', sharpErr);
+      }
+    }
+
+    if (!png) {
       const resvg = new Resvg(svg, {
         fitTo: { mode: 'original' },
         font: {
           fontBuffers: allFontBuffers,
-          loadSystemFonts: true,
+          loadSystemFonts: false,
           defaultFontFamily: 'Arial',
         }
       });
-      png = resvg.render().asPng();
+      png = Buffer.from(resvg.render().asPng());
     }
 
     if (pngCache.size < 1000) pngCache.set(cacheKey, png);
