@@ -514,6 +514,7 @@ function renderSvg(cfg) {
   const footerHeight = Math.round(height * 0.08);
   const contentTop = innerTop + headerHeight + Math.round(height * 0.012);
   const contentBottom = innerBottom - footerHeight - Math.round(height * 0.014);
+  const contentH = contentBottom - contentTop;
 
   // --- ЛОГИКА ВСТАВКИ ШРИФТА ---
   const selectedFontDef = FONTS[cfg.font] || FONTS.inter;
