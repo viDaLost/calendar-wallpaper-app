@@ -64,7 +64,7 @@
     input,select,button,textarea{font:inherit}
     input[type="text"], input[type="number"], select, textarea{
       width:100%;appearance:none;border:none;outline:none;
-      border-radius:14px;padding:12px 14px;background:var(--panel2);color:var(--text); /* Сделал поля чуть компактнее */
+      border-radius:14px;padding:12px 14px;background:var(--panel2);color:var(--text); 
       border:1px solid rgba(255,255,255,.07);box-shadow:inset 0 1px 0 rgba(255,255,255,.03)
     }
     select{background-image:linear-gradient(45deg, transparent 50%, rgba(255,255,255,.7) 50%),linear-gradient(135deg, rgba(255,255,255,.7) 50%, transparent 50%);background-position:calc(100% - 22px) calc(50% - 3px),calc(100% - 16px) calc(50% - 3px);background-size:6px 6px,6px 6px;background-repeat:no-repeat;padding-right:34px}
@@ -250,6 +250,7 @@
           <button class="primary" id="downloadBtn">Скачать обои</button>
           <button class="ok" id="savePresetBtn">Сохранить пресет</button>
           <button class="ghost" id="openPngBtn">Открыть PNG</button>
+          <button class="ghost" id="openSvgBtn">Открыть SVG</button>
           <button class="ghost" id="copyLinkBtn">Скопировать ссылку</button>
           <button class="ghost" id="randomBtn">Случайный стиль</button>
           <button class="ghost" id="resetBtn">Сбросить</button>
@@ -372,11 +373,14 @@
     function updatePreview(push = true){
       const q = paramsFromForm();
       const png = `${location.origin}/wallpaper.png?${q.toString()}`;
+      const svg = `${location.origin}/wallpaper.svg?${q.toString()}`;
       const page = `${location.origin}/?${q.toString()}`;
       preview.src = `${png}&_ts=${Date.now()}`;
       if(push) history.replaceState({}, '', page);
 
       document.getElementById('openPngBtn').onclick = () => window.open(png, '_blank');
+      document.getElementById('openSvgBtn').onclick = () => window.open(svg, '_blank');
+      
       document.getElementById('downloadBtn').onclick = () => {
         const a = document.createElement('a');
         a.href = png;
