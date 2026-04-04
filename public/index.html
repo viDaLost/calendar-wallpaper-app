@@ -42,8 +42,21 @@
     .section-head{display:flex;justify-content:space-between;align-items:center;gap:10px;margin:4px 0 12px}
     .section-title{font-size:13px;letter-spacing:.16em;text-transform:uppercase;color:var(--muted)}
     .tiny{font-size:12px;color:var(--muted)}
-    .group{padding:12px;border:1px solid var(--line);background:rgba(255,255,255,.025);border-radius:20px;margin-bottom:10px}
-    .group-title{margin:0 0 10px;font-size:14px;color:#fff;font-weight:700}
+    
+    /* Сворачиваемые блоки (Аккордеон) */
+    details.group {
+      padding:12px; border:1px solid var(--line); background:rgba(255,255,255,.025); border-radius:20px; margin-bottom:10px;
+    }
+    details.group > summary {
+      margin:0; font-size:15px; color:#fff; font-weight:700; cursor:pointer; list-style:none; display:flex; justify-content:space-between; align-items:center; user-select:none;
+    }
+    details.group > summary::-webkit-details-marker { display:none; }
+    details.group > summary::after {
+      content: "▼"; font-size:12px; color:var(--muted); transition: transform 0.2s;
+    }
+    details.group[open] > summary::after { transform: rotate(180deg); }
+    details.group[open] > summary { margin-bottom:12px; }
+
     .grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
     .field{display:flex;flex-direction:column;gap:6px}
     .field.full{grid-column:1/-1}
@@ -51,21 +64,21 @@
     input,select,button,textarea{font:inherit}
     input[type="text"], input[type="number"], select, textarea{
       width:100%;appearance:none;border:none;outline:none;
-      border-radius:18px;padding:14px 16px;background:var(--panel2);color:var(--text);
+      border-radius:14px;padding:12px 14px;background:var(--panel2);color:var(--text); /* Сделал поля чуть компактнее */
       border:1px solid rgba(255,255,255,.07);box-shadow:inset 0 1px 0 rgba(255,255,255,.03)
     }
     select{background-image:linear-gradient(45deg, transparent 50%, rgba(255,255,255,.7) 50%),linear-gradient(135deg, rgba(255,255,255,.7) 50%, transparent 50%);background-position:calc(100% - 22px) calc(50% - 3px),calc(100% - 16px) calc(50% - 3px);background-size:6px 6px,6px 6px;background-repeat:no-repeat;padding-right:34px}
     textarea{min-height:82px;resize:vertical}
     .toggle-grid{display:grid;grid-template-columns:1fr;gap:8px}
-    .toggle{display:flex;align-items:center;gap:12px;padding:14px 16px;border-radius:18px;background:var(--panel2);border:1px solid rgba(255,255,255,.07);cursor:pointer}
+    .toggle{display:flex;align-items:center;gap:12px;padding:12px 14px;border-radius:14px;background:var(--panel2);border:1px solid rgba(255,255,255,.07);cursor:pointer}
     .toggle input{display:none}
-    .switch{width:26px;height:26px;border-radius:50%;background:#f4f4f4;box-shadow:inset 0 1px 2px rgba(0,0,0,.15);flex:none;position:relative}
+    .switch{width:24px;height:24px;border-radius:50%;background:#f4f4f4;box-shadow:inset 0 1px 2px rgba(0,0,0,.15);flex:none;position:relative}
     .toggle input:checked + .switch{background:#1e90ff}
-    .toggle input:checked + .switch:after{content:"✓";position:absolute;inset:0;display:grid;place-items:center;color:#fff;font-size:18px;font-weight:900}
-    .toggle .t-main{font-size:15px}
-    .toggle .t-sub{font-size:12px;color:var(--muted);margin-top:2px}
+    .toggle input:checked + .switch:after{content:"✓";position:absolute;inset:0;display:grid;place-items:center;color:#fff;font-size:16px;font-weight:900}
+    .toggle .t-main{font-size:14px}
+    .toggle .t-sub{font-size:11px;color:var(--muted);margin-top:2px}
     .actions{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px}
-    button{width:100%;border:none;border-radius:18px;padding:15px 16px;color:#fff;background:rgba(255,255,255,.06);cursor:pointer;transition:.18s transform ease,.18s opacity ease}
+    button{width:100%;border:none;border-radius:16px;padding:14px 16px;color:#fff;background:rgba(255,255,255,.06);cursor:pointer;transition:.18s transform ease,.18s opacity ease}
     button:hover{transform:translateY(-1px)}
     .primary{background:linear-gradient(135deg,#ff9832,#ff692f);font-weight:800}
     .ghost{background:rgba(255,255,255,.05)}
@@ -106,24 +119,18 @@
   <div class="app">
     <section class="hero">
       <h1>Wallpaper Calendar Pro v2</h1>
-      <p>Улучшенный генератор обоев-календарей для iPhone: больше пресетов размеров, новые фоны, удобное мобильное меню, сохранение пресетов, недели, кварталы, заметка на обоях и отдельная инструкция для установки на экран блокировки.</p>
-      <div class="hero-row">
-        <div class="pill">Только iPhone</div>
-        <div class="pill">PNG и SVG</div>
-        <div class="pill">Сохранение пресетов</div>
-        <div class="pill">Уникальные режимы: week numbers, quarter dividers, custom note</div>
-      </div>
+      <p>Сгенерируй идеальные обои-календарь для своего смартфона. Улучшенная читаемость шрифтов, удобное меню настроек и полная адаптация под любые экраны.</p>
     </section>
 
     <div class="layout">
       <aside class="panel controls">
         <div class="section-head">
           <div class="section-title">Настройки</div>
-          <div class="tiny">v2 mobile UI</div>
+          <div class="tiny">Интерфейс v2</div>
         </div>
 
-        <div class="group">
-          <div class="group-title">1. Устройство и вид</div>
+        <details class="group" open>
+          <summary>1. Устройство и вид</summary>
           <div class="grid">
             <div class="field full">
               <label for="model">Размер iPhone</label>
@@ -132,10 +139,10 @@
             <div class="field">
               <label for="style">Стиль календаря</label>
               <select id="style">
-                <option value="numbers">Numbers</option>
-                <option value="dots">Dots + numbers</option>
-                <option value="outline">Outline today</option>
-                <option value="focus">Month focus</option>
+                <option value="numbers">Только цифры</option>
+                <option value="dots">С точками</option>
+                <option value="outline">Контур сегодня</option>
+                <option value="focus">Акцент на месяце</option>
               </select>
             </div>
             <div class="field">
@@ -151,19 +158,19 @@
               <select id="calendar_size">
                 <option value="balanced">Сбалансированный</option>
                 <option value="compact">Компактный</option>
-                <option value="large">Большой</option>
+                <option value="large">Крупный</option>
               </select>
             </div>
             <div class="field">
               <label for="month_layout">Сетка месяцев</label>
               <select id="month_layout">
-                <option value="grid_3x4">3 × 4</option>
-                <option value="grid_4x3">4 × 3</option>
-                <option value="list_1x12">1 × 12</option>
+                <option value="grid_3x4">3 колонки × 4 ряда</option>
+                <option value="grid_4x3">4 колонки × 3 ряда</option>
+                <option value="list_1x12">1 колонка (список)</option>
               </select>
             </div>
             <div class="field">
-              <label for="opacity">Светлый overlay</label>
+              <label for="opacity">Светлый слой (наложение)</label>
               <select id="opacity">
                 <option value="0">0%</option>
                 <option value="4">4%</option>
@@ -175,28 +182,28 @@
               </select>
             </div>
             <div class="field">
-              <label for="weekend_mode">Выходные</label>
+              <label for="weekend_mode">Выходные дни</label>
               <select id="weekend_mode">
-                <option value="weekends_only">Только выходные</option>
-                <option value="production">RU праздники + выходные</option>
+                <option value="weekends_only">Только Сб и Вс</option>
+                <option value="production">Праздники РФ + выходные</option>
                 <option value="none">Не выделять</option>
               </select>
             </div>
           </div>
           <div class="grid" id="customSizeWrap" style="margin-top:10px">
             <div class="field">
-              <label for="width">Ширина</label>
+              <label for="width">Ширина (px)</label>
               <input id="width" type="number" min="320" value="1179" />
             </div>
             <div class="field">
-              <label for="height">Высота</label>
+              <label for="height">Высота (px)</label>
               <input id="height" type="number" min="568" value="2556" />
             </div>
           </div>
-        </div>
+        </details>
 
-        <div class="group">
-          <div class="group-title">2. Язык и инфо-блоки</div>
+        <details class="group">
+          <summary>2. Язык и инфо-блоки</summary>
           <div class="grid">
             <div class="field">
               <label for="lang">Язык</label>
@@ -216,50 +223,48 @@
                 <option value="progress_bar">Прогресс-бар года</option>
                 <option value="today_card">Карточка сегодняшнего дня</option>
                 <option value="quote">Мотивационная цитата</option>
-                <option value="custom_note">Моя заметка</option>
+                <option value="custom_note">Своя заметка</option>
               </select>
             </div>
             <div class="field full">
-              <label for="note">Заметка / подпись на обоях</label>
+              <label for="note">Текст своей заметки</label>
               <textarea id="note" placeholder="Например: Фокус месяца — дисциплина и спокойный темп"></textarea>
             </div>
           </div>
-        </div>
+        </details>
 
-        <div class="group">
-          <div class="group-title">3. Уникальные функции</div>
+        <details class="group">
+          <summary>3. Уникальные функции</summary>
           <div class="toggle-grid">
-            <label class="toggle"><input type="checkbox" id="show_weekdays" checked><span class="switch"></span><div><div class="t-main">Подписи дней недели</div><div class="t-sub">Улучшенное чтение сетки</div></div></label>
-            <label class="toggle"><input type="checkbox" id="accent_today" checked><span class="switch"></span><div><div class="t-main">Выделять сегодня</div><div class="t-sub">Отдельная карточка/рамка текущего дня</div></div></label>
-            <label class="toggle"><input type="checkbox" id="show_progress_ring" checked><span class="switch"></span><div><div class="t-main">Верхний progress ring</div><div class="t-sub">Процент пройденного года</div></div></label>
-            <label class="toggle"><input type="checkbox" id="show_week_numbers"><span class="switch"></span><div><div class="t-main">Номера недель</div><div class="t-sub">Полезно для планирования</div></div></label>
-            <label class="toggle"><input type="checkbox" id="quarter_dividers" checked><span class="switch"></span><div><div class="t-main">Разделители кварталов</div><div class="t-sub">Легче видеть Q1 / Q2 / Q3 / Q4</div></div></label>
-            <label class="toggle"><input type="checkbox" id="month_badges" checked><span class="switch"></span><div><div class="t-main">Badge у каждого месяца</div><div class="t-sub">Показывает число дней в месяце</div></div></label>
-            <label class="toggle"><input type="checkbox" id="focus_current_month" checked><span class="switch"></span><div><div class="t-main">Акцент на текущем месяце</div><div class="t-sub">Текущий месяц визуально сильнее выделен</div></div></label>
+            <label class="toggle"><input type="checkbox" id="show_weekdays" checked><span class="switch"></span><div><div class="t-main">Подписи дней недели</div><div class="t-sub">Улучшенное чтение сетки (Пн, Вт...)</div></div></label>
+            <label class="toggle"><input type="checkbox" id="accent_today" checked><span class="switch"></span><div><div class="t-main">Выделять сегодня</div><div class="t-sub">Рамка или фон на текущем дне</div></div></label>
+            <label class="toggle"><input type="checkbox" id="show_progress_ring" checked><span class="switch"></span><div><div class="t-main">Круговой прогресс года</div><div class="t-sub">Процент пройденного года сверху</div></div></label>
+            <label class="toggle"><input type="checkbox" id="show_week_numbers"><span class="switch"></span><div><div class="t-main">Номера недель</div><div class="t-sub">Слева от дат (полезно для планирования)</div></div></label>
+            <label class="toggle"><input type="checkbox" id="quarter_dividers" checked><span class="switch"></span><div><div class="t-main">Разделители кварталов</div><div class="t-sub">Тонкие линии между Q1/Q2/Q3/Q4</div></div></label>
+            <label class="toggle"><input type="checkbox" id="month_badges" checked><span class="switch"></span><div><div class="t-main">Бейджи месяцев</div><div class="t-sub">Показывает общее число дней (30д/31д)</div></div></label>
+            <label class="toggle"><input type="checkbox" id="focus_current_month" checked><span class="switch"></span><div><div class="t-main">Акцент на текущем месяце</div><div class="t-sub">Текущий месяц визуально ярче остальных</div></div></label>
           </div>
-        </div>
+        </details>
 
         <div class="actions">
-          <button class="primary" id="downloadBtn">Скачать PNG</button>
-          <button class="accent" id="openPngBtn">Открыть PNG</button>
-          <button class="ghost" id="openSvgBtn">Открыть SVG</button>
-          <button class="ghost" id="copyLinkBtn">Скопировать ссылку</button>
-          <button class="ghost" id="copyPngBtn">Скопировать PNG URL</button>
+          <button class="primary" id="downloadBtn">Скачать обои</button>
           <button class="ok" id="savePresetBtn">Сохранить пресет</button>
+          <button class="ghost" id="openPngBtn">Открыть PNG</button>
+          <button class="ghost" id="copyLinkBtn">Скопировать ссылку</button>
           <button class="ghost" id="randomBtn">Случайный стиль</button>
           <button class="ghost" id="resetBtn">Сбросить</button>
         </div>
 
-        <div class="guide" style="margin-top:10px">
-          <div class="group-title" style="margin-bottom:4px">Как добавить обои на экран блокировки iPhone</div>
+        <details class="guide" style="margin-top:10px">
+          <summary class="group-title" style="margin-bottom:0; font-size:14px; color:#fff; cursor:pointer;">Как добавить на экран блокировки</summary>
           <ol>
-            <li>Нажми «Скачать PNG».</li>
-            <li>Сохрани картинку в «Фото».</li>
-            <li>Удерживай экран блокировки на iPhone.</li>
-            <li>Нажми «+» → «Фото».</li>
-            <li>Выбери сохранённые обои и нажми «Готово».</li>
+            <li>Нажми «Скачать обои».</li>
+            <li>Сохрани картинку в приложение «Фото».</li>
+            <li>Удерживай палец на экране блокировки iPhone.</li>
+            <li>Нажми «+» → выбери «Фото».</li>
+            <li>Выбери сохранённые обои и нажми «Готово» (отключи размытие, если нужно).</li>
           </ol>
-        </div>
+        </details>
       </aside>
 
       <main class="panel preview-panel">
@@ -267,9 +272,8 @@
           <div>
             <div class="section-title" style="margin-bottom:6px">Предпросмотр</div>
             <div class="badge-row">
-              <div class="pill">Live preview</div>
-              <div class="pill">Shareable link</div>
-              <div class="pill">Preset memory</div>
+              <div class="pill">Live</div>
+              <div class="pill">Auto-save</div>
             </div>
           </div>
           <div class="tiny" id="sizeLabel"></div>
@@ -277,16 +281,6 @@
 
         <div class="preview-shell">
           <div class="phone-frame"><img id="preview" alt="Wallpaper preview"></div>
-        </div>
-
-        <div class="url-box">
-          <div class="group-title" style="margin:0 0 6px">Ссылка на конфигурацию</div>
-          <div class="mono" id="shareUrl"></div>
-        </div>
-
-        <div class="url-box">
-          <div class="group-title" style="margin:0 0 6px">PNG URL для автоматизации</div>
-          <div class="mono" id="pngUrl"></div>
         </div>
 
         <div class="preset-list">
@@ -310,8 +304,6 @@
     const checks = ['show_weekdays','accent_today','show_progress_ring','show_week_numbers','quarter_dividers','month_badges','focus_current_month'];
     const els = Object.fromEntries([...fields, ...checks].map(id => [id, document.getElementById(id)]));
     const preview = document.getElementById('preview');
-    const shareUrlEl = document.getElementById('shareUrl');
-    const pngUrlEl = document.getElementById('pngUrl');
     const presetsContainer = document.getElementById('presetsContainer');
     const sizeLabel = document.getElementById('sizeLabel');
     const modelEl = document.getElementById('model');
@@ -380,15 +372,11 @@
     function updatePreview(push = true){
       const q = paramsFromForm();
       const png = `${location.origin}/wallpaper.png?${q.toString()}`;
-      const svg = `${location.origin}/wallpaper.svg?${q.toString()}`;
       const page = `${location.origin}/?${q.toString()}`;
       preview.src = `${png}&_ts=${Date.now()}`;
-      shareUrlEl.textContent = page;
-      pngUrlEl.textContent = png;
       if(push) history.replaceState({}, '', page);
 
       document.getElementById('openPngBtn').onclick = () => window.open(png, '_blank');
-      document.getElementById('openSvgBtn').onclick = () => window.open(svg, '_blank');
       document.getElementById('downloadBtn').onclick = () => {
         const a = document.createElement('a');
         a.href = png;
@@ -397,11 +385,7 @@
       };
       document.getElementById('copyLinkBtn').onclick = async () => {
         await navigator.clipboard.writeText(page);
-        alert('Ссылка скопирована');
-      };
-      document.getElementById('copyPngBtn').onclick = async () => {
-        await navigator.clipboard.writeText(png);
-        alert('PNG URL скопирован');
+        alert('Ссылка на эти настройки скопирована!');
       };
     }
 
@@ -464,16 +448,16 @@
     }
 
     document.getElementById('savePresetBtn').addEventListener('click', () => {
-      const name = prompt('Название пресета', 'Мой пресет');
+      const name = prompt('Название пресета', 'Мои обои');
       if(!name) return;
       const items = getSavedPresets();
       items.unshift({
         name,
-        url: shareUrlEl.textContent,
+        url: location.href,
         modelLabel: modelEl.options[modelEl.selectedIndex].textContent
       });
       setSavedPresets(items.slice(0, 12));
-      alert('Пресет сохранён');
+      alert('Пресет успешно сохранён!');
     });
 
     document.getElementById('randomBtn').addEventListener('click', () => {
