@@ -305,7 +305,7 @@
         if(code >= 80 && code <= 82) icon = '🌦️';
         if(code >= 95) icon = '⛈️';
         const place = geoData.results[0];
-        const cityLabel = [place.name, place.admin1 || place.country].filter(Boolean).slice(0,2).join(', ');
+        const cityLabel = String(place.name || city || '').split(',')[0].trim();
         return { temp: temp > 0 ? `+${temp}` : temp, icon, cityLabel };
       } catch(e) { return null; }
     }

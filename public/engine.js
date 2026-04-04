@@ -118,7 +118,7 @@
 
   function weatherSummary(cfg, lang) {
     if (!cfg.weatherData) return lang === 'ru' ? 'Погода не выбрана' : 'No city weather';
-    return `${cfg.weatherData.icon} ${cfg.weatherData.temp}°C · ${cfg.weatherData.cityLabel || ''}`.trim();
+    return `${cfg.weatherData.icon} ${cfg.weatherData.temp}°C · ${cfg.weatherData.cityLabel || ''}`.replace(/·\s*$/, '').trim();
   }
 
 
@@ -222,9 +222,11 @@
     if (cfg.weatherData) {
       const weatherX = width - padding;
       const weatherY = yearY - yearSize * 0.42;
-      const cityLineY = weatherY + subtitleSize * 1.18;
-      rightSvg += `<text x="${weatherX}" y="${weatherY}" text-anchor="end" fill="${theme.text}" font-size="${subtitleSize * 1.5}" font-family="${FONT}" font-weight="700">${cfg.weatherData.temp}°C ${cfg.weatherData.icon}</text>`;
-      if (cfg.weatherData.cityLabel) rightSvg += `<text x="${weatherX}" y="${cityLineY}" text-anchor="end" fill="${theme.muted}" font-size="${Math.round(subtitleSize * 0.92)}" font-family="${FONT}" font-weight="600">${escapeXml(cfg.weatherData.cityLabel)}</text>`;
+      const cityLineY = weatherY + subtitleSize * 1.15;
+      const rawCity = String(cfg.weatherData.cityLabel || '').split(',')[0].trim();
+      const cityLabel = rawCity.length > 14 ? `${rawCity.slice(0, 13)}…` : rawCity;
+      rightSvg += `<text x="${weatherX}" y="${weatherY}" text-anchor="end" fill="${theme.text}" font-size="${subtitleSize * 1.42}" font-family="${FONT}" font-weight="700">${cfg.weatherData.temp}°C ${cfg.weatherData.icon}</text>`;
+      if (cityLabel) rightSvg += `<text x="${weatherX}" y="${cityLineY}" text-anchor="end" fill="${theme.muted}" font-size="${Math.round(subtitleSize * 0.82)}" font-family="${FONT}" font-weight="600">${escapeXml(cityLabel)}</text>`;
     } else if (cfg.showProgressRing && stats) {
       const ringCx = width - padding - ringR;
       const ringCy = yearY - yearSize * 0.25;
