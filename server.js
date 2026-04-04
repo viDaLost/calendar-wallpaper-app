@@ -1,14 +1,11 @@
 const express = require('express');
 const path = require('path');
 const sharp = require('sharp');
-const { Resvg } = require('@resvg/resvg-js');
 const dayjs = require('dayjs');
 const utc = require('dayjs/plugin/utc');
 const isLeapYear = require('dayjs/plugin/isLeapYear');
 const weekOfYear = require('dayjs/plugin/weekOfYear');
 const advancedFormat = require('dayjs/plugin/advancedFormat');
-require('dayjs/locale/ru');
-require('dayjs/locale/en');
 const fs = require('fs');
 
 dayjs.extend(utc);
@@ -35,7 +32,6 @@ const FONTS = {
 
 const fontCache = {};
 const fontsDir = path.join(__dirname, 'fonts');
-const fontFiles = Object.values(FONTS).map((f) => path.join(fontsDir, f.file)).filter((p) => fs.existsSync(p));
 
 if (fs.existsSync(fontsDir)) {
   for (const [key, fontDef] of Object.entries(FONTS)) {
@@ -53,41 +49,19 @@ if (fs.existsSync(fontsDir)) {
 
 const PHONE_PRESETS = {
   iphone_se_1: { label: 'iPhone SE (1-е пок.)', width: 640, height: 1136, family: 'SE / Классика' },
+  iphone_8: { label: 'iPhone 8 / 7 / 6s', width: 750, height: 1334, family: 'Классика' },
+  iphone_8_plus: { label: 'iPhone 8 Plus / 7 Plus', width: 1080, height: 1920, family: 'Классика Плюс' },
   iphone_se_2: { label: 'iPhone SE (2/3-е пок.)', width: 750, height: 1334, family: 'SE' },
-  iphone_6: { label: 'iPhone 6', width: 750, height: 1334, family: 'Классика' },
-  iphone_6s: { label: 'iPhone 6s', width: 750, height: 1334, family: 'Классика' },
-  iphone_7: { label: 'iPhone 7', width: 750, height: 1334, family: 'Классика' },
-  iphone_8: { label: 'iPhone 8', width: 750, height: 1334, family: 'Классика' },
-  iphone_6_plus: { label: 'iPhone 6 Plus', width: 1080, height: 1920, family: 'Классика Плюс' },
-  iphone_6s_plus: { label: 'iPhone 6s Plus', width: 1080, height: 1920, family: 'Классика Плюс' },
-  iphone_7_plus: { label: 'iPhone 7 Plus', width: 1080, height: 1920, family: 'Классика Плюс' },
-  iphone_8_plus: { label: 'iPhone 8 Plus', width: 1080, height: 1920, family: 'Классика Плюс' },
-  iphone_x: { label: 'iPhone X', width: 1125, height: 2436, family: 'Face ID 5.8"' },
-  iphone_xs: { label: 'iPhone XS', width: 1125, height: 2436, family: 'Face ID 5.8"' },
+  iphone_x: { label: 'iPhone X / XS / 11 Pro', width: 1125, height: 2436, family: 'Face ID 5.8"' },
   iphone_xr: { label: 'iPhone XR / 11', width: 828, height: 1792, family: 'Liquid Retina 6.1"' },
-  iphone_11: { label: 'iPhone 11', width: 828, height: 1792, family: 'Liquid Retina 6.1"' },
-  iphone_11_pro: { label: 'iPhone 11 Pro', width: 1125, height: 2436, family: 'Pro 5.8"' },
-  iphone_xs_max: { label: 'iPhone XS Max', width: 1242, height: 2688, family: 'Max 6.5"' },
-  iphone_11_pro_max: { label: 'iPhone 11 Pro Max', width: 1242, height: 2688, family: 'Max 6.5"' },
-  iphone_12_mini: { label: 'iPhone 12 mini', width: 1080, height: 2340, family: 'mini' },
-  iphone_12: { label: 'iPhone 12', width: 1170, height: 2532, family: '6.1"' },
-  iphone_12_pro: { label: 'iPhone 12 Pro', width: 1170, height: 2532, family: '6.1"' },
-  iphone_12_pro_max: { label: 'iPhone 12 Pro Max', width: 1284, height: 2778, family: 'Крупный 6.7"' },
-  iphone_13_mini: { label: 'iPhone 13 mini', width: 1080, height: 2340, family: 'mini' },
-  iphone_13: { label: 'iPhone 13', width: 1170, height: 2532, family: '6.1"' },
-  iphone_13_pro: { label: 'iPhone 13 Pro', width: 1170, height: 2532, family: '6.1"' },
-  iphone_13_pro_max: { label: 'iPhone 13 Pro Max', width: 1284, height: 2778, family: 'Крупный 6.7"' },
-  iphone_14: { label: 'iPhone 14', width: 1170, height: 2532, family: '6.1"' },
-  iphone_14_plus: { label: 'iPhone 14 Plus', width: 1284, height: 2778, family: 'Plus 6.7"' },
+  iphone_xs_max: { label: 'iPhone XS Max / 11 Pro Max', width: 1242, height: 2688, family: 'Max 6.5"' },
+  iphone_12_mini: { label: 'iPhone 12/13 mini', width: 1080, height: 2340, family: 'mini' },
+  iphone_12: { label: 'iPhone 12/13/14 / Pro', width: 1170, height: 2532, family: '6.1"' },
+  iphone_12_pro_max: { label: 'iPhone 12/13 Pro Max / 14 Plus', width: 1284, height: 2778, family: 'Крупный 6.7"' },
   iphone_14_pro: { label: 'iPhone 14 Pro', width: 1179, height: 2556, family: 'Pro 6.1"' },
   iphone_14_pro_max: { label: 'iPhone 14 Pro Max', width: 1290, height: 2796, family: 'Pro Max 6.7"' },
-  iphone_15: { label: 'iPhone 15', width: 1179, height: 2556, family: '6.1" новый' },
-  iphone_15_plus: { label: 'iPhone 15 Plus', width: 1290, height: 2796, family: '6.7" новый' },
-  iphone_15_pro: { label: 'iPhone 15 Pro', width: 1179, height: 2556, family: 'Pro 6.1"' },
-  iphone_15_pro_max: { label: 'iPhone 15 Pro Max', width: 1290, height: 2796, family: 'Pro Max 6.7"' },
-  iphone_16e: { label: 'iPhone 16e', width: 1170, height: 2532, family: '6.1"' },
-  iphone_16: { label: 'iPhone 16', width: 1179, height: 2556, family: '6.1" новый' },
-  iphone_16_plus: { label: 'iPhone 16 Plus', width: 1290, height: 2796, family: '6.7" новый' },
+  iphone_15: { label: 'iPhone 15 / 16 / Pro', width: 1179, height: 2556, family: '6.1" новый' },
+  iphone_15_plus: { label: 'iPhone 15/16 Plus', width: 1290, height: 2796, family: '6.7" новый' },
   iphone_16_pro: { label: 'iPhone 16 Pro', width: 1206, height: 2622, family: 'Pro 6.3"' },
   iphone_16_pro_max: { label: 'iPhone 16 Pro Max', width: 1320, height: 2868, family: 'Pro Max 6.9"' },
   custom: { label: 'Свой размер', width: 1179, height: 2556, family: 'Custom' }
@@ -201,12 +175,13 @@ function getConfig(query) {
     showWeekNumbers: String(query.show_week_numbers || '0') === '1',
     quarterDividers: String(query.quarter_dividers || '1') === '1',
     monthBadges: String(query.month_badges || '1') === '1',
-    focusCurrentMonth: String(query.focus_current_month || '1') === '1'
+    focusCurrentMonth: String(query.focus_current_month || '1') === '1',
+    lockscreenSafe: String(query.lockscreen_safe || '1') === '1'
   };
 }
 
-function zonedNow(offsetHours, lang = 'ru') {
-  return dayjs.utc().add(offsetHours, 'hour').locale(lang);
+function zonedNow(offsetHours) {
+  return dayjs.utc().add(offsetHours, 'hour');
 }
 
 function yearStats(now) {
@@ -219,6 +194,18 @@ function yearStats(now) {
     daysLeft,
     percentPassed: Math.round((dayOfYear / daysInYear) * 100)
   };
+}
+
+
+function getSafeInsets(cfg, width, height) {
+  if (!cfg.lockscreenSafe) {
+    const base = Math.round(width * 0.05);
+    return { top: base, bottom: base };
+  }
+
+  const top = Math.round(height * 0.16 + width * 0.06);
+  const bottom = Math.round(height * 0.11 + width * 0.035);
+  return { top, bottom };
 }
 
 function randomQuote(lang, year) {
@@ -326,33 +313,37 @@ function wrap(text, max) {
   return lines;
 }
 
-function renderHeader(cfg, theme, labels, now, stats, width, padding, topY, FONT) {
+function renderHeader(cfg, theme, labels, now, stats, width, padding, topY, headerHeight, FONT) {
   const dateText = cfg.lang === 'ru'
-    ? `${labels.today}: ${escapeXml(now.format('D MMMM'))}`
-    : `${labels.today}: ${escapeXml(now.format('MMM D'))}`;
-  const right = width - padding;
-  const titleSize = Math.round(width * 0.1);
-  const subtitleSize = Math.round(width * 0.035);
-  const chipHeight = Math.round(width * 0.08);
-  const chipWidth = Math.round(width * 0.28);
-  const ringR = Math.round(width * 0.052);
-  const ringCx = right - ringR - 2;
-  const ringCy = topY + 18 + ringR;
+    ? `${labels.today}: ${now.format('D MMMM')}`
+    : `${labels.today}: ${now.format('MMM D')}`;
+
+  const chipHeight = Math.round(headerHeight * 0.42);
+  const chipPadX = Math.round(width * 0.02);
+  const weekChipW = Math.round(width * 0.26);
+  const dateChipW = Math.round(width * 0.38);
+  const ringR = Math.round(Math.min(width, headerHeight) * 0.18);
+  const ringCx = width - padding - ringR - 2;
+  const ringCy = topY + headerHeight * 0.34;
   const circumference = 2 * Math.PI * ringR;
   const dash = circumference * (stats.percentPassed / 100);
+  const labelSize = Math.round(headerHeight * 0.22);
+  const smallSize = Math.round(headerHeight * 0.2);
+  const rowY = topY + headerHeight * 0.12;
 
   let out = `
-    <text x="${padding}" y="${topY + titleSize}" fill="${theme.text}" font-size="${titleSize}" font-family="${FONT}" font-weight="900" letter-spacing="-0.03em">${now.year()}</text>
-    <text x="${padding}" y="${topY + titleSize + subtitleSize * 1.8}" fill="${theme.muted}" font-size="${subtitleSize}" font-family="${FONT}">${escapeXml(dateText)}</text>
-    <rect x="${padding}" y="${topY + titleSize + subtitleSize * 2.8}" width="${chipWidth}" height="${chipHeight}" rx="${chipHeight / 2}" fill="${alpha(theme.panel, 0.92)}" stroke="${alpha(theme.accent2, 0.24)}" />
-    <text x="${padding + chipWidth / 2}" y="${topY + titleSize + subtitleSize * 2.8 + chipHeight * 0.64}" text-anchor="middle" fill="${theme.accent2}" font-size="${Math.round(width * 0.026)}" font-family="${FONT}" font-weight="700">${escapeXml(labels.week)} ${now.week()}</text>
+    <text x="${padding}" y="${topY + labelSize * 0.95}" fill="${theme.muted}" font-size="${labelSize}" font-family="${FONT}" font-weight="700">${now.year()}</text>
+    <rect x="${padding}" y="${rowY + labelSize * 0.55}" width="${dateChipW}" height="${chipHeight}" rx="${chipHeight / 2}" fill="${alpha(theme.panel, 0.92)}" stroke="${alpha(theme.accent2, 0.18)}" />
+    <text x="${padding + chipPadX}" y="${rowY + labelSize * 0.55 + chipHeight * 0.64}" fill="${theme.text}" font-size="${smallSize}" font-family="${FONT}" font-weight="700">${escapeXml(dateText)}</text>
+    <rect x="${padding}" y="${rowY + labelSize * 0.55 + chipHeight + Math.round(headerHeight * 0.08)}" width="${weekChipW}" height="${chipHeight}" rx="${chipHeight / 2}" fill="${alpha(theme.panel, 0.92)}" stroke="${alpha(theme.accent2, 0.18)}" />
+    <text x="${padding + weekChipW / 2}" y="${rowY + labelSize * 0.55 + chipHeight + Math.round(headerHeight * 0.08) + chipHeight * 0.64}" text-anchor="middle" fill="${theme.accent2}" font-size="${smallSize}" font-family="${FONT}" font-weight="700">${labels.week} ${now.week()}</text>
   `;
 
   if (cfg.showProgressRing) {
     out += `
-      <circle cx="${ringCx}" cy="${ringCy}" r="${ringR}" fill="none" stroke="${alpha(theme.panel, 0.92)}" stroke-width="${ringR * 0.28}" />
-      <circle cx="${ringCx}" cy="${ringCy}" r="${ringR}" fill="none" stroke="${theme.accent}" stroke-width="${ringR * 0.28}" stroke-linecap="round" stroke-dasharray="${dash} ${circumference}" transform="rotate(-90 ${ringCx} ${ringCy})" />
-      <text x="${ringCx}" y="${ringCy + width * 0.01}" text-anchor="middle" fill="${theme.text}" font-size="${Math.round(width * 0.025)}" font-family="${FONT}" font-weight="800">${stats.percentPassed}%</text>
+      <circle cx="${ringCx}" cy="${ringCy}" r="${ringR}" fill="none" stroke="${alpha(theme.panel, 0.92)}" stroke-width="${ringR * 0.24}" />
+      <circle cx="${ringCx}" cy="${ringCy}" r="${ringR}" fill="none" stroke="${theme.accent}" stroke-width="${ringR * 0.24}" stroke-linecap="round" stroke-dasharray="${dash} ${circumference}" transform="rotate(-90 ${ringCx} ${ringCy})" />
+      <text x="${ringCx}" y="${ringCy + smallSize * 0.35}" text-anchor="middle" fill="${theme.text}" font-size="${smallSize}" font-family="${FONT}" font-weight="800">${stats.percentPassed}%</text>
     `;
   }
 
@@ -365,20 +356,20 @@ function renderMonth({ monthIndex, year, x, y, w, h, cfg, theme, labels, now, FO
   const firstWeekday = (first.day() + 6) % 7;
   const isCurrent = now.month() === monthIndex;
   const emphasis = cfg.focusCurrentMonth && isCurrent ? 1.08 : 1;
-  const radius = Math.max(16, Math.round(w * 0.08));
-  const pad = Math.round(w * 0.06);
+  const radius = Math.max(16, Math.round(w * 0.07));
+  const pad = Math.round(w * 0.055);
   
   const cols = 7;
   const weekNumberCol = cfg.showWeekNumbers ? 1 : 0;
   const innerW = w - pad * 2;
   const cellW = innerW / (cols + weekNumberCol);
   const rows = 6;
-  const gridTopOffset = cfg.showWeekdays ? h * 0.30 : h * 0.22;
-  const cellH = (h - gridTopOffset - h * 0.05) / rows;
+  const gridTopOffset = cfg.showWeekdays ? h * 0.28 : h * 0.2;
+  const cellH = (h - gridTopOffset - h * 0.055) / rows;
 
-  const titleSize = Math.min(Math.round(h * 0.12), Math.round(w * 0.14)) * emphasis;
-  const weekdaySize = Math.min(Math.round(cellW * 0.5), Math.round(h * 0.06));
-  const numberSize = Math.min(Math.round(cellW * 0.6), Math.round(cellH * 0.6)) * emphasis;
+  const titleSize = Math.min(Math.round(h * 0.105), Math.round(w * 0.13)) * emphasis;
+  const weekdaySize = Math.min(Math.round(cellW * 0.42), Math.round(h * 0.048));
+  const numberSize = Math.min(Math.round(cellW * 0.5), Math.round(cellH * 0.52)) * emphasis;
   
   const badgeW = Math.round(w * 0.2);
   const badgeH = Math.round(h * 0.11);
@@ -392,7 +383,7 @@ function renderMonth({ monthIndex, year, x, y, w, h, cfg, theme, labels, now, FO
   if (cfg.monthBadges) {
     out += `
       <rect x="${x + w - pad - badgeW}" y="${y + pad * 0.6}" width="${badgeW}" height="${badgeH}" rx="${badgeH / 2}" fill="${isCurrent ? alpha(theme.accent, 0.18) : alpha('#ffffff', 0.05)}" />
-      <text x="${x + w - pad - badgeW / 2}" y="${y + pad * 0.6 + badgeH * 0.65}" text-anchor="middle" fill="${isCurrent ? theme.accent2 : theme.muted}" font-size="${Math.round(badgeH * 0.6)}" font-family="${FONT}" font-weight="700">${daysInMonth}${cfg.lang === 'ru' ? 'д' : 'd'}</text>
+      <text x="${x + w - pad - badgeW / 2}" y="${y + pad * 0.6 + badgeH * 0.65}" text-anchor="middle" fill="${isCurrent ? theme.accent2 : theme.muted}" font-size="${Math.round(badgeH * 0.6)}" font-family="${FONT}" font-weight="700">${daysInMonth}</text>
     `;
   }
 
@@ -474,8 +465,8 @@ function renderFooter(cfg, theme, labels, now, stats, width, footerBox, FONT) {
   const { x, y, w, h } = footerBox;
   const pad = Math.round(w * 0.04);
   const base = `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${Math.round(w * 0.05)}" fill="${alpha(theme.panel, 0.82)}" stroke="${alpha('#ffffff', 0.06)}"/>`;
-  const textSize = Math.round(h * 0.22);
-  const subSize = Math.round(h * 0.15);
+  const textSize = Math.round(h * 0.2);
+  const subSize = Math.round(h * 0.14);
 
   if (cfg.footer === 'quote') {
     const lines = wrap(cfg.note || randomQuote(cfg.lang, now.year()), 34);
@@ -512,15 +503,17 @@ function renderFooter(cfg, theme, labels, now, stats, width, footerBox, FONT) {
 function renderSvg(cfg) {
   const theme = THEMES[cfg.theme];
   const labels = getLabels(cfg.lang);
-  const now = zonedNow(cfg.timezone, cfg.lang);
+  const now = zonedNow(cfg.timezone);
   const stats = yearStats(now);
   const { width, height } = cfg;
-  const padding = Math.round(width * 0.05); 
-  const topArea = Math.round(height * (cfg.calendarSize === 'compact' ? 0.11 : 0.14));
-  const footerArea = Math.round(height * (cfg.calendarSize === 'large' ? 0.1 : 0.11));
-  const contentTop = padding + topArea;
-  const contentBottom = height - padding - footerArea;
-  const contentH = contentBottom - contentTop;
+  const sidePadding = Math.round(width * 0.03);
+  const safe = getSafeInsets(cfg, width, height);
+  const innerTop = safe.top;
+  const innerBottom = height - safe.bottom;
+  const headerHeight = Math.round(height * 0.095);
+  const footerHeight = Math.round(height * 0.08);
+  const contentTop = innerTop + headerHeight + Math.round(height * 0.012);
+  const contentBottom = innerBottom - footerHeight - Math.round(height * 0.014);
 
   // --- ЛОГИКА ВСТАВКИ ШРИФТА ---
   const selectedFontDef = FONTS[cfg.font] || FONTS.inter;
@@ -539,15 +532,15 @@ function renderSvg(cfg) {
   if (cfg.monthLayout === 'grid_4x3') { cols = 4; rows = 3; }
   if (cfg.monthLayout === 'list_1x12') { cols = 1; rows = 12; }
 
-  const gap = Math.round(width * (cfg.monthLayout === 'list_1x12' ? 0.03 : 0.02));
-  const monthW = (width - padding * 2 - gap * (cols - 1)) / cols;
+  const gap = Math.round(width * (cfg.monthLayout === 'list_1x12' ? 0.026 : 0.018));
+  const monthW = (width - sidePadding * 2 - gap * (cols - 1)) / cols;
   const monthH = (contentH - gap * (rows - 1)) / rows;
 
   let monthsSvg = '';
   for (let i = 0; i < 12; i++) {
     const col = i % cols;
     const row = Math.floor(i / cols);
-    const x = padding + col * (monthW + gap);
+    const x = sidePadding + col * (monthW + gap);
     const y = contentTop + row * (monthH + gap);
     monthsSvg += renderMonth({ monthIndex: i, year: now.year(), x, y, w: monthW, h: monthH, cfg, theme, labels, now, FONT: FONT_FAMILY });
   }
@@ -557,18 +550,18 @@ function renderSvg(cfg) {
     if (cols === 3 && rows === 4) {
       for (let r = 1; r < rows; r++) {
         const ly = contentTop + r * monthH + (r - 0.5) * gap;
-        quarterLines += `<line x1="${padding}" y1="${ly}" x2="${width - padding}" y2="${ly}" stroke="${alpha(theme.accent2, 0.12)}" stroke-dasharray="10 12" />`;
+        quarterLines += `<line x1="${sidePadding}" y1="${ly}" x2="${width - sidePadding}" y2="${ly}" stroke="${alpha(theme.accent2, 0.12)}" stroke-dasharray="10 12" />`;
       }
     }
   }
 
-  const footerBox = { x: padding, y: height - padding - footerArea + Math.round(footerArea * 0.06), w: width - padding * 2, h: Math.round(footerArea * 0.84) };
+  const footerBox = { x: sidePadding, y: innerBottom - footerHeight, w: width - sidePadding * 2, h: footerHeight };
 
   return `<?xml version="1.0" encoding="UTF-8"?>
   <svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">
     <defs>${fontDefs}</defs>
     ${renderBackground(cfg, theme, width, height)}
-    ${renderHeader(cfg, theme, labels, now, stats, width, padding, padding, FONT_FAMILY)}
+    ${renderHeader(cfg, theme, labels, now, stats, width, sidePadding, innerTop, headerHeight, FONT_FAMILY)}
     ${quarterLines}
     ${monthsSvg}
     ${renderFooter(cfg, theme, labels, now, stats, width, footerBox, FONT_FAMILY)}
@@ -595,25 +588,9 @@ app.get('/wallpaper.png', async (req, res) => {
   try {
     const cfg = getConfig(req.query);
     const svg = renderSvg(cfg);
-
-    let png;
-    try {
-      const resvg = new Resvg(svg, {
-        fitTo: { mode: 'width', value: cfg.width },
-        font: {
-          fontFiles,
-          loadSystemFonts: true,
-          defaultFontFamily: (FONTS[cfg.font] || FONTS.inter).family,
-        },
-      });
-      png = resvg.render().asPng();
-    } catch (renderErr) {
-      png = await sharp(Buffer.from(svg), { density: 300 }).png().toBuffer();
-    }
-
+    const png = await sharp(Buffer.from(svg)).png().toBuffer();
     res.setHeader('Content-Type', 'image/png');
-    res.setHeader('Cache-Control', 'no-store, max-age=0');
-    res.send(Buffer.from(png));
+    res.send(png);
   } catch (err) {
     res.status(500).json({ error: 'ОШИБКА ГЕНЕРАЦИИ ОБОЕВ', details: err.message });
   }
