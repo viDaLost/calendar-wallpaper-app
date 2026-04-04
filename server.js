@@ -4,157 +4,75 @@ const sharp = require('sharp');
 const dayjs = require('dayjs');
 const utc = require('dayjs/plugin/utc');
 const isLeapYear = require('dayjs/plugin/isLeapYear');
+const weekOfYear = require('dayjs/plugin/weekOfYear');
+const advancedFormat = require('dayjs/plugin/advancedFormat');
 
 dayjs.extend(utc);
 dayjs.extend(isLeapYear);
+dayjs.extend(weekOfYear);
+dayjs.extend(advancedFormat);
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
 const PHONE_PRESETS = {
-  iphone_15_pro: { label: 'iPhone 15 Pro', width: 1179, height: 2556 },
-  iphone_15_pro_max: { label: 'iPhone 15 Pro Max', width: 1290, height: 2796 },
-  iphone_15: { label: 'iPhone 15', width: 1179, height: 2556 },
-  iphone_14: { label: 'iPhone 14', width: 1170, height: 2532 },
-  iphone_se: { label: 'iPhone SE', width: 750, height: 1334 },
-  galaxy_s24: { label: 'Galaxy S24', width: 1080, height: 2340 },
-  galaxy_s24_ultra: { label: 'Galaxy S24 Ultra', width: 1440, height: 3120 },
-  pixel_8: { label: 'Pixel 8', width: 1080, height: 2400 },
-  pixel_8_pro: { label: 'Pixel 8 Pro', width: 1344, height: 2992 }
+  iphone_se_1: { label: 'iPhone SE (1st gen)', width: 640, height: 1136, family: 'SE / Classic' },
+  iphone_8: { label: 'iPhone 8 / 7 / 6s / 6', width: 750, height: 1334, family: 'Classic' },
+  iphone_8_plus: { label: 'iPhone 8 Plus / 7 Plus / 6s Plus / 6 Plus', width: 1080, height: 1920, family: 'Classic Plus' },
+  iphone_se_2: { label: 'iPhone SE (2nd / 3rd gen)', width: 750, height: 1334, family: 'SE' },
+  iphone_x: { label: 'iPhone X / XS / 11 Pro', width: 1125, height: 2436, family: 'Face ID 5.8"' },
+  iphone_xr: { label: 'iPhone XR / 11', width: 828, height: 1792, family: 'Liquid Retina 6.1"' },
+  iphone_xs_max: { label: 'iPhone XS Max / 11 Pro Max', width: 1242, height: 2688, family: 'Max 6.5"' },
+  iphone_12_mini: { label: 'iPhone 12 mini / 13 mini', width: 1080, height: 2340, family: 'mini' },
+  iphone_12: { label: 'iPhone 12 / 12 Pro / 13 / 13 Pro / 14', width: 1170, height: 2532, family: '6.1"' },
+  iphone_12_pro_max: { label: 'iPhone 12 Pro Max / 13 Pro Max / 14 Plus', width: 1284, height: 2778, family: 'Large 6.7"' },
+  iphone_14_pro: { label: 'iPhone 14 Pro', width: 1179, height: 2556, family: 'Pro 6.1"' },
+  iphone_14_pro_max: { label: 'iPhone 14 Pro Max', width: 1290, height: 2796, family: 'Pro Max 6.7"' },
+  iphone_15: { label: 'iPhone 15 / 15 Pro / 16', width: 1179, height: 2556, family: '6.1" modern' },
+  iphone_15_plus: { label: 'iPhone 15 Plus / 16 Plus', width: 1290, height: 2796, family: '6.7" modern' },
+  iphone_16_pro: { label: 'iPhone 16 Pro', width: 1206, height: 2622, family: 'Pro 6.3"' },
+  iphone_16_pro_max: { label: 'iPhone 16 Pro Max', width: 1320, height: 2868, family: 'Pro Max 6.9"' },
+  custom: { label: 'Custom size', width: 1179, height: 2556, family: 'Custom' }
 };
 
 const THEMES = {
-  graphite_orange: {
-    bg: '#0b0d12', panel: '#12161d', text: '#e9edf4', muted: '#8c95a4', accent: '#ff8a26', accent2: '#ffb26c', weekend: '#c95f5f'
-  },
-  midnight_blue: {
-    bg: '#07111f', panel: '#0d1726', text: '#ebf3ff', muted: '#91a7c7', accent: '#5bb9ff', accent2: '#9dd9ff', weekend: '#8bb4ff'
-  },
-  forest_green: {
-    bg: '#07140e', panel: '#102017', text: '#edf8ef', muted: '#95b29d', accent: '#59c57d', accent2: '#a3e0b6', weekend: '#73d49f'
-  },
-  sand_terracotta: {
-    bg: '#1b1612', panel: '#261f19', text: '#f8efe7', muted: '#c3ae9b', accent: '#d37b4d', accent2: '#f0c19f', weekend: '#ea8c63'
-  },
-  violet_focus: {
-    bg: '#100b17', panel: '#181022', text: '#f5efff', muted: '#b6a4cb', accent: '#9b6bff', accent2: '#c4a8ff', weekend: '#bc8cff'
-  },
-  minimal_red: {
-    bg: '#121212', panel: '#1a1a1a', text: '#f7f7f7', muted: '#9c9c9c', accent: '#ff4d5f', accent2: '#ff8e98', weekend: '#ff7e8a'
-  },
-  oled_gold: {
-    bg: '#000000', panel: '#0a0a0a', text: '#fff5dc', muted: '#9f8d65', accent: '#ffc14d', accent2: '#ffe39c', weekend: '#ffcf70'
-  },
-  frost: {
-    bg: '#eef5ff', panel: '#dfe9f8', text: '#1c2b3d', muted: '#6b8097', accent: '#367cff', accent2: '#8ab2ff', weekend: '#5c93ff'
-  }
+  graphite_orange: { name: 'Graphite Orange', bg: '#0a0d12', panel: '#131823', text: '#edf2ff', muted: '#8994a7', accent: '#ff8f2d', accent2: '#ffbc6f', weekend: '#ff8f7b' },
+  obsidian_blue: { name: 'Obsidian Blue', bg: '#07111e', panel: '#0d1726', text: '#eef6ff', muted: '#92abc9', accent: '#5db6ff', accent2: '#a7dcff', weekend: '#86b4ff' },
+  frost_light: { name: 'Frost Light', bg: '#edf4ff', panel: '#dfe8f7', text: '#1e2d41', muted: '#73839a', accent: '#3b7bff', accent2: '#7ea6ff', weekend: '#5b88ff' },
+  violet_night: { name: 'Violet Night', bg: '#110c18', panel: '#1a1325', text: '#f6efff', muted: '#b29fc9', accent: '#9d72ff', accent2: '#ceb8ff', weekend: '#d09cff' },
+  olive_linen: { name: 'Olive Linen', bg: '#161812', panel: '#202419', text: '#f3f4ea', muted: '#a5aa95', accent: '#b4c86a', accent2: '#dbe8a1', weekend: '#c7ad86' },
+  rose_sunset: { name: 'Rose Sunset', bg: '#1b1014', panel: '#291920', text: '#fff0f5', muted: '#c2a4af', accent: '#ff6d96', accent2: '#ffb1c4', weekend: '#ff9f90' },
+  oled_gold: { name: 'OLED Gold', bg: '#000000', panel: '#0a0a0a', text: '#fff7df', muted: '#a39063', accent: '#ffc44e', accent2: '#ffe49a', weekend: '#ffd07b' },
+  mint_air: { name: 'Mint Air', bg: '#0a1512', panel: '#10211c', text: '#ebfff8', muted: '#8db4a8', accent: '#57d2ab', accent2: '#aef2da', weekend: '#88e0ca' }
+};
+
+const BG_STYLES = {
+  aurora: 'Aurora',
+  glass: 'Glass',
+  paper: 'Paper',
+  spotlight: 'Spotlight',
+  waves: 'Soft waves',
+  noir: 'Noir'
 };
 
 const QUOTES = {
   ru: [
-    'Главное — не идеальный план, а движение каждый день.',
     'Маленькие шаги собирают большой год.',
-    'У времени нет черновика — живи осознанно.',
-    'Сегодня тоже часть твоего будущего.'
+    'Сегодня тоже часть твоего будущего.',
+    'Спокойный ритм сильнее хаоса.',
+    'Лучший день для движения — сегодняшний.'
   ],
   en: [
-    'Small consistent steps shape a big year.',
-    'Today is part of the life you are building.',
-    'Time rewards attention.',
-    'Progress is quieter than excuses.'
+    'Small steps shape a big year.',
+    'Today is part of your future.',
+    'Consistency beats intensity.',
+    'The best day to move is today.'
   ]
 };
 
-function parseNumber(value, fallback) {
-  const n = Number(value);
+function num(v, fallback) {
+  const n = Number(v);
   return Number.isFinite(n) ? n : fallback;
-}
-
-function getConfig(query) {
-  const preset = PHONE_PRESETS[query.model] || PHONE_PRESETS.iphone_15_pro;
-  const width = query.width ? Math.max(320, parseNumber(query.width, preset.width)) : preset.width;
-  const height = query.height ? Math.max(568, parseNumber(query.height, preset.height)) : preset.height;
-  return {
-    model: query.model || 'iphone_15_pro',
-    width,
-    height,
-    style: query.style || 'numbers',
-    calendarSize: query.calendar_size || 'standard',
-    weekendMode: query.weekend_mode || 'weekends_only',
-    opacity: Math.min(100, Math.max(0, parseNumber(query.opacity, 0))),
-    theme: query.theme || 'graphite_orange',
-    lang: query.lang === 'en' ? 'en' : 'ru',
-    timezone: parseNumber(query.timezone, 3),
-    footer: query.footer || 'days_left_percent_left',
-    monthLayout: query.month_layout || 'grid_3x4',
-    showWeekdays: String(query.show_weekdays || '0') === '1',
-    accentToday: String(query.accent_today || '1') !== '0',
-    showProgressRing: String(query.show_progress_ring || '0') === '1',
-    bgMode: query.bg_mode || 'solid'
-  };
-}
-
-function getZonedNow(offsetHours) {
-  return dayjs.utc().add(offsetHours, 'hour');
-}
-
-function getLabels(lang) {
-  return lang === 'ru'
-    ? {
-        months: ['Янв', 'Фев', 'Март', 'Апр', 'Май', 'Июнь', 'Июль', 'Авг', 'Сен', 'Окт', 'Нояб', 'Дек'],
-        weekdays: ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'],
-        daysLeft: 'дн. осталось',
-        daysPassed: 'дн. прошло'
-      }
-    : {
-        months: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'],
-        weekdays: ['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su'],
-        daysLeft: 'days left',
-        daysPassed: 'days passed'
-      };
-}
-
-function getProductionHolidays(year) {
-  // simplified fixed RU holidays only; weekends are handled separately
-  return new Set([
-    `${year}-01-01`, `${year}-01-02`, `${year}-01-03`, `${year}-01-04`, `${year}-01-05`, `${year}-01-06`, `${year}-01-07`, `${year}-01-08`,
-    `${year}-02-23`, `${year}-03-08`, `${year}-05-01`, `${year}-05-09`, `${year}-06-12`, `${year}-11-04`
-  ]);
-}
-
-function isWeekendOrHoliday(date, weekendMode, holidays) {
-  const day = date.day();
-  if (weekendMode === 'none') return false;
-  if (weekendMode === 'weekends_only') return day === 0 || day === 6;
-  return day === 0 || day === 6 || holidays.has(date.format('YYYY-MM-DD'));
-}
-
-function computeYearStats(now) {
-  const start = dayjs.utc(`${now.year()}-01-01T00:00:00Z`).add(now.utcOffset(), 'minute');
-  const end = dayjs.utc(`${now.year() + 1}-01-01T00:00:00Z`).add(now.utcOffset(), 'minute');
-  const daysInYear = now.isLeapYear() ? 366 : 365;
-  const dayOfYear = now.diff(dayjs(`${now.year()}-01-01`), 'day') + 1;
-  const daysLeft = daysInYear - dayOfYear;
-  const percentPassed = Math.round((dayOfYear / daysInYear) * 100);
-  const percentLeft = 100 - percentPassed;
-  return { daysInYear, dayOfYear, daysLeft, percentPassed, percentLeft };
-}
-
-function wrapSvgText(text, x, y, maxChars, lineHeight, fill, fontSize, anchor = 'middle') {
-  const words = text.split(' ');
-  const lines = [];
-  let line = '';
-  for (const word of words) {
-    const next = line ? `${line} ${word}` : word;
-    if (next.length > maxChars && line) {
-      lines.push(line);
-      line = word;
-    } else {
-      line = next;
-    }
-  }
-  if (line) lines.push(line);
-  return lines.map((ln, i) => `<text x="${x}" y="${y + i * lineHeight}" text-anchor="${anchor}" fill="${fill}" font-size="${fontSize}" font-family="Inter, Arial, sans-serif">${escapeXml(ln)}</text>`).join('');
 }
 
 function escapeXml(str) {
@@ -166,264 +84,467 @@ function escapeXml(str) {
     .replace(/'/g, '&apos;');
 }
 
-function renderMonthNumbers({ monthIndex, year, x, y, w, h, cfg, theme, labels, now, holidays }) {
+function clamp(v, min, max) {
+  return Math.max(min, Math.min(max, v));
+}
+
+function alpha(hex, opacity) {
+  const clean = hex.replace('#', '');
+  const bigint = parseInt(clean, 16);
+  const r = (bigint >> 16) & 255;
+  const g = (bigint >> 8) & 255;
+  const b = bigint & 255;
+  return `rgba(${r},${g},${b},${opacity})`;
+}
+
+function getLabels(lang) {
+  return lang === 'ru'
+    ? {
+        months: ['Янв', 'Фев', 'Мар', 'Апр', 'Май', 'Июн', 'Июл', 'Авг', 'Сен', 'Окт', 'Ноя', 'Дек'],
+        weekdays: ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'],
+        today: 'Сегодня',
+        year: 'год',
+        daysLeft: 'дн. осталось',
+        passed: 'пройдено',
+        week: 'Неделя',
+        setupTitle: 'Как установить на экран блокировки iPhone',
+        setupSteps: [
+          '1. Нажми «Скачать PNG».',
+          '2. Сохрани изображение в Фото.',
+          '3. На iPhone удерживай экран блокировки.',
+          '4. Нажми «+» → Фото → выбери обои.',
+          '5. При необходимости кадрируй и нажми «Готово».'
+        ]
+      }
+    : {
+        months: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'],
+        weekdays: ['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su'],
+        today: 'Today',
+        year: 'year',
+        daysLeft: 'days left',
+        passed: 'passed',
+        week: 'Week',
+        setupTitle: 'How to set it on iPhone Lock Screen',
+        setupSteps: [
+          '1. Tap “Download PNG”.',
+          '2. Save the image to Photos.',
+          '3. Long-press the Lock Screen on iPhone.',
+          '4. Tap “+” → Photos → choose the wallpaper.',
+          '5. Adjust the crop if needed and tap “Done”.'
+        ]
+      };
+}
+
+function getConfig(query) {
+  const preset = PHONE_PRESETS[query.model] || PHONE_PRESETS.iphone_15;
+  return {
+    model: query.model || 'iphone_15',
+    width: query.model === 'custom' ? clamp(num(query.width, preset.width), 320, 4000) : preset.width,
+    height: query.model === 'custom' ? clamp(num(query.height, preset.height), 568, 5000) : preset.height,
+    style: query.style || 'numbers',
+    calendarSize: query.calendar_size || 'balanced',
+    monthLayout: query.month_layout || 'grid_3x4',
+    weekendMode: query.weekend_mode || 'weekends_only',
+    opacity: clamp(num(query.opacity, 8), 0, 60),
+    theme: THEMES[query.theme] ? query.theme : 'graphite_orange',
+    bgStyle: BG_STYLES[query.bg_style] ? query.bg_style : 'aurora',
+    lang: query.lang === 'en' ? 'en' : 'ru',
+    timezone: clamp(num(query.timezone, 3), -12, 14),
+    footer: query.footer || 'year_summary',
+    note: (query.note || '').slice(0, 80),
+    showWeekdays: String(query.show_weekdays || '1') === '1',
+    accentToday: String(query.accent_today || '1') === '1',
+    showProgressRing: String(query.show_progress_ring || '1') === '1',
+    showWeekNumbers: String(query.show_week_numbers || '0') === '1',
+    quarterDividers: String(query.quarter_dividers || '1') === '1',
+    monthBadges: String(query.month_badges || '1') === '1',
+    focusCurrentMonth: String(query.focus_current_month || '1') === '1'
+  };
+}
+
+function zonedNow(offsetHours) {
+  return dayjs.utc().add(offsetHours, 'hour');
+}
+
+function yearStats(now) {
+  const daysInYear = now.isLeapYear() ? 366 : 365;
+  const dayOfYear = now.diff(dayjs(`${now.year()}-01-01`), 'day') + 1;
+  const daysLeft = daysInYear - dayOfYear;
+  return {
+    dayOfYear,
+    daysInYear,
+    daysLeft,
+    percentPassed: Math.round((dayOfYear / daysInYear) * 100)
+  };
+}
+
+function randomQuote(lang, year) {
+  const arr = QUOTES[lang] || QUOTES.ru;
+  return arr[year % arr.length];
+}
+
+function renderBackground(cfg, theme, width, height) {
+  const overlayOpacity = cfg.opacity / 100;
+  if (cfg.bgStyle === 'paper') {
+    return `
+      <defs>
+        <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0%" stop-color="${theme.bg}" />
+          <stop offset="100%" stop-color="${theme.panel}" />
+        </linearGradient>
+        <filter id="noise">
+          <feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="2" stitchTiles="stitch" />
+          <feColorMatrix type="saturate" values="0" />
+          <feComponentTransfer><feFuncA type="table" tableValues="0 0 .035 .05"/></feComponentTransfer>
+        </filter>
+      </defs>
+      <rect width="100%" height="100%" fill="url(#bg)"/>
+      <rect width="100%" height="100%" filter="url(#noise)" opacity="0.55"/>
+      <rect width="100%" height="100%" fill="${alpha('#ffffff', overlayOpacity)}"/>
+    `;
+  }
+  if (cfg.bgStyle === 'glass') {
+    return `
+      <defs>
+        <radialGradient id="bg" cx="25%" cy="15%" r="85%">
+          <stop offset="0%" stop-color="${alpha(theme.accent, 0.42)}" />
+          <stop offset="35%" stop-color="${alpha(theme.bg, 0.95)}" />
+          <stop offset="100%" stop-color="${theme.bg}" />
+        </radialGradient>
+      </defs>
+      <rect width="100%" height="100%" fill="url(#bg)"/>
+      <circle cx="${width * 0.18}" cy="${height * 0.14}" r="${width * 0.22}" fill="${alpha(theme.accent2, 0.18)}"/>
+      <circle cx="${width * 0.83}" cy="${height * 0.18}" r="${width * 0.2}" fill="${alpha(theme.accent, 0.12)}"/>
+      <circle cx="${width * 0.58}" cy="${height * 0.82}" r="${width * 0.3}" fill="${alpha(theme.accent2, 0.08)}"/>
+      <rect width="100%" height="100%" fill="${alpha('#ffffff', overlayOpacity)}"/>
+    `;
+  }
+  if (cfg.bgStyle === 'spotlight') {
+    return `
+      <defs>
+        <radialGradient id="bg" cx="50%" cy="12%" r="90%">
+          <stop offset="0%" stop-color="${alpha(theme.accent2, 0.3)}" />
+          <stop offset="18%" stop-color="${alpha(theme.accent, 0.18)}" />
+          <stop offset="55%" stop-color="${alpha(theme.bg, 0.97)}" />
+          <stop offset="100%" stop-color="${theme.bg}" />
+        </radialGradient>
+      </defs>
+      <rect width="100%" height="100%" fill="url(#bg)"/>
+      <rect width="100%" height="100%" fill="${alpha('#ffffff', overlayOpacity)}"/>
+    `;
+  }
+  if (cfg.bgStyle === 'waves') {
+    return `
+      <defs>
+        <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="${theme.bg}" />
+          <stop offset="100%" stop-color="${theme.panel}" />
+        </linearGradient>
+      </defs>
+      <rect width="100%" height="100%" fill="url(#bg)"/>
+      <path d="M 0 ${height * 0.22} C ${width * 0.12} ${height * 0.18}, ${width * 0.28} ${height * 0.28}, ${width * 0.42} ${height * 0.24} S ${width * 0.74} ${height * 0.14}, ${width} ${height * 0.22}" fill="none" stroke="${alpha(theme.accent2, 0.16)}" stroke-width="${width * 0.01}"/>
+      <path d="M 0 ${height * 0.62} C ${width * 0.18} ${height * 0.56}, ${width * 0.34} ${height * 0.69}, ${width * 0.56} ${height * 0.64} S ${width * 0.82} ${height * 0.58}, ${width} ${height * 0.65}" fill="none" stroke="${alpha(theme.accent, 0.14)}" stroke-width="${width * 0.013}"/>
+      <rect width="100%" height="100%" fill="${alpha('#ffffff', overlayOpacity)}"/>
+    `;
+  }
+  if (cfg.bgStyle === 'noir') {
+    return `
+      <defs>
+        <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0%" stop-color="#020202" />
+          <stop offset="100%" stop-color="#0c1017" />
+        </linearGradient>
+      </defs>
+      <rect width="100%" height="100%" fill="url(#bg)"/>
+      <circle cx="${width * 0.84}" cy="${height * 0.12}" r="${width * 0.16}" fill="${alpha(theme.accent, 0.12)}"/>
+      <circle cx="${width * 0.24}" cy="${height * 0.76}" r="${width * 0.2}" fill="${alpha(theme.accent2, 0.08)}"/>
+      <rect width="100%" height="100%" fill="${alpha('#ffffff', overlayOpacity)}"/>
+    `;
+  }
+  return `
+    <defs>
+      <radialGradient id="bg1" cx="18%" cy="10%" r="80%">
+        <stop offset="0%" stop-color="${alpha(theme.accent, 0.36)}"/>
+        <stop offset="35%" stop-color="${alpha(theme.bg, 0.94)}"/>
+        <stop offset="100%" stop-color="${theme.bg}"/>
+      </radialGradient>
+      <radialGradient id="bg2" cx="82%" cy="78%" r="78%">
+        <stop offset="0%" stop-color="${alpha(theme.accent2, 0.14)}"/>
+        <stop offset="100%" stop-color="${alpha(theme.panel, 0)}"/>
+      </radialGradient>
+    </defs>
+    <rect width="100%" height="100%" fill="url(#bg1)"/>
+    <rect width="100%" height="100%" fill="url(#bg2)"/>
+    <rect width="100%" height="100%" fill="${alpha('#ffffff', overlayOpacity)}"/>
+  `;
+}
+
+function wrap(text, max) {
+  const words = String(text).split(/\s+/);
+  const lines = [];
+  let line = '';
+  for (const word of words) {
+    const attempt = line ? `${line} ${word}` : word;
+    if (attempt.length > max && line) {
+      lines.push(line);
+      line = word;
+    } else {
+      line = attempt;
+    }
+  }
+  if (line) lines.push(line);
+  return lines;
+}
+
+function renderHeader(cfg, theme, labels, now, stats, width, padding, topY) {
+  const dateText = cfg.lang === 'ru'
+    ? `${labels.today}: ${now.format('D MMMM YYYY')}`
+    : `${labels.today}: ${now.format('MMM D, YYYY')}`;
+  const right = width - padding;
+  const titleSize = Math.round(width * 0.06);
+  const subtitleSize = Math.round(width * 0.024);
+  const chipHeight = Math.round(width * 0.08);
+  const chipWidth = Math.round(width * 0.28);
+  const ringR = Math.round(width * 0.052);
+  const ringCx = right - ringR - 2;
+  const ringCy = topY + 18 + ringR;
+  const circumference = 2 * Math.PI * ringR;
+  const dash = circumference * (stats.percentPassed / 100);
+
+  let out = `
+    <text x="${padding}" y="${topY + titleSize}" fill="${theme.text}" font-size="${titleSize}" font-family="Inter, Arial, sans-serif" font-weight="800">${now.year()}</text>
+    <text x="${padding}" y="${topY + titleSize + subtitleSize * 1.6}" fill="${theme.muted}" font-size="${subtitleSize}" font-family="Inter, Arial, sans-serif">${escapeXml(dateText)}</text>
+    <rect x="${padding}" y="${topY + titleSize + subtitleSize * 2.3}" width="${chipWidth}" height="${chipHeight}" rx="${chipHeight / 2}" fill="${alpha(theme.panel, 0.92)}" stroke="${alpha(theme.accent2, 0.24)}" />
+    <text x="${padding + chipWidth / 2}" y="${topY + titleSize + subtitleSize * 2.3 + chipHeight * 0.64}" text-anchor="middle" fill="${theme.accent2}" font-size="${Math.round(width * 0.026)}" font-family="Inter, Arial, sans-serif" font-weight="700">${labels.week} ${now.week()}</text>
+  `;
+
+  if (cfg.showProgressRing) {
+    out += `
+      <circle cx="${ringCx}" cy="${ringCy}" r="${ringR}" fill="none" stroke="${alpha(theme.panel, 0.92)}" stroke-width="${ringR * 0.28}" />
+      <circle cx="${ringCx}" cy="${ringCy}" r="${ringR}" fill="none" stroke="${theme.accent}" stroke-width="${ringR * 0.28}" stroke-linecap="round" stroke-dasharray="${dash} ${circumference}" transform="rotate(-90 ${ringCx} ${ringCy})" />
+      <text x="${ringCx}" y="${ringCy + width * 0.01}" text-anchor="middle" fill="${theme.text}" font-size="${Math.round(width * 0.025)}" font-family="Inter, Arial, sans-serif" font-weight="800">${stats.percentPassed}%</text>
+    `;
+  }
+
+  return out;
+}
+
+function monthEmphasis(monthIndex, now, cfg) {
+  if (!cfg.focusCurrentMonth) return 1;
+  if (now.month() === monthIndex) return 1.12;
+  if (Math.abs(now.month() - monthIndex) === 1) return 1.03;
+  return 1;
+}
+
+function weekNumberLabel(date) {
+  return dayjs(date).week();
+}
+
+function renderMonth({ monthIndex, year, x, y, w, h, cfg, theme, labels, now }) {
   const first = dayjs(`${year}-${String(monthIndex + 1).padStart(2, '0')}-01`);
   const daysInMonth = first.daysInMonth();
   const firstWeekday = (first.day() + 6) % 7;
-  const titleY = y + h * 0.10;
-  const showWeekdays = cfg.showWeekdays;
-  const gridTop = y + (showWeekdays ? h * 0.28 : h * 0.2);
-  const cols = 7;
+  const isCurrent = now.month() === monthIndex;
+  const emphasis = monthEmphasis(monthIndex, now, cfg);
+  const radius = Math.max(16, Math.round(w * 0.08));
+  const pad = Math.round(w * 0.06);
+  const titleSize = Math.round(h * 0.14 * emphasis);
+  const weekdaySize = Math.round(h * 0.065);
+  const numberSize = Math.round(h * 0.078 * emphasis);
+  const badgeH = Math.round(h * 0.12);
+  const cardFill = isCurrent ? alpha(theme.panel, 0.98) : alpha(theme.panel, 0.72);
+  let out = `
+    <rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${radius}" fill="${cardFill}" stroke="${isCurrent ? alpha(theme.accent2, 0.36) : alpha('#ffffff', 0.06)}" />
+    <text x="${x + pad}" y="${y + pad + titleSize * 0.75}" fill="${theme.text}" font-size="${titleSize}" font-family="Inter, Arial, sans-serif" font-weight="800">${labels.months[monthIndex]}</text>
+  `;
+
+  if (cfg.monthBadges) {
+    const badgeW = Math.round(w * 0.26);
+    out += `
+      <rect x="${x + w - pad - badgeW}" y="${y + pad * 0.65}" width="${badgeW}" height="${badgeH}" rx="${badgeH / 2}" fill="${isCurrent ? alpha(theme.accent, 0.18) : alpha('#ffffff', 0.05)}" />
+      <text x="${x + w - pad - badgeW / 2}" y="${y + pad * 0.65 + badgeH * 0.65}" text-anchor="middle" fill="${isCurrent ? theme.accent2 : theme.muted}" font-size="${Math.round(h * 0.06)}" font-family="Inter, Arial, sans-serif" font-weight="700">${daysInMonth}d</text>
+    `;
+  }
+
+  const weekdayY = y + h * 0.24;
+  const gridTop = cfg.showWeekdays ? y + h * 0.30 : y + h * 0.22;
   const rows = 6;
-  const cellW = w / cols;
-  const cellH = (h - (gridTop - y) - h * 0.04) / rows;
-  let out = `<text x="${x}" y="${titleY}" fill="${theme.text}" font-size="${Math.round(h * 0.12)}" font-family="Inter, Arial, sans-serif" font-weight="600">${labels.months[monthIndex]}</text>`;
-  if (showWeekdays) {
-    for (let i = 0; i < labels.weekdays.length; i++) {
-      out += `<text x="${x + i * cellW + cellW / 2}" y="${y + h * 0.2}" text-anchor="middle" fill="${theme.muted}" font-size="${Math.round(h * 0.07)}" font-family="Inter, Arial, sans-serif">${labels.weekdays[i]}</text>`;
-    }
-  }
-  for (let day = 1; day <= daysInMonth; day++) {
-    const idx = firstWeekday + (day - 1);
-    const col = idx % 7;
-    const row = Math.floor(idx / 7);
-    const date = dayjs(`${year}-${String(monthIndex + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`);
-    const isToday = date.isSame(now, 'day');
-    const isAccent = isWeekendOrHoliday(date, cfg.weekendMode, holidays);
-    const tx = x + col * cellW + cellW / 2;
-    const ty = gridTop + row * cellH + cellH * 0.72;
-    if (isToday && cfg.accentToday) {
-      out += `<circle cx="${tx}" cy="${ty - cellH * 0.32}" r="${Math.min(cellW, cellH) * 0.34}" fill="${theme.accent}" fill-opacity="0.18" stroke="${theme.accent}" stroke-opacity="0.5" />`;
-    }
-    out += `<text x="${tx}" y="${ty}" text-anchor="middle" fill="${isToday && cfg.accentToday ? theme.accent2 : isAccent ? theme.weekend : theme.muted}" font-size="${Math.round(h * 0.08)}" font-family="Inter, Arial, sans-serif" font-weight="${isToday ? 700 : 500}">${day}</text>`;
-  }
-  return out;
-}
-
-function renderMonthDots({ monthIndex, year, x, y, w, h, cfg, theme, labels, now }) {
-  const first = dayjs(`${year}-${String(monthIndex + 1).padStart(2, '0')}-01`);
-  const daysInMonth = first.daysInMonth();
-  const titleY = y + h * 0.1;
   const cols = 7;
-  const rows = Math.ceil(daysInMonth / 7);
-  const dotAreaTop = y + h * 0.23;
-  const cellW = w / cols;
-  const cellH = (h - (dotAreaTop - y) - h * 0.08) / Math.max(rows, 5);
-  let out = `<text x="${x}" y="${titleY}" fill="${theme.text}" font-size="${Math.round(h * 0.12)}" font-family="Inter, Arial, sans-serif" font-weight="600">${labels.months[monthIndex]}</text>`;
-  for (let day = 1; day <= daysInMonth; day++) {
-    const date = dayjs(`${year}-${String(monthIndex + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`);
-    const idx = day - 1;
-    const col = idx % 7;
-    const row = Math.floor(idx / 7);
-    const cx = x + col * cellW + cellW / 2;
-    const cy = dotAreaTop + row * cellH + cellH / 2;
-    const isPast = date.isBefore(now, 'day');
-    const isToday = date.isSame(now, 'day');
-    const fill = isToday ? theme.accent : isPast ? theme.accent2 : theme.panel;
-    out += `<circle cx="${cx}" cy="${cy}" r="${Math.min(cellW, cellH) * 0.22}" fill="${fill}" stroke="${isPast || isToday ? 'none' : theme.muted}" stroke-opacity="0.35" />`;
+  const weekNumberCol = cfg.showWeekNumbers ? 1 : 0;
+  const innerW = w - pad * 2;
+  const cellW = innerW / (cols + weekNumberCol);
+  const cellH = (h - (gridTop - y) - h * 0.08) / rows;
+  const startX = x + pad + (cfg.showWeekNumbers ? cellW : 0);
+
+  if (cfg.showWeekdays) {
+    if (cfg.showWeekNumbers) {
+      out += `<text x="${x + pad + cellW / 2}" y="${weekdayY}" text-anchor="middle" fill="${theme.muted}" font-size="${weekdaySize}" font-family="Inter, Arial, sans-serif">#</text>`;
+    }
+    labels.weekdays.forEach((wd, i) => {
+      const weekend = i >= 5;
+      out += `<text x="${startX + i * cellW + cellW / 2}" y="${weekdayY}" text-anchor="middle" fill="${weekend ? alpha(theme.weekend, 0.95) : theme.muted}" font-size="${weekdaySize}" font-family="Inter, Arial, sans-serif" font-weight="700">${wd}</text>`;
+    });
   }
+
+  const productionHolidays = new Set([
+    `${year}-01-01`, `${year}-01-02`, `${year}-01-03`, `${year}-01-04`, `${year}-01-05`, `${year}-01-06`, `${year}-01-07`, `${year}-01-08`,
+    `${year}-02-23`, `${year}-03-08`, `${year}-05-01`, `${year}-05-09`, `${year}-06-12`, `${year}-11-04`
+  ]);
+
+  const isRestDay = (date) => {
+    if (cfg.weekendMode === 'none') return false;
+    const weekend = date.day() === 0 || date.day() === 6;
+    if (cfg.weekendMode === 'production') return weekend || productionHolidays.has(date.format('YYYY-MM-DD'));
+    return weekend;
+  };
+
+  const usedWeekRows = new Set();
+  for (let day = 1; day <= daysInMonth; day++) {
+    const index = firstWeekday + day - 1;
+    const col = index % 7;
+    const row = Math.floor(index / 7);
+    usedWeekRows.add(row);
+    const date = dayjs(`${year}-${String(monthIndex + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`);
+    const cx = startX + col * cellW + cellW / 2;
+    const cy = gridTop + row * cellH + cellH * 0.68;
+    const isToday = cfg.accentToday && date.isSame(now, 'day');
+    const isWeekend = isRestDay(date);
+    const isPast = date.isBefore(now, 'day') && now.month() === monthIndex;
+    const textColor = isToday ? theme.text : isWeekend ? theme.weekend : isPast ? alpha(theme.text, 0.88) : theme.muted;
+
+    if (isToday) {
+      if (cfg.style === 'outline') {
+        out += `<rect x="${cx - cellW * 0.38}" y="${cy - cellH * 0.58}" width="${cellW * 0.76}" height="${cellH * 0.72}" rx="${cellH * 0.28}" fill="none" stroke="${theme.accent}" stroke-width="${Math.max(2, w * 0.006)}"/>`;
+      } else {
+        out += `<rect x="${cx - cellW * 0.38}" y="${cy - cellH * 0.58}" width="${cellW * 0.76}" height="${cellH * 0.72}" rx="${cellH * 0.28}" fill="${alpha(theme.accent, cfg.style === 'numbers' ? 0.24 : 0.18)}" stroke="${alpha(theme.accent2, 0.34)}"/>`;
+      }
+    }
+
+    if (cfg.style === 'dots') {
+      const r = Math.min(cellW, cellH) * (isToday ? 0.2 : 0.14);
+      out += `<circle cx="${cx}" cy="${cy - cellH * 0.15}" r="${r}" fill="${isToday ? theme.accent : isPast ? theme.accent2 : isWeekend ? alpha(theme.weekend, 0.9) : alpha(theme.text, 0.26)}"/>`;
+      out += `<text x="${cx}" y="${cy + cellH * 0.36}" text-anchor="middle" fill="${textColor}" font-size="${Math.round(numberSize * 0.9)}" font-family="Inter, Arial, sans-serif" font-weight="700">${day}</text>`;
+    } else if (cfg.style === 'focus') {
+      out += `<text x="${cx}" y="${cy}" text-anchor="middle" fill="${textColor}" font-size="${Math.round(numberSize * (isToday ? 1.08 : 1))}" font-family="Inter, Arial, sans-serif" font-weight="${isToday || isCurrent ? 800 : 600}">${day}</text>`;
+      if (isCurrent && !isToday) {
+        out += `<line x1="${cx - cellW * 0.18}" y1="${cy + cellH * 0.17}" x2="${cx + cellW * 0.18}" y2="${cy + cellH * 0.17}" stroke="${alpha(theme.accent2, 0.35)}" stroke-linecap="round" />`;
+      }
+    } else {
+      out += `<text x="${cx}" y="${cy}" text-anchor="middle" fill="${textColor}" font-size="${numberSize}" font-family="Inter, Arial, sans-serif" font-weight="${isToday ? 800 : 650}">${day}</text>`;
+    }
+  }
+
+  if (cfg.showWeekNumbers) {
+    [...usedWeekRows].forEach((row) => {
+      const date = first.add(row * 7 - firstWeekday, 'day');
+      const wx = x + pad + cellW / 2;
+      const wy = gridTop + row * cellH + cellH * 0.68;
+      out += `<text x="${wx}" y="${wy}" text-anchor="middle" fill="${alpha(theme.muted, 0.8)}" font-size="${Math.round(numberSize * 0.78)}" font-family="Inter, Arial, sans-serif">${weekNumberLabel(date)}</text>`;
+    });
+  }
+
   return out;
 }
 
-function renderMonthBars({ monthIndex, year, x, y, w, h, theme, labels, now }) {
-  const first = dayjs(`${year}-${String(monthIndex + 1).padStart(2, '0')}-01`);
-  const daysInMonth = first.daysInMonth();
-  const titleY = y + h * 0.12;
-  const barY = y + h * 0.52;
-  const barH = h * 0.15;
-  const progress = Math.max(0, Math.min(1, now.month() > monthIndex ? 1 : now.month() < monthIndex ? 0 : now.date() / daysInMonth));
-  return [
-    `<text x="${x}" y="${titleY}" fill="${theme.text}" font-size="${Math.round(h * 0.12)}" font-family="Inter, Arial, sans-serif" font-weight="600">${labels.months[monthIndex]}</text>`,
-    `<rect x="${x}" y="${barY}" rx="${barH / 2}" ry="${barH / 2}" width="${w}" height="${barH}" fill="${theme.panel}" stroke="${theme.muted}" stroke-opacity="0.2" />`,
-    `<rect x="${x}" y="${barY}" rx="${barH / 2}" ry="${barH / 2}" width="${w * progress}" height="${barH}" fill="${theme.accent}" />`,
-    `<text x="${x}" y="${barY + h * 0.33}" fill="${theme.muted}" font-size="${Math.round(h * 0.08)}" font-family="Inter, Arial, sans-serif">${daysInMonth}d</text>`
-  ].join('');
-}
-
-function renderMonthRings({ monthIndex, year, x, y, w, h, theme, labels, now }) {
-  const first = dayjs(`${year}-${String(monthIndex + 1).padStart(2, '0')}-01`);
-  const daysInMonth = first.daysInMonth();
-  const progress = Math.max(0, Math.min(1, now.month() > monthIndex ? 1 : now.month() < monthIndex ? 0 : now.date() / daysInMonth));
-  const cx = x + w * 0.5;
-  const cy = y + h * 0.58;
-  const r = Math.min(w, h) * 0.23;
-  const c = 2 * Math.PI * r;
-  return `
-    <text x="${x}" y="${y + h * 0.12}" fill="${theme.text}" font-size="${Math.round(h * 0.12)}" font-family="Inter, Arial, sans-serif" font-weight="600">${labels.months[monthIndex]}</text>
-    <circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${theme.panel}" stroke-width="${r * 0.28}" />
-    <circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${theme.accent}" stroke-width="${r * 0.28}" stroke-dasharray="${c}" stroke-dashoffset="${c * (1 - progress)}" transform="rotate(-90 ${cx} ${cy})" stroke-linecap="round" />
-    <text x="${cx}" y="${cy + 10}" text-anchor="middle" fill="${theme.accent2}" font-size="${Math.round(h * 0.12)}" font-family="Inter, Arial, sans-serif" font-weight="700">${Math.round(progress * 100)}%</text>
+function renderFooter(cfg, theme, labels, now, stats, width, footerBox) {
+  const { x, y, w, h } = footerBox;
+  const pad = Math.round(w * 0.04);
+  const base = `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${Math.round(w * 0.05)}" fill="${alpha(theme.panel, 0.82)}" stroke="${alpha('#ffffff', 0.06)}"/>`;
+  const textSize = Math.round(h * 0.22);
+  const subSize = Math.round(h * 0.15);
+  if (cfg.footer === 'quote') {
+    const lines = wrap(cfg.note || randomQuote(cfg.lang, now.year()), 34);
+    return base + lines.map((line, i) => `<text x="${x + w / 2}" y="${y + h * 0.38 + i * subSize * 1.45}" text-anchor="middle" fill="${theme.text}" font-size="${subSize}" font-family="Inter, Arial, sans-serif" font-weight="700">${escapeXml(line)}</text>`).join('');
+  }
+  if (cfg.footer === 'progress_bar') {
+    const barX = x + pad;
+    const barY = y + h * 0.55;
+    const barW = w - pad * 2;
+    const barH = h * 0.12;
+    return base + `
+      <text x="${x + pad}" y="${y + h * 0.32}" fill="${theme.text}" font-size="${textSize}" font-family="Inter, Arial, sans-serif" font-weight="800">${stats.percentPassed}% ${labels.passed}</text>
+      <rect x="${barX}" y="${barY}" width="${barW}" height="${barH}" rx="${barH / 2}" fill="${alpha(theme.bg, 0.7)}" />
+      <rect x="${barX}" y="${barY}" width="${barW * stats.percentPassed / 100}" height="${barH}" rx="${barH / 2}" fill="${theme.accent}" />
+    `;
+  }
+  if (cfg.footer === 'today_card') {
+    const dateLabel = cfg.lang === 'ru' ? now.format('dddd, D MMMM') : now.format('dddd, MMMM D');
+    return base + `
+      <text x="${x + pad}" y="${y + h * 0.34}" fill="${theme.accent2}" font-size="${subSize}" font-family="Inter, Arial, sans-serif" font-weight="700">${labels.today}</text>
+      <text x="${x + pad}" y="${y + h * 0.68}" fill="${theme.text}" font-size="${textSize}" font-family="Inter, Arial, sans-serif" font-weight="800">${escapeXml(dateLabel)}</text>
+    `;
+  }
+  if (cfg.footer === 'custom_note' && cfg.note) {
+    const lines = wrap(cfg.note, 36).slice(0, 2);
+    return base + lines.map((line, i) => `<text x="${x + pad}" y="${y + h * 0.38 + i * subSize * 1.6}" fill="${theme.text}" font-size="${subSize}" font-family="Inter, Arial, sans-serif" font-weight="700">${escapeXml(line)}</text>`).join('');
+  }
+  return base + `
+    <text x="${x + pad}" y="${y + h * 0.36}" fill="${theme.text}" font-size="${textSize}" font-family="Inter, Arial, sans-serif" font-weight="800">${stats.daysLeft} ${labels.daysLeft}</text>
+    <text x="${x + pad}" y="${y + h * 0.66}" fill="${theme.muted}" font-size="${subSize}" font-family="Inter, Arial, sans-serif">${stats.percentPassed}% ${labels.passed}</text>
   `;
-}
-
-function renderMonthHeatmap({ monthIndex, year, x, y, w, h, theme, labels, now }) {
-  const first = dayjs(`${year}-${String(monthIndex + 1).padStart(2, '0')}-01`);
-  const daysInMonth = first.daysInMonth();
-  const cols = 7;
-  const rows = 5;
-  const top = y + h * 0.22;
-  const cellW = w / cols;
-  const cellH = (h - h * 0.28) / rows;
-  let out = `<text x="${x}" y="${y + h * 0.1}" fill="${theme.text}" font-size="${Math.round(h * 0.12)}" font-family="Inter, Arial, sans-serif" font-weight="600">${labels.months[monthIndex]}</text>`;
-  for (let day = 1; day <= daysInMonth; day++) {
-    const idx = day - 1;
-    const col = idx % 7;
-    const row = Math.floor(idx / 7);
-    const date = dayjs(`${year}-${String(monthIndex + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`);
-    const t = date.isBefore(now, 'day') ? 0.85 : date.isSame(now, 'day') ? 1 : 0.15;
-    const alpha = t;
-    out += `<rect x="${x + col * cellW + 3}" y="${top + row * cellH + 3}" width="${Math.max(8, cellW - 6)}" height="${Math.max(8, cellH - 6)}" rx="${Math.min(cellW, cellH) * 0.18}" fill="${theme.accent}" fill-opacity="${alpha}" />`;
-  }
-  return out;
-}
-
-function renderMonthFocus({ monthIndex, year, x, y, w, h, cfg, theme, labels, now, holidays }) {
-  if (monthIndex !== now.month()) {
-    return `<text x="${x}" y="${y + h * 0.1}" fill="${theme.text}" font-size="${Math.round(h * 0.12)}" font-family="Inter, Arial, sans-serif" font-weight="600">${labels.months[monthIndex]}</text>
-    <rect x="${x}" y="${y + h * 0.24}" width="${w}" height="${h * 0.18}" rx="12" fill="${theme.panel}" />`;
-  }
-  return renderMonthNumbers({ monthIndex, year, x, y, w, h, cfg, theme, labels, now, holidays });
-}
-
-function renderProgressRing(width, height, theme, stats) {
-  const cx = width * 0.5;
-  const cy = height * 0.16;
-  const r = Math.min(width, height) * 0.08;
-  const c = 2 * Math.PI * r;
-  const progress = stats.percentPassed / 100;
-  return `
-    <circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${theme.panel}" stroke-width="${r * 0.22}" />
-    <circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${theme.accent}" stroke-width="${r * 0.22}" stroke-dasharray="${c}" stroke-dashoffset="${c * (1 - progress)}" transform="rotate(-90 ${cx} ${cy})" stroke-linecap="round" />
-    <text x="${cx}" y="${cy + 12}" text-anchor="middle" fill="${theme.text}" font-size="${Math.round(r * 0.52)}" font-family="Inter, Arial, sans-serif" font-weight="700">${stats.percentPassed}%</text>
-  `;
-}
-
-function renderFooter(cfg, labels, theme, width, height, stats) {
-  const y = height * 0.88;
-  const x = width * 0.5;
-  switch (cfg.footer) {
-    case 'days_left':
-      return `<text x="${x}" y="${y}" text-anchor="middle" fill="${theme.accent}" font-size="${Math.round(height * 0.028)}" font-family="Inter, Arial, sans-serif" font-weight="700">${stats.daysLeft} ${labels.daysLeft}</text>`;
-    case 'days_passed':
-      return `<text x="${x}" y="${y}" text-anchor="middle" fill="${theme.accent}" font-size="${Math.round(height * 0.028)}" font-family="Inter, Arial, sans-serif" font-weight="700">${stats.dayOfYear} ${labels.daysPassed}</text>`;
-    case 'quote': {
-      const list = QUOTES[cfg.lang] || QUOTES.ru;
-      const quote = list[stats.dayOfYear % list.length];
-      return wrapSvgText(quote, x, y - 12, 34, Math.round(height * 0.024), theme.accent, Math.round(height * 0.02));
-    }
-    case 'progress_bar': {
-      const w = width * 0.46;
-      const h = height * 0.014;
-      const progress = stats.percentPassed / 100;
-      return `
-        <rect x="${x - w / 2}" y="${y - 10}" width="${w}" height="${h}" rx="${h / 2}" fill="${theme.panel}" />
-        <rect x="${x - w / 2}" y="${y - 10}" width="${w * progress}" height="${h}" rx="${h / 2}" fill="${theme.accent}" />
-        <text x="${x}" y="${y + 28}" text-anchor="middle" fill="${theme.muted}" font-size="${Math.round(height * 0.018)}" font-family="Inter, Arial, sans-serif">${stats.percentPassed}%</text>
-      `;
-    }
-    case 'days_left_percent_passed':
-      return `
-        <text x="${x - 16}" y="${y}" text-anchor="end" fill="${theme.accent}" font-size="${Math.round(height * 0.028)}" font-family="Inter, Arial, sans-serif" font-weight="700">${stats.daysLeft} ${labels.daysLeft}</text>
-        <text x="${x + 16}" y="${y}" text-anchor="start" fill="${theme.muted}" font-size="${Math.round(height * 0.026)}" font-family="Inter, Arial, sans-serif">${stats.percentPassed}%</text>
-      `;
-    default:
-      return `
-        <text x="${x - 16}" y="${y}" text-anchor="end" fill="${theme.accent}" font-size="${Math.round(height * 0.028)}" font-family="Inter, Arial, sans-serif" font-weight="700">${stats.daysLeft} ${labels.daysLeft}</text>
-        <text x="${x + 16}" y="${y}" text-anchor="start" fill="${theme.muted}" font-size="${Math.round(height * 0.026)}" font-family="Inter, Arial, sans-serif">${stats.percentLeft}%</text>
-      `;
-  }
-}
-
-function createLayout(cfg, width, height) {
-  let top = height * 0.14;
-  let bottom = height * 0.18;
-  if (cfg.calendarSize === 'large') {
-    top = height * 0.11;
-    bottom = height * 0.14;
-  } else if (cfg.calendarSize === 'large_no_top') {
-    top = height * 0.06;
-    bottom = height * 0.14;
-  } else if (cfg.calendarSize === 'large_no_bottom') {
-    top = height * 0.11;
-    bottom = height * 0.08;
-  }
-  return { top, bottom };
 }
 
 function renderSvg(cfg) {
-  const theme = THEMES[cfg.theme] || THEMES.graphite_orange;
+  const theme = THEMES[cfg.theme];
   const labels = getLabels(cfg.lang);
-  const now = getZonedNow(cfg.timezone);
-  const year = now.year();
-  const stats = computeYearStats(now);
-  const holidays = getProductionHolidays(year);
+  const now = zonedNow(cfg.timezone);
+  const stats = yearStats(now);
   const { width, height } = cfg;
-  const layout = createLayout(cfg, width, height);
-  const cols = cfg.monthLayout === 'list_1x12' ? 1 : cfg.monthLayout === 'grid_4x3' ? 4 : 3;
-  const rows = cfg.monthLayout === 'list_1x12' ? 12 : cfg.monthLayout === 'grid_4x3' ? 3 : 4;
-  const calendarW = width * 0.82;
-  const gapX = width * 0.05;
-  const gapY = height * 0.025;
-  const innerW = calendarW - gapX * (cols - 1);
-  const cardW = innerW / cols;
-  const usableH = height - layout.top - layout.bottom - gapY * (rows - 1);
-  const cardH = usableH / rows;
-  const startX = (width - calendarW) / 2;
-  const startY = layout.top;
+  const padding = Math.round(width * 0.06);
+  const topArea = Math.round(height * (cfg.calendarSize === 'compact' ? 0.11 : 0.15));
+  const footerArea = Math.round(height * (cfg.calendarSize === 'large' ? 0.1 : 0.12));
+  const contentTop = padding + topArea;
+  const contentBottom = height - padding - footerArea;
+  const contentH = contentBottom - contentTop;
 
-  const styleRenderer = {
-    numbers: renderMonthNumbers,
-    dots: renderMonthDots,
-    bars: renderMonthBars,
-    rings: renderMonthRings,
-    heatmap: renderMonthHeatmap,
-    focus: renderMonthFocus
-  }[cfg.style] || renderMonthNumbers;
+  let cols = 3, rows = 4;
+  if (cfg.monthLayout === 'grid_4x3') { cols = 4; rows = 3; }
+  if (cfg.monthLayout === 'list_1x12') { cols = 1; rows = 12; }
 
-  let months = '';
+  const gap = Math.round(width * (cfg.monthLayout === 'list_1x12' ? 0.03 : 0.025));
+  const monthW = (width - padding * 2 - gap * (cols - 1)) / cols;
+  const monthH = (contentH - gap * (rows - 1)) / rows;
+
+  let monthsSvg = '';
   for (let i = 0; i < 12; i++) {
     const col = i % cols;
     const row = Math.floor(i / cols);
-    const x = startX + col * (cardW + gapX);
-    const y = startY + row * (cardH + gapY);
-    months += styleRenderer({ monthIndex: i, year, x, y, w: cardW, h: cardH, cfg, theme, labels, now, holidays });
+    const x = padding + col * (monthW + gap);
+    const y = contentTop + row * (monthH + gap);
+    monthsSvg += renderMonth({ monthIndex: i, year: now.year(), x, y, w: monthW, h: monthH, cfg, theme, labels, now });
   }
 
-  const bgOpacity = Math.max(0, Math.min(1, cfg.opacity / 100));
-  const defs = `
-    <linearGradient id="bgGrad" x1="0" x2="0" y1="0" y2="1">
-      <stop offset="0%" stop-color="${theme.bg}" />
-      <stop offset="100%" stop-color="${theme.panel}" />
-    </linearGradient>
-    <radialGradient id="glow" cx="50%" cy="0%" r="85%">
-      <stop offset="0%" stop-color="${theme.accent}" stop-opacity="0.20" />
-      <stop offset="100%" stop-color="${theme.accent}" stop-opacity="0" />
-    </radialGradient>
-  `;
+  let quarterLines = '';
+  if (cfg.quarterDividers && cfg.monthLayout !== 'list_1x12') {
+    if (cols === 3 && rows === 4) {
+      for (let r = 1; r < rows; r++) {
+        const ly = contentTop + r * monthH + (r - 0.5) * gap;
+        quarterLines += `<line x1="${padding}" y1="${ly}" x2="${width - padding}" y2="${ly}" stroke="${alpha(theme.accent2, 0.12)}" stroke-dasharray="10 12" />`;
+      }
+    }
+  }
 
-  return `
+  const footerBox = { x: padding, y: height - padding - footerArea + Math.round(footerArea * 0.06), w: width - padding * 2, h: Math.round(footerArea * 0.84) };
+
+  return `<?xml version="1.0" encoding="UTF-8"?>
   <svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">
-    <defs>${defs}</defs>
-    <rect width="100%" height="100%" fill="url(#bgGrad)" />
-    <rect width="100%" height="100%" fill="${theme.bg}" fill-opacity="${bgOpacity}" />
-    <rect width="100%" height="${height * 0.4}" fill="url(#glow)" />
-    ${cfg.showProgressRing ? renderProgressRing(width, height, theme, stats) : ''}
-    ${months}
-    ${renderFooter(cfg, labels, theme, width, height, stats)}
+    ${renderBackground(cfg, theme, width, height)}
+    ${renderHeader(cfg, theme, labels, now, stats, width, padding, padding)}
+    ${quarterLines}
+    ${monthsSvg}
+    ${renderFooter(cfg, theme, labels, now, stats, width, footerBox)}
   </svg>`;
 }
 
 app.use(express.static(path.join(__dirname, 'public')));
 
-app.get('/api/config', (req, res) => {
-  res.json({ presets: PHONE_PRESETS, themes: Object.keys(THEMES) });
+app.get('/api/options', (req, res) => {
+  res.json({ presets: PHONE_PRESETS, themes: THEMES, bgStyles: BG_STYLES });
 });
 
 app.get('/wallpaper.svg', (req, res) => {
   const cfg = getConfig(req.query);
-  const svg = renderSvg(cfg);
-  res.setHeader('Content-Type', 'image/svg+xml; charset=utf-8');
-  res.send(svg);
+  res.type('image/svg+xml').send(renderSvg(cfg));
 });
 
 app.get('/wallpaper.png', async (req, res) => {
@@ -433,13 +554,12 @@ app.get('/wallpaper.png', async (req, res) => {
     const png = await sharp(Buffer.from(svg)).png().toBuffer();
     res.setHeader('Content-Type', 'image/png');
     res.send(png);
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ error: 'Failed to generate PNG' });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to render wallpaper', details: err.message });
   }
 });
 
-app.get('*', (req, res) => {
+app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
