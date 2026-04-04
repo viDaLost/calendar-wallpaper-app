@@ -17,10 +17,10 @@ const Engine = require('./public/engine.js');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// In-memory Кеш PNG картинок (Очистка каждый час)
+// In-memory кеш PNG картинок
 const pngCache = new Map();
-const cacheSweepTimer = setInterval(() => pngCache.clear(), 1000 * 60 * 60);
-if (cacheSweepTimer.unref) cacheSweepTimer.unref();
+const cacheInterval = setInterval(() => pngCache.clear(), 1000 * 60 * 60);
+if (cacheInterval.unref) cacheInterval.unref();
 
 const FONTS = {
   inter: { name: 'Inter (Стандарт)', file: 'inter.ttf', family: 'Inter' },
@@ -72,82 +72,61 @@ if (fs.existsSync(fontsDir)) {
   }
 }
 
-
-
-function buildFontPayload(fontKey) {
-  return {
-    selected: fontCache[fontKey] || fontCache.inter || '',
-    inter: fontCache.inter || '',
-    ubuntu: fontCache.ubuntu || ''
-  };
+function getFontBuffer(key) {
+  const def = FONTS[key] || FONTS.inter;
+  const fp = path.join(fontsDir, def.file);
+  return fs.existsSync(fp) ? fs.readFileSync(fp) : null;
 }
 
-function buildResvgFontBuffers(fontKey) {
-  const keys = [fontKey, 'inter', 'ubuntu'];
-  const seen = new Set();
-  const buffers = [];
-  for (const key of keys) {
-    if (!key || seen.has(key) || !fontCache[key]) continue;
-    seen.add(key);
-    buffers.push(Buffer.from(fontCache[key], 'base64'));
-  }
-  return buffers;
+function normalizeCityLabel(city) {
+  return String(city || '').split(',')[0].trim();
 }
 
-async function fetchJsonWithTimeout(url, timeoutMs = 2200) {
+async function fetchJsonWithTimeout(url, timeoutMs = 2500) {
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  const t = setTimeout(() => controller.abort(), timeoutMs);
+  if (t.unref) t.unref();
   try {
-    const resp = await fetch(url, { signal: controller.signal, headers: { 'accept': 'application/json' } });
-    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-    return await resp.json();
+    const res = await fetch(url, { signal: controller.signal, headers: { 'user-agent': 'wallpaper-calendar-pro/1.0' } });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return await res.json();
   } finally {
-    clearTimeout(timer);
+    clearTimeout(t);
   }
 }
 
 // Получение погоды по названию города (Open-Meteo Geocoding)
-function weatherIconFromCode(code) {
-  let icon = '☀️';
-  if (code >= 1 && code <= 3) icon = '⛅';
-  if (code >= 45 && code <= 48) icon = '🌫️';
-  if (code >= 51 && code <= 67) icon = '🌧️';
-  if (code >= 71 && code <= 77) icon = '❄️';
-  if (code >= 80 && code <= 82) icon = '🌦️';
-  if (code >= 95) icon = '⛈️';
-  return icon;
-}
-
 async function fetchWeatherByCity(city) {
-  const normalizedCity = String(city || '').split(',')[0].trim();
-  if (!normalizedCity) return null;
+  const cityLabel = normalizeCityLabel(city);
+  if (!cityLabel) return null;
   try {
-    const geoData = await fetchJsonWithTimeout(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(normalizedCity)}&count=1&language=ru`, 1800);
+    const geoData = await fetchJsonWithTimeout(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(cityLabel)}&count=1&language=ru`, 2200);
     if (!geoData.results || geoData.results.length === 0) return null;
-
-    const place = geoData.results[0];
-    const { latitude, longitude, timezone } = place;
-    const data = await fetchJsonWithTimeout(`https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current=temperature_2m,weather_code&hourly=temperature_2m,weather_code&forecast_days=1&timezone=${encodeURIComponent(timezone || 'auto')}`, 2200);
-    if (!data.current || typeof data.current.temperature_2m !== 'number') return null;
-
+    const { latitude, longitude, name } = geoData.results[0];
+    const data = await fetchJsonWithTimeout(`https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current=temperature_2m,weather_code&hourly=temperature_2m,weather_code&forecast_days=1`, 2200);
     const temp = Math.round(data.current.temperature_2m);
-    const code = data.current.weather_code;
-    const cityLabel = String(place.name || normalizedCity).trim();
-
-    const preferredHours = [6, 9, 12, 15, 18, 21];
-    const hourly = [];
-    if (data.hourly && Array.isArray(data.hourly.time) && Array.isArray(data.hourly.temperature_2m)) {
-      for (const targetHour of preferredHours) {
-        const idx = data.hourly.time.findIndex((t) => Number(String(t).slice(11, 13)) === targetHour);
-        if (idx >= 0) {
-          const t = Math.round(data.hourly.temperature_2m[idx]);
-          const hourlyCode = Array.isArray(data.hourly.weather_code) ? data.hourly.weather_code[idx] : code;
-          hourly.push({ hour: `${String(targetHour).padStart(2, '0')}:00`, temp: t > 0 ? `+${t}` : `${t}`, icon: weatherIconFromCode(hourlyCode) });
-        }
-      }
+    const iconFor = (code) => {
+      let icon = '☀️';
+      if(code >= 1 && code <= 3) icon = '⛅';
+      if(code >= 45 && code <= 48) icon = '🌫️';
+      if(code >= 51 && code <= 67) icon = '🌧️';
+      if(code >= 71 && code <= 77) icon = '❄️';
+      if(code >= 80 && code <= 82) icon = '🌦️';
+      if(code >= 95) icon = '⛈️';
+      return icon;
+    };
+    let dayWeather = [];
+    const slots = ['06:00','09:00','12:00','15:00','18:00','21:00'];
+    if (data.hourly && Array.isArray(data.hourly.time)) {
+      dayWeather = slots.map((slot) => {
+        const idx = data.hourly.time.findIndex((t) => String(t).includes(`T${slot}`));
+        if (idx === -1) return null;
+        const t = Math.round(data.hourly.temperature_2m[idx]);
+        const code = data.hourly.weather_code[idx];
+        return { time: slot, temp: t > 0 ? `+${t}°` : `${t}°`, icon: iconFor(code) };
+      }).filter(Boolean);
     }
-
-    return { temp: temp > 0 ? `+${temp}` : `${temp}`, icon: weatherIconFromCode(code), cityLabel, hourly };
+    return { temp: temp > 0 ? `+${temp}` : `${temp}`, icon: iconFor(data.current.weather_code), cityLabel: normalizeCityLabel(name || cityLabel), dayWeather };
   } catch (e) {
     return null;
   }
@@ -158,8 +137,7 @@ app.use(express.static(path.join(__dirname, 'public')));
 app.get('/api/options', (req, res) => {
   res.json({ 
     presets: PHONE_PRESETS, themes: Engine.THEMES, bgStyles: Engine.BG_STYLES, 
-    fonts: Object.fromEntries(Object.entries(FONTS).map(([k, v]) => [k, v.name])),
-    fontFamilies: Object.fromEntries(Object.entries(FONTS).map(([k, v]) => [k, v.family]))
+    fonts: Object.fromEntries(Object.entries(FONTS).map(([k, v]) => [k, v.name])) 
   });
 });
 
@@ -195,26 +173,22 @@ function getConfig(query) {
     bgStyle: Engine.BG_STYLES[rawBg] ? rawBg : 'mesh_organic',
     lang: query.lang === 'en' ? 'en' : 'ru',
     timezone: Number(query.timezone) || 3,
-    footer: query.footer || 'year_summary', note: (query.note || '').slice(0, 120),
+    footer: query.footer || 'year_summary', note: (query.note || '').slice(0, 80),
     events: query.events || '',
-    city: String(query.city || '').split(',')[0].trim(),
-    eventColor: query.c_event || themeObj.accent,
+    city: query.city || '',
+    eventColor: query.event_color || '',
     showWeekdays: String(query.show_weekdays || '1') === '1', accentToday: String(query.accent_today || '1') === '1',
     showProgressRing: String(query.show_progress_ring || '1') === '1', showWeekNumbers: String(query.show_week_numbers || '0') === '1',
     quarterDividers: String(query.quarter_dividers || '1') === '1', monthBadges: String(query.month_badges || '1') === '1',
-    focusCurrentMonth: String(query.focus_current_month || '1') === '1', lockscreenSafe: String(query.lockscreen_safe || '1') === '1',
-    showHeaderMeta: String(query.show_header_meta || '1') === '1',
-    strongWeekendTint: String(query.strong_weekend_tint || '1') === '1',
-    glassPanels: String(query.glass_panels || '1') === '1'
+    focusCurrentMonth: String(query.focus_current_month || '1') === '1', lockscreenSafe: String(query.lockscreen_safe || '1') === '1'
   };
 }
 
 app.get('/wallpaper.svg', async (req, res) => {
   const cfg = getConfig(req.query);
-  try {
-    if (cfg.city) cfg.weatherData = await fetchWeatherByCity(cfg.city);
-  } catch (_) {}
-  res.type('image/svg+xml').send(Engine.renderSvg(cfg, dayjs, buildFontPayload(req.query.font || 'inter')));
+  cfg.weatherData = await fetchWeatherByCity(cfg.city);
+  if (cfg.weatherData && cfg.weatherData.dayWeather) cfg.dayWeather = cfg.weatherData.dayWeather;
+  res.type('image/svg+xml').send(Engine.renderSvg(cfg, dayjs, fontCache[req.query.font || 'inter']));
 });
 
 app.get('/wallpaper.png', async (req, res) => {
@@ -231,19 +205,30 @@ app.get('/wallpaper.png', async (req, res) => {
     // Запрашиваем погоду по городу (если указан)
     cfg.weatherData = await fetchWeatherByCity(cfg.city);
 
-    const fontKey = req.query.font || 'inter';
-    const svg = Engine.renderSvg(cfg, dayjs, buildFontPayload(fontKey));
-    const fontBuffers = buildResvgFontBuffers(fontKey);
+    const b64Font = fontCache[req.query.font || 'inter'];
+    const svg = Engine.renderSvg(cfg, dayjs, b64Font);
 
-    const resvg = new Resvg(svg, {
-      fitTo: { mode: 'original' },
-      font: {
-        fontBuffers,
-        loadSystemFonts: false,
-        defaultFontFamily: 'Ubuntu',
-      }
-    });
-    const png = Buffer.from(resvg.render().asPng());
+    // Подготовка буферов шрифтов для 100% рендера текста в Resvg на Vercel
+    const fontBuffers = [];
+    if (b64Font) fontBuffers.push(Buffer.from(b64Font, 'base64'));
+    const defaultFontBuf = await getDefaultFontBuffer();
+    if (defaultFontBuf) fontBuffers.push(Buffer.from(defaultFontBuf));
+
+    let png;
+    try {
+      const resvg = new Resvg(svg, { 
+        fitTo: { mode: 'original' },
+        font: {
+          fontBuffers,
+          loadSystemFonts: true,
+          defaultFontFamily: 'Inter',
+        }
+      });
+      png = resvg.render().asPng();
+    } catch (renderErr) {
+      console.error('Resvg Error, falling back to sharp:', renderErr);
+      png = await sharp(Buffer.from(svg), { density: 300 }).png().toBuffer();
+    }
 
     if (pngCache.size < 1000) pngCache.set(cacheKey, png);
     res.setHeader('Content-Type', 'image/png');
@@ -251,7 +236,6 @@ app.get('/wallpaper.png', async (req, res) => {
     res.setHeader('X-Cache', 'MISS');
     res.send(png);
   } catch (err) {
-    console.error('WALLPAPER_PNG_ERROR', err);
     res.status(500).json({ error: 'RENDER_ERROR', details: err.message });
   }
 });
