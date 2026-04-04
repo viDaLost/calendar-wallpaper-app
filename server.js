@@ -346,8 +346,7 @@ function getLayoutMetrics(cfg, width, height, contentH, sidePadding) {
 }
 
 function getSafeFontStack(selectedFontFamily, pngSafeFont) {
-  const safe = `'DejaVu Sans','Noto Sans','Liberation Sans',Arial,sans-serif`;
-  return pngSafeFont ? safe : `'${selectedFontFamily}','DejaVu Sans','Noto Sans','Liberation Sans',Arial,sans-serif`;
+  return `'${selectedFontFamily}','DejaVu Sans','Noto Sans','Liberation Sans',Arial,sans-serif`;
 }
 
 function pickMonthLabel(labels, monthIndex, width, mode = 'grid') {
@@ -632,7 +631,7 @@ function renderSvg(cfg) {
   const selectedFontDef = FONTS[cfg.font] || FONTS.inter;
   const b64Font = fontCache[cfg.font];
   const FONT_FAMILY = getSafeFontStack(selectedFontDef.family, cfg.pngSafeFont);
-  const fontDefs = b64Font && !cfg.pngSafeFont ? `<style>@font-face { font-family: '${selectedFontDef.family}'; src: url(data:font/truetype;base64,${b64Font}) format('truetype'); }</style>` : '';
+  const fontDefs = b64Font ? `<style>@font-face { font-family: '${selectedFontDef.family}'; src: url(data:font/truetype;base64,${b64Font}) format('truetype'); font-weight: 100 900; font-style: normal; } text, tspan { font-family: '${selectedFontDef.family}','DejaVu Sans','Noto Sans','Liberation Sans',Arial,sans-serif; }</style>` : '';
 
   const layout = getLayoutMetrics(cfg, width, height, contentH, sidePadding);
 
@@ -721,9 +720,9 @@ app.get('/wallpaper.svg', (req, res) => {
 });
 app.get('/wallpaper.png', async (req, res) => {
   try {
-    const cfg = getConfig({ ...req.query, __target: 'png' });
+    const cfg = getConfig(req.query);
     const svg = renderSvg(cfg);
-    const png = await sharp(Buffer.from(svg)).png().toBuffer();
+    const png = await sharp(Buffer.from(svg), { density: 240 }).png().toBuffer();
     res.setHeader('Content-Type', 'image/png');
     res.send(png);
   } catch (err) {
