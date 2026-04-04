@@ -1,0 +1,513 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>Wallpaper Calendar Pro</title>
+  <style>
+    :root {
+      --bg: #0b0f16;
+      --panel: rgba(18, 24, 34, 0.88);
+      --panel-2: rgba(24, 31, 43, 0.88);
+      --stroke: rgba(255,255,255,.08);
+      --text: #eef2f8;
+      --muted: #9aa6b8;
+      --accent: #ff8b2b;
+      --shadow: 0 18px 50px rgba(0,0,0,.35);
+      --safe-top: env(safe-area-inset-top, 0px);
+      --safe-bottom: env(safe-area-inset-bottom, 0px);
+      --radius: 22px;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background:
+        radial-gradient(circle at top, rgba(255,139,43,.16), transparent 32%),
+        linear-gradient(180deg, #0b0f16, #111827);
+      color: var(--text);
+      min-height: 100vh;
+    }
+    .app {
+      width: min(1320px, calc(100% - 24px));
+      margin: 0 auto;
+      padding: calc(18px + var(--safe-top)) 0 calc(24px + var(--safe-bottom));
+    }
+    .hero {
+      padding: 18px;
+      margin-bottom: 16px;
+      border: 1px solid var(--stroke);
+      border-radius: 28px;
+      background: rgba(16,20,28,.75);
+      backdrop-filter: blur(18px);
+      box-shadow: var(--shadow);
+    }
+    .hero h1 {
+      margin: 0 0 8px;
+      font-size: clamp(28px, 4vw, 44px);
+      line-height: 1.02;
+    }
+    .hero p {
+      margin: 0;
+      color: var(--muted);
+      max-width: 840px;
+      line-height: 1.55;
+    }
+    .layout {
+      display: grid;
+      grid-template-columns: minmax(320px, 470px) 1fr;
+      gap: 16px;
+      align-items: start;
+    }
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--stroke);
+      border-radius: var(--radius);
+      padding: 16px;
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(16px);
+    }
+    .controls {
+      position: sticky;
+      top: 12px;
+    }
+    .section-title {
+      font-size: 14px;
+      text-transform: uppercase;
+      letter-spacing: .12em;
+      color: var(--muted);
+      margin: 6px 0 12px;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+    .field { display: flex; flex-direction: column; gap: 8px; }
+    .field.full { grid-column: 1 / -1; }
+    label { font-size: 13px; color: var(--muted); }
+    input, select, button, textarea {
+      width: 100%;
+      border: 1px solid rgba(255,255,255,.08);
+      background: var(--panel-2);
+      color: var(--text);
+      border-radius: 14px;
+      padding: 12px 14px;
+      font: inherit;
+      outline: none;
+    }
+    input[type="checkbox"] { width: auto; }
+    .checkrow {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 12px 14px;
+      border: 1px solid rgba(255,255,255,.08);
+      background: var(--panel-2);
+      border-radius: 14px;
+      min-height: 48px;
+    }
+    .actions {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin-top: 14px;
+    }
+    button {
+      cursor: pointer;
+      transition: .18s transform ease, .18s opacity ease;
+    }
+    button:hover { transform: translateY(-1px); }
+    .primary {
+      background: linear-gradient(135deg, #ff8b2b, #ff6b2f);
+      border: none;
+      color: white;
+      font-weight: 700;
+    }
+    .secondary { background: rgba(255,255,255,.05); }
+    .preview-wrap {
+      display: grid;
+      gap: 14px;
+    }
+    .toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .toolbar .links {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      border-radius: 999px;
+      border: 1px solid var(--stroke);
+      background: rgba(255,255,255,.04);
+      padding: 8px 12px;
+      color: var(--muted);
+      font-size: 13px;
+    }
+    .preview-shell {
+      min-height: 70vh;
+      display: grid;
+      place-items: center;
+      border-radius: 28px;
+      background: linear-gradient(180deg, rgba(255,255,255,.03), rgba(255,255,255,.01));
+      border: 1px solid var(--stroke);
+      overflow: hidden;
+      padding: 18px;
+    }
+    .preview-frame {
+      width: min(390px, 100%);
+      aspect-ratio: 390 / 844;
+      border-radius: 34px;
+      overflow: hidden;
+      border: 10px solid rgba(255,255,255,.08);
+      background: #0b0f16;
+      box-shadow: 0 25px 70px rgba(0,0,0,.45);
+    }
+    .preview-frame img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+      background: #0a0d12;
+    }
+    .code {
+      margin-top: 10px;
+      border-radius: 16px;
+      background: rgba(255,255,255,.04);
+      border: 1px solid var(--stroke);
+      padding: 12px;
+      word-break: break-all;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.45;
+    }
+    .tips {
+      display: grid;
+      gap: 10px;
+      margin-top: 14px;
+    }
+    .tip {
+      padding: 12px 14px;
+      border-radius: 16px;
+      border: 1px solid var(--stroke);
+      background: rgba(255,255,255,.035);
+      color: var(--muted);
+      line-height: 1.5;
+    }
+    @media (max-width: 980px) {
+      .layout { grid-template-columns: 1fr; }
+      .controls { position: static; }
+      .preview-shell { min-height: auto; }
+    }
+    @media (max-width: 640px) {
+      .app { width: min(100%, calc(100% - 14px)); }
+      .hero { padding: 16px; border-radius: 22px; }
+      .panel { padding: 14px; border-radius: 18px; }
+      .grid { grid-template-columns: 1fr; }
+      .actions { grid-template-columns: 1fr; }
+      .preview-frame { width: min(100%, 360px); }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <section class="hero">
+      <h1>Wallpaper Calendar Pro</h1>
+      <p>Генератор обоев-календарей с живым предпросмотром, PNG-ссылкой для автоматизаций, расширенными стилями, темами, режимами под iPhone и Android, а также shareable-ссылками для готовых конфигураций.</p>
+    </section>
+
+    <div class="layout">
+      <aside class="panel controls">
+        <div class="section-title">Настройки</div>
+        <div class="grid">
+          <div class="field">
+            <label for="model">Модель</label>
+            <select id="model">
+              <option value="iphone_15_pro">iPhone 15 Pro</option>
+              <option value="iphone_15_pro_max">iPhone 15 Pro Max</option>
+              <option value="iphone_15">iPhone 15</option>
+              <option value="iphone_14">iPhone 14</option>
+              <option value="iphone_se">iPhone SE</option>
+              <option value="galaxy_s24">Galaxy S24</option>
+              <option value="galaxy_s24_ultra">Galaxy S24 Ultra</option>
+              <option value="pixel_8">Pixel 8</option>
+              <option value="pixel_8_pro">Pixel 8 Pro</option>
+              <option value="custom">Свои размеры</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="style">Стиль</label>
+            <select id="style">
+              <option value="numbers">Numbers</option>
+              <option value="dots">Dots</option>
+              <option value="bars">Bars</option>
+              <option value="rings">Rings</option>
+              <option value="heatmap">Heatmap</option>
+              <option value="focus">Month focus</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="calendar_size">Размер календаря</label>
+            <select id="calendar_size">
+              <option value="standard">Стандартный</option>
+              <option value="large">Большой</option>
+              <option value="large_no_top">Большой без верхнего блока</option>
+              <option value="large_no_bottom">Большой без нижнего блока</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="month_layout">Сетка месяцев</label>
+            <select id="month_layout">
+              <option value="grid_3x4">3 × 4</option>
+              <option value="grid_4x3">4 × 3</option>
+              <option value="list_1x12">1 × 12</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="weekend_mode">Выходные</label>
+            <select id="weekend_mode">
+              <option value="weekends_only">Только выходные</option>
+              <option value="production">Производственный календарь RU</option>
+              <option value="none">Не отмечать</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="opacity">Прозрачность фона</label>
+            <select id="opacity">
+              <option value="0">0%</option>
+              <option value="5">5%</option>
+              <option value="10">10%</option>
+              <option value="15">15%</option>
+              <option value="20">20%</option>
+              <option value="25">25%</option>
+              <option value="50">50%</option>
+              <option value="75">75%</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="theme">Тема</label>
+            <select id="theme">
+              <option value="graphite_orange">Graphite Orange</option>
+              <option value="midnight_blue">Midnight Blue</option>
+              <option value="forest_green">Forest Green</option>
+              <option value="sand_terracotta">Sand & Terracotta</option>
+              <option value="violet_focus">Violet Focus</option>
+              <option value="minimal_red">Minimal Red</option>
+              <option value="oled_gold">OLED Gold</option>
+              <option value="frost">Frost Light</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="lang">Язык</label>
+            <select id="lang">
+              <option value="ru">Русский</option>
+              <option value="en">English</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="timezone">Часовой пояс UTC</label>
+            <select id="timezone"></select>
+          </div>
+          <div class="field">
+            <label for="footer">Нижний блок</label>
+            <select id="footer">
+              <option value="days_left_percent_left">Осталось дней + % осталось</option>
+              <option value="days_left_percent_passed">Осталось дней + % прошло</option>
+              <option value="days_left">Только осталось дней</option>
+              <option value="days_passed">Только прошло дней</option>
+              <option value="quote">Мотивирующая цитата</option>
+              <option value="progress_bar">Прогресс-бар</option>
+            </select>
+          </div>
+          <div class="field full" id="customSizeFields" style="display:none;">
+            <div class="grid">
+              <div class="field">
+                <label for="width">Ширина</label>
+                <input id="width" type="number" value="1179" min="320" step="1" />
+              </div>
+              <div class="field">
+                <label for="height">Высота</label>
+                <input id="height" type="number" value="2556" min="568" step="1" />
+              </div>
+            </div>
+          </div>
+          <div class="field full">
+            <label>Дополнительно</label>
+            <div class="grid">
+              <label class="checkrow"><input type="checkbox" id="show_weekdays" /> Подписи дней недели</label>
+              <label class="checkrow"><input type="checkbox" id="accent_today" checked /> Выделять сегодня</label>
+              <label class="checkrow"><input type="checkbox" id="show_progress_ring" /> Верхний progress ring</label>
+            </div>
+          </div>
+        </div>
+
+        <div class="actions">
+          <button class="primary" id="downloadBtn">Скачать PNG</button>
+          <button class="secondary" id="copyLinkBtn">Скопировать ссылку</button>
+          <button class="secondary" id="copyPngBtn">Скопировать PNG URL</button>
+          <button class="secondary" id="randomBtn">Случайная тема</button>
+        </div>
+
+        <div class="tips">
+          <div class="tip">PNG-ссылка подходит для iPhone Shortcuts и Android-автоматизаций, потому что сервер отдает уже готовое изображение, а не страницу.</div>
+          <div class="tip">Эту версию легко расширить: добавить собственные фоны, пользовательские шрифты, праздники по странам, сезонные темы и наборы премиум-обоев.</div>
+        </div>
+      </aside>
+
+      <main class="panel preview-wrap">
+        <div class="toolbar">
+          <div>
+            <div class="section-title" style="margin-top:0">Предпросмотр</div>
+            <div class="pill">Живое обновление по всем параметрам</div>
+          </div>
+          <div class="links">
+            <button class="secondary" id="openSvgBtn">Открыть SVG</button>
+            <button class="secondary" id="openPngBtn">Открыть PNG</button>
+          </div>
+        </div>
+
+        <div class="preview-shell">
+          <div class="preview-frame">
+            <img id="preview" alt="Preview" />
+          </div>
+        </div>
+
+        <div>
+          <div class="section-title">Shareable URL</div>
+          <div class="code" id="shareUrl"></div>
+        </div>
+        <div>
+          <div class="section-title">PNG URL для автоматизации</div>
+          <div class="code" id="pngUrl"></div>
+        </div>
+      </main>
+    </div>
+  </div>
+
+  <script>
+    const presets = {
+      iphone_15_pro: { width: 1179, height: 2556 },
+      iphone_15_pro_max: { width: 1290, height: 2796 },
+      iphone_15: { width: 1179, height: 2556 },
+      iphone_14: { width: 1170, height: 2532 },
+      iphone_se: { width: 750, height: 1334 },
+      galaxy_s24: { width: 1080, height: 2340 },
+      galaxy_s24_ultra: { width: 1440, height: 3120 },
+      pixel_8: { width: 1080, height: 2400 },
+      pixel_8_pro: { width: 1344, height: 2992 }
+    };
+
+    const fields = [
+      'model','style','calendar_size','month_layout','weekend_mode','opacity','theme','lang','timezone','footer','width','height'
+    ];
+    const checks = ['show_weekdays','accent_today','show_progress_ring'];
+
+    const els = Object.fromEntries([...fields, ...checks].map(id => [id, document.getElementById(id)]));
+    const preview = document.getElementById('preview');
+    const shareUrlEl = document.getElementById('shareUrl');
+    const pngUrlEl = document.getElementById('pngUrl');
+    const customSizeFields = document.getElementById('customSizeFields');
+
+    for (let i = -12; i <= 14; i++) {
+      const opt = document.createElement('option');
+      opt.value = i;
+      opt.textContent = `UTC${i >= 0 ? '+' + i : i}`;
+      if (i === 3) opt.selected = true;
+      els.timezone.appendChild(opt);
+    }
+
+    function applyPreset() {
+      if (els.model.value === 'custom') {
+        customSizeFields.style.display = '';
+        return;
+      }
+      customSizeFields.style.display = 'none';
+      const p = presets[els.model.value];
+      if (p) {
+        els.width.value = p.width;
+        els.height.value = p.height;
+      }
+    }
+
+    function paramsFromForm() {
+      applyPreset();
+      const params = new URLSearchParams();
+      for (const id of fields) {
+        if ((id === 'width' || id === 'height') && els.model.value !== 'custom') continue;
+        params.set(id, els[id].value);
+      }
+      for (const id of checks) {
+        params.set(id, els[id].checked ? '1' : '0');
+      }
+      return params;
+    }
+
+    function updatePreview(pushHistory = true) {
+      const params = paramsFromForm();
+      const pngUrl = `${location.origin}/wallpaper.png?${params.toString()}`;
+      const pageUrl = `${location.origin}/?${params.toString()}`;
+      const svgUrl = `${location.origin}/wallpaper.svg?${params.toString()}`;
+      preview.src = `${pngUrl}&_ts=${Date.now()}`;
+      shareUrlEl.textContent = pageUrl;
+      pngUrlEl.textContent = pngUrl;
+      if (pushHistory) history.replaceState({}, '', pageUrl);
+      document.getElementById('openSvgBtn').onclick = () => window.open(svgUrl, '_blank');
+      document.getElementById('openPngBtn').onclick = () => window.open(pngUrl, '_blank');
+      document.getElementById('downloadBtn').onclick = () => {
+        const a = document.createElement('a');
+        a.href = pngUrl;
+        a.download = 'wallpaper-calendar.png';
+        a.click();
+      };
+      document.getElementById('copyLinkBtn').onclick = async () => {
+        await navigator.clipboard.writeText(pageUrl);
+        alert('Ссылка скопирована');
+      };
+      document.getElementById('copyPngBtn').onclick = async () => {
+        await navigator.clipboard.writeText(pngUrl);
+        alert('PNG URL скопирован');
+      };
+    }
+
+    function loadFromQuery() {
+      const q = new URLSearchParams(location.search);
+      fields.forEach(id => {
+        if (q.has(id) && els[id]) els[id].value = q.get(id);
+      });
+      checks.forEach(id => {
+        if (q.has(id) && els[id]) els[id].checked = q.get(id) === '1';
+      });
+      applyPreset();
+      updatePreview(false);
+    }
+
+    document.getElementById('randomBtn').addEventListener('click', () => {
+      const themes = ['graphite_orange','midnight_blue','forest_green','sand_terracotta','violet_focus','minimal_red','oled_gold','frost'];
+      const styles = ['numbers','dots','bars','rings','heatmap','focus'];
+      els.theme.value = themes[Math.floor(Math.random() * themes.length)];
+      els.style.value = styles[Math.floor(Math.random() * styles.length)];
+      updatePreview();
+    });
+
+    [...fields, ...checks].forEach(id => {
+      els[id].addEventListener('change', () => updatePreview());
+      els[id].addEventListener('input', () => updatePreview());
+    });
+
+    els.model.addEventListener('change', () => {
+      applyPreset();
+      updatePreview();
+    });
+
+    loadFromQuery();
+  </script>
+</body>
+</html>
