@@ -15,50 +15,51 @@ dayjs.extend(advancedFormat);
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+// Переведено на русский
 const PHONE_PRESETS = {
-  iphone_se_1: { label: 'iPhone SE (1st gen)', width: 640, height: 1136, family: 'SE / Classic' },
-  iphone_8: { label: 'iPhone 8 / 7 / 6s / 6', width: 750, height: 1334, family: 'Classic' },
-  iphone_8_plus: { label: 'iPhone 8 Plus / 7 Plus / 6s Plus / 6 Plus', width: 1080, height: 1920, family: 'Classic Plus' },
-  iphone_se_2: { label: 'iPhone SE (2nd / 3rd gen)', width: 750, height: 1334, family: 'SE' },
+  iphone_se_1: { label: 'iPhone SE (1-е пок.)', width: 640, height: 1136, family: 'SE / Классика' },
+  iphone_8: { label: 'iPhone 8 / 7 / 6s', width: 750, height: 1334, family: 'Классика' },
+  iphone_8_plus: { label: 'iPhone 8 Plus / 7 Plus', width: 1080, height: 1920, family: 'Классика Плюс' },
+  iphone_se_2: { label: 'iPhone SE (2/3-е пок.)', width: 750, height: 1334, family: 'SE' },
   iphone_x: { label: 'iPhone X / XS / 11 Pro', width: 1125, height: 2436, family: 'Face ID 5.8"' },
   iphone_xr: { label: 'iPhone XR / 11', width: 828, height: 1792, family: 'Liquid Retina 6.1"' },
   iphone_xs_max: { label: 'iPhone XS Max / 11 Pro Max', width: 1242, height: 2688, family: 'Max 6.5"' },
-  iphone_12_mini: { label: 'iPhone 12 mini / 13 mini', width: 1080, height: 2340, family: 'mini' },
-  iphone_12: { label: 'iPhone 12 / 12 Pro / 13 / 13 Pro / 14', width: 1170, height: 2532, family: '6.1"' },
-  iphone_12_pro_max: { label: 'iPhone 12 Pro Max / 13 Pro Max / 14 Plus', width: 1284, height: 2778, family: 'Large 6.7"' },
+  iphone_12_mini: { label: 'iPhone 12/13 mini', width: 1080, height: 2340, family: 'mini' },
+  iphone_12: { label: 'iPhone 12/13/14 / Pro', width: 1170, height: 2532, family: '6.1"' },
+  iphone_12_pro_max: { label: 'iPhone 12/13 Pro Max / 14 Plus', width: 1284, height: 2778, family: 'Крупный 6.7"' },
   iphone_14_pro: { label: 'iPhone 14 Pro', width: 1179, height: 2556, family: 'Pro 6.1"' },
   iphone_14_pro_max: { label: 'iPhone 14 Pro Max', width: 1290, height: 2796, family: 'Pro Max 6.7"' },
-  iphone_15: { label: 'iPhone 15 / 15 Pro / 16', width: 1179, height: 2556, family: '6.1" modern' },
-  iphone_15_plus: { label: 'iPhone 15 Plus / 16 Plus', width: 1290, height: 2796, family: '6.7" modern' },
+  iphone_15: { label: 'iPhone 15 / 16 / Pro', width: 1179, height: 2556, family: '6.1" новый' },
+  iphone_15_plus: { label: 'iPhone 15/16 Plus', width: 1290, height: 2796, family: '6.7" новый' },
   iphone_16_pro: { label: 'iPhone 16 Pro', width: 1206, height: 2622, family: 'Pro 6.3"' },
   iphone_16_pro_max: { label: 'iPhone 16 Pro Max', width: 1320, height: 2868, family: 'Pro Max 6.9"' },
-  custom: { label: 'Custom size', width: 1179, height: 2556, family: 'Custom' }
+  custom: { label: 'Свой размер', width: 1179, height: 2556, family: 'Custom' }
 };
 
 const THEMES = {
-  graphite_orange: { name: 'Graphite Orange', bg: '#0a0d12', panel: '#131823', text: '#edf2ff', muted: '#8994a7', accent: '#ff8f2d', accent2: '#ffbc6f', weekend: '#ff8f7b' },
-  obsidian_blue: { name: 'Obsidian Blue', bg: '#07111e', panel: '#0d1726', text: '#eef6ff', muted: '#92abc9', accent: '#5db6ff', accent2: '#a7dcff', weekend: '#86b4ff' },
-  frost_light: { name: 'Frost Light', bg: '#edf4ff', panel: '#dfe8f7', text: '#1e2d41', muted: '#73839a', accent: '#3b7bff', accent2: '#7ea6ff', weekend: '#5b88ff' },
-  violet_night: { name: 'Violet Night', bg: '#110c18', panel: '#1a1325', text: '#f6efff', muted: '#b29fc9', accent: '#9d72ff', accent2: '#ceb8ff', weekend: '#d09cff' },
-  olive_linen: { name: 'Olive Linen', bg: '#161812', panel: '#202419', text: '#f3f4ea', muted: '#a5aa95', accent: '#b4c86a', accent2: '#dbe8a1', weekend: '#c7ad86' },
-  rose_sunset: { name: 'Rose Sunset', bg: '#1b1014', panel: '#291920', text: '#fff0f5', muted: '#c2a4af', accent: '#ff6d96', accent2: '#ffb1c4', weekend: '#ff9f90' },
-  oled_gold: { name: 'OLED Gold', bg: '#000000', panel: '#0a0a0a', text: '#fff7df', muted: '#a39063', accent: '#ffc44e', accent2: '#ffe49a', weekend: '#ffd07b' },
-  mint_air: { name: 'Mint Air', bg: '#0a1512', panel: '#10211c', text: '#ebfff8', muted: '#8db4a8', accent: '#57d2ab', accent2: '#aef2da', weekend: '#88e0ca' }
+  graphite_orange: { name: 'Графит и Оранж', bg: '#0a0d12', panel: '#131823', text: '#edf2ff', muted: '#8994a7', accent: '#ff8f2d', accent2: '#ffbc6f', weekend: '#ff8f7b' },
+  obsidian_blue: { name: 'Обсидиан и Синий', bg: '#07111e', panel: '#0d1726', text: '#eef6ff', muted: '#92abc9', accent: '#5db6ff', accent2: '#a7dcff', weekend: '#86b4ff' },
+  frost_light: { name: 'Светлый Иней', bg: '#edf4ff', panel: '#dfe8f7', text: '#1e2d41', muted: '#73839a', accent: '#3b7bff', accent2: '#7ea6ff', weekend: '#5b88ff' },
+  violet_night: { name: 'Фиолетовая Ночь', bg: '#110c18', panel: '#1a1325', text: '#f6efff', muted: '#b29fc9', accent: '#9d72ff', accent2: '#ceb8ff', weekend: '#d09cff' },
+  olive_linen: { name: 'Оливковый Лен', bg: '#161812', panel: '#202419', text: '#f3f4ea', muted: '#a5aa95', accent: '#b4c86a', accent2: '#dbe8a1', weekend: '#c7ad86' },
+  rose_sunset: { name: 'Розовый Закат', bg: '#1b1014', panel: '#291920', text: '#fff0f5', muted: '#c2a4af', accent: '#ff6d96', accent2: '#ffb1c4', weekend: '#ff9f90' },
+  oled_gold: { name: 'OLED Золото', bg: '#000000', panel: '#0a0a0a', text: '#fff7df', muted: '#a39063', accent: '#ffc44e', accent2: '#ffe49a', weekend: '#ffd07b' },
+  mint_air: { name: 'Мятный Воздух', bg: '#0a1512', panel: '#10211c', text: '#ebfff8', muted: '#8db4a8', accent: '#57d2ab', accent2: '#aef2da', weekend: '#88e0ca' }
 };
 
 const BG_STYLES = {
-  aurora: 'Aurora',
-  glass: 'Glass',
-  paper: 'Paper',
-  spotlight: 'Spotlight',
-  waves: 'Soft waves',
-  noir: 'Noir'
+  aurora: 'Аврора (Градиент)',
+  glass: 'Стекло (Блики)',
+  paper: 'Бумага (Шум)',
+  spotlight: 'Прожектор',
+  waves: 'Мягкие волны',
+  noir: 'Нуар (Глубокий темный)'
 };
 
 const QUOTES = {
   ru: [
     'Маленькие шаги собирают большой год.',
-    'Сегодня тоже часть твоего будущего.',
+    'Сегодня — часть твоего будущего.',
     'Спокойный ритм сильнее хаоса.',
     'Лучший день для движения — сегодняшний.'
   ],
@@ -100,38 +101,22 @@ function alpha(hex, opacity) {
 function getLabels(lang) {
   return lang === 'ru'
     ? {
-        months: ['Янв', 'Фев', 'Мар', 'Апр', 'Май', 'Июн', 'Июл', 'Авг', 'Сен', 'Окт', 'Ноя', 'Дек'],
+        months: ['Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь', 'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь'],
         weekdays: ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'],
         today: 'Сегодня',
         year: 'год',
         daysLeft: 'дн. осталось',
         passed: 'пройдено',
         week: 'Неделя',
-        setupTitle: 'Как установить на экран блокировки iPhone',
-        setupSteps: [
-          '1. Нажми «Скачать PNG».',
-          '2. Сохрани изображение в Фото.',
-          '3. На iPhone удерживай экран блокировки.',
-          '4. Нажми «+» → Фото → выбери обои.',
-          '5. При необходимости кадрируй и нажми «Готово».'
-        ]
       }
     : {
-        months: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'],
+        months: ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'],
         weekdays: ['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su'],
         today: 'Today',
         year: 'year',
         daysLeft: 'days left',
         passed: 'passed',
         week: 'Week',
-        setupTitle: 'How to set it on iPhone Lock Screen',
-        setupSteps: [
-          '1. Tap “Download PNG”.',
-          '2. Save the image to Photos.',
-          '3. Long-press the Lock Screen on iPhone.',
-          '4. Tap “+” → Photos → choose the wallpaper.',
-          '5. Adjust the crop if needed and tap “Done”.'
-        ]
       };
 }
 
@@ -185,8 +170,9 @@ function randomQuote(lang, year) {
 
 function renderBackground(cfg, theme, width, height) {
   const overlayOpacity = cfg.opacity / 100;
+  let bgCode = '';
   if (cfg.bgStyle === 'paper') {
-    return `
+    bgCode = `
       <defs>
         <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
           <stop offset="0%" stop-color="${theme.bg}" />
@@ -199,12 +185,9 @@ function renderBackground(cfg, theme, width, height) {
         </filter>
       </defs>
       <rect width="100%" height="100%" fill="url(#bg)"/>
-      <rect width="100%" height="100%" filter="url(#noise)" opacity="0.55"/>
-      <rect width="100%" height="100%" fill="${alpha('#ffffff', overlayOpacity)}"/>
-    `;
-  }
-  if (cfg.bgStyle === 'glass') {
-    return `
+      <rect width="100%" height="100%" filter="url(#noise)" opacity="0.55"/>`;
+  } else if (cfg.bgStyle === 'glass') {
+    bgCode = `
       <defs>
         <radialGradient id="bg" cx="25%" cy="15%" r="85%">
           <stop offset="0%" stop-color="${alpha(theme.accent, 0.42)}" />
@@ -215,12 +198,9 @@ function renderBackground(cfg, theme, width, height) {
       <rect width="100%" height="100%" fill="url(#bg)"/>
       <circle cx="${width * 0.18}" cy="${height * 0.14}" r="${width * 0.22}" fill="${alpha(theme.accent2, 0.18)}"/>
       <circle cx="${width * 0.83}" cy="${height * 0.18}" r="${width * 0.2}" fill="${alpha(theme.accent, 0.12)}"/>
-      <circle cx="${width * 0.58}" cy="${height * 0.82}" r="${width * 0.3}" fill="${alpha(theme.accent2, 0.08)}"/>
-      <rect width="100%" height="100%" fill="${alpha('#ffffff', overlayOpacity)}"/>
-    `;
-  }
-  if (cfg.bgStyle === 'spotlight') {
-    return `
+      <circle cx="${width * 0.58}" cy="${height * 0.82}" r="${width * 0.3}" fill="${alpha(theme.accent2, 0.08)}"/>`;
+  } else if (cfg.bgStyle === 'spotlight') {
+    bgCode = `
       <defs>
         <radialGradient id="bg" cx="50%" cy="12%" r="90%">
           <stop offset="0%" stop-color="${alpha(theme.accent2, 0.3)}" />
@@ -229,12 +209,9 @@ function renderBackground(cfg, theme, width, height) {
           <stop offset="100%" stop-color="${theme.bg}" />
         </radialGradient>
       </defs>
-      <rect width="100%" height="100%" fill="url(#bg)"/>
-      <rect width="100%" height="100%" fill="${alpha('#ffffff', overlayOpacity)}"/>
-    `;
-  }
-  if (cfg.bgStyle === 'waves') {
-    return `
+      <rect width="100%" height="100%" fill="url(#bg)"/>`;
+  } else if (cfg.bgStyle === 'waves') {
+    bgCode = `
       <defs>
         <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
           <stop offset="0%" stop-color="${theme.bg}" />
@@ -243,12 +220,9 @@ function renderBackground(cfg, theme, width, height) {
       </defs>
       <rect width="100%" height="100%" fill="url(#bg)"/>
       <path d="M 0 ${height * 0.22} C ${width * 0.12} ${height * 0.18}, ${width * 0.28} ${height * 0.28}, ${width * 0.42} ${height * 0.24} S ${width * 0.74} ${height * 0.14}, ${width} ${height * 0.22}" fill="none" stroke="${alpha(theme.accent2, 0.16)}" stroke-width="${width * 0.01}"/>
-      <path d="M 0 ${height * 0.62} C ${width * 0.18} ${height * 0.56}, ${width * 0.34} ${height * 0.69}, ${width * 0.56} ${height * 0.64} S ${width * 0.82} ${height * 0.58}, ${width} ${height * 0.65}" fill="none" stroke="${alpha(theme.accent, 0.14)}" stroke-width="${width * 0.013}"/>
-      <rect width="100%" height="100%" fill="${alpha('#ffffff', overlayOpacity)}"/>
-    `;
-  }
-  if (cfg.bgStyle === 'noir') {
-    return `
+      <path d="M 0 ${height * 0.62} C ${width * 0.18} ${height * 0.56}, ${width * 0.34} ${height * 0.69}, ${width * 0.56} ${height * 0.64} S ${width * 0.82} ${height * 0.58}, ${width} ${height * 0.65}" fill="none" stroke="${alpha(theme.accent, 0.14)}" stroke-width="${width * 0.013}"/>`;
+  } else if (cfg.bgStyle === 'noir') {
+    bgCode = `
       <defs>
         <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
           <stop offset="0%" stop-color="#020202" />
@@ -257,26 +231,24 @@ function renderBackground(cfg, theme, width, height) {
       </defs>
       <rect width="100%" height="100%" fill="url(#bg)"/>
       <circle cx="${width * 0.84}" cy="${height * 0.12}" r="${width * 0.16}" fill="${alpha(theme.accent, 0.12)}"/>
-      <circle cx="${width * 0.24}" cy="${height * 0.76}" r="${width * 0.2}" fill="${alpha(theme.accent2, 0.08)}"/>
-      <rect width="100%" height="100%" fill="${alpha('#ffffff', overlayOpacity)}"/>
-    `;
+      <circle cx="${width * 0.24}" cy="${height * 0.76}" r="${width * 0.2}" fill="${alpha(theme.accent2, 0.08)}"/>`;
+  } else {
+    bgCode = `
+      <defs>
+        <radialGradient id="bg1" cx="18%" cy="10%" r="80%">
+          <stop offset="0%" stop-color="${alpha(theme.accent, 0.36)}"/>
+          <stop offset="35%" stop-color="${alpha(theme.bg, 0.94)}"/>
+          <stop offset="100%" stop-color="${theme.bg}"/>
+        </radialGradient>
+        <radialGradient id="bg2" cx="82%" cy="78%" r="78%">
+          <stop offset="0%" stop-color="${alpha(theme.accent2, 0.14)}"/>
+          <stop offset="100%" stop-color="${alpha(theme.panel, 0)}"/>
+        </radialGradient>
+      </defs>
+      <rect width="100%" height="100%" fill="url(#bg1)"/>
+      <rect width="100%" height="100%" fill="url(#bg2)"/>`;
   }
-  return `
-    <defs>
-      <radialGradient id="bg1" cx="18%" cy="10%" r="80%">
-        <stop offset="0%" stop-color="${alpha(theme.accent, 0.36)}"/>
-        <stop offset="35%" stop-color="${alpha(theme.bg, 0.94)}"/>
-        <stop offset="100%" stop-color="${theme.bg}"/>
-      </radialGradient>
-      <radialGradient id="bg2" cx="82%" cy="78%" r="78%">
-        <stop offset="0%" stop-color="${alpha(theme.accent2, 0.14)}"/>
-        <stop offset="100%" stop-color="${alpha(theme.panel, 0)}"/>
-      </radialGradient>
-    </defs>
-    <rect width="100%" height="100%" fill="url(#bg1)"/>
-    <rect width="100%" height="100%" fill="url(#bg2)"/>
-    <rect width="100%" height="100%" fill="${alpha('#ffffff', overlayOpacity)}"/>
-  `;
+  return bgCode + `<rect width="100%" height="100%" fill="${alpha('#ffffff', overlayOpacity)}"/>`;
 }
 
 function wrap(text, max) {
@@ -298,11 +270,11 @@ function wrap(text, max) {
 
 function renderHeader(cfg, theme, labels, now, stats, width, padding, topY) {
   const dateText = cfg.lang === 'ru'
-    ? `${labels.today}: ${now.format('D MMMM YYYY')}`
-    : `${labels.today}: ${now.format('MMM D, YYYY')}`;
+    ? `${labels.today}: ${now.format('D MMMM')}`
+    : `${labels.today}: ${now.format('MMM D')}`;
   const right = width - padding;
-  const titleSize = Math.round(width * 0.06);
-  const subtitleSize = Math.round(width * 0.024);
+  const titleSize = Math.round(width * 0.1);
+  const subtitleSize = Math.round(width * 0.035);
   const chipHeight = Math.round(width * 0.08);
   const chipWidth = Math.round(width * 0.28);
   const ringR = Math.round(width * 0.052);
@@ -312,10 +284,10 @@ function renderHeader(cfg, theme, labels, now, stats, width, padding, topY) {
   const dash = circumference * (stats.percentPassed / 100);
 
   let out = `
-    <text x="${padding}" y="${topY + titleSize}" fill="${theme.text}" font-size="${titleSize}" font-family="Inter, Arial, sans-serif" font-weight="800">${now.year()}</text>
-    <text x="${padding}" y="${topY + titleSize + subtitleSize * 1.6}" fill="${theme.muted}" font-size="${subtitleSize}" font-family="Inter, Arial, sans-serif">${escapeXml(dateText)}</text>
-    <rect x="${padding}" y="${topY + titleSize + subtitleSize * 2.3}" width="${chipWidth}" height="${chipHeight}" rx="${chipHeight / 2}" fill="${alpha(theme.panel, 0.92)}" stroke="${alpha(theme.accent2, 0.24)}" />
-    <text x="${padding + chipWidth / 2}" y="${topY + titleSize + subtitleSize * 2.3 + chipHeight * 0.64}" text-anchor="middle" fill="${theme.accent2}" font-size="${Math.round(width * 0.026)}" font-family="Inter, Arial, sans-serif" font-weight="700">${labels.week} ${now.week()}</text>
+    <text x="${padding}" y="${topY + titleSize}" fill="${theme.text}" font-size="${titleSize}" font-family="Inter, Arial, sans-serif" font-weight="900" letter-spacing="-0.03em">${now.year()}</text>
+    <text x="${padding}" y="${topY + titleSize + subtitleSize * 1.8}" fill="${theme.muted}" font-size="${subtitleSize}" font-family="Inter, Arial, sans-serif">${escapeXml(dateText)}</text>
+    <rect x="${padding}" y="${topY + titleSize + subtitleSize * 2.8}" width="${chipWidth}" height="${chipHeight}" rx="${chipHeight / 2}" fill="${alpha(theme.panel, 0.92)}" stroke="${alpha(theme.accent2, 0.24)}" />
+    <text x="${padding + chipWidth / 2}" y="${topY + titleSize + subtitleSize * 2.8 + chipHeight * 0.64}" text-anchor="middle" fill="${theme.accent2}" font-size="${Math.round(width * 0.026)}" font-family="Inter, Arial, sans-serif" font-weight="700">${labels.week} ${now.week()}</text>
   `;
 
   if (cfg.showProgressRing) {
@@ -329,51 +301,47 @@ function renderHeader(cfg, theme, labels, now, stats, width, padding, topY) {
   return out;
 }
 
-function monthEmphasis(monthIndex, now, cfg) {
-  if (!cfg.focusCurrentMonth) return 1;
-  if (now.month() === monthIndex) return 1.12;
-  if (Math.abs(now.month() - monthIndex) === 1) return 1.03;
-  return 1;
-}
-
-function weekNumberLabel(date) {
-  return dayjs(date).week();
-}
-
 function renderMonth({ monthIndex, year, x, y, w, h, cfg, theme, labels, now }) {
   const first = dayjs(`${year}-${String(monthIndex + 1).padStart(2, '0')}-01`);
   const daysInMonth = first.daysInMonth();
   const firstWeekday = (first.day() + 6) % 7;
   const isCurrent = now.month() === monthIndex;
-  const emphasis = monthEmphasis(monthIndex, now, cfg);
+  const emphasis = cfg.focusCurrentMonth && isCurrent ? 1.08 : 1;
   const radius = Math.max(16, Math.round(w * 0.08));
   const pad = Math.round(w * 0.06);
-  const titleSize = Math.round(h * 0.14 * emphasis);
-  const weekdaySize = Math.round(h * 0.065);
-  const numberSize = Math.round(h * 0.078 * emphasis);
-  const badgeH = Math.round(h * 0.12);
-  const cardFill = isCurrent ? alpha(theme.panel, 0.98) : alpha(theme.panel, 0.72);
+  
+  // Улучшенная математика размеров: шрифты зависят от доступной ширины ячейки, чтобы не пересекаться
+  const cols = 7;
+  const weekNumberCol = cfg.showWeekNumbers ? 1 : 0;
+  const innerW = w - pad * 2;
+  const cellW = innerW / (cols + weekNumberCol);
+  const rows = 6;
+  const gridTopOffset = cfg.showWeekdays ? h * 0.30 : h * 0.22;
+  const cellH = (h - gridTopOffset - h * 0.05) / rows;
+
+  const titleSize = Math.min(Math.round(h * 0.12), Math.round(w * 0.14)) * emphasis;
+  const weekdaySize = Math.min(Math.round(cellW * 0.5), Math.round(h * 0.06));
+  // Ограничиваем размер цифр размером ячейки (cellW)
+  const numberSize = Math.min(Math.round(cellW * 0.6), Math.round(cellH * 0.6)) * emphasis;
+  
+  const badgeW = Math.round(w * 0.2);
+  const badgeH = Math.round(h * 0.11);
+  const cardFill = isCurrent ? alpha(theme.panel, 0.98) : alpha(theme.panel, 0.65);
+  
   let out = `
     <rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${radius}" fill="${cardFill}" stroke="${isCurrent ? alpha(theme.accent2, 0.36) : alpha('#ffffff', 0.06)}" />
     <text x="${x + pad}" y="${y + pad + titleSize * 0.75}" fill="${theme.text}" font-size="${titleSize}" font-family="Inter, Arial, sans-serif" font-weight="800">${labels.months[monthIndex]}</text>
   `;
 
   if (cfg.monthBadges) {
-    const badgeW = Math.round(w * 0.26);
     out += `
-      <rect x="${x + w - pad - badgeW}" y="${y + pad * 0.65}" width="${badgeW}" height="${badgeH}" rx="${badgeH / 2}" fill="${isCurrent ? alpha(theme.accent, 0.18) : alpha('#ffffff', 0.05)}" />
-      <text x="${x + w - pad - badgeW / 2}" y="${y + pad * 0.65 + badgeH * 0.65}" text-anchor="middle" fill="${isCurrent ? theme.accent2 : theme.muted}" font-size="${Math.round(h * 0.06)}" font-family="Inter, Arial, sans-serif" font-weight="700">${daysInMonth}d</text>
+      <rect x="${x + w - pad - badgeW}" y="${y + pad * 0.6}" width="${badgeW}" height="${badgeH}" rx="${badgeH / 2}" fill="${isCurrent ? alpha(theme.accent, 0.18) : alpha('#ffffff', 0.05)}" />
+      <text x="${x + w - pad - badgeW / 2}" y="${y + pad * 0.6 + badgeH * 0.65}" text-anchor="middle" fill="${isCurrent ? theme.accent2 : theme.muted}" font-size="${Math.round(badgeH * 0.6)}" font-family="Inter, Arial, sans-serif" font-weight="700">${daysInMonth}д</text>
     `;
   }
 
   const weekdayY = y + h * 0.24;
-  const gridTop = cfg.showWeekdays ? y + h * 0.30 : y + h * 0.22;
-  const rows = 6;
-  const cols = 7;
-  const weekNumberCol = cfg.showWeekNumbers ? 1 : 0;
-  const innerW = w - pad * 2;
-  const cellW = innerW / (cols + weekNumberCol);
-  const cellH = (h - (gridTop - y) - h * 0.08) / rows;
+  const gridTop = y + gridTopOffset;
   const startX = x + pad + (cfg.showWeekNumbers ? cellW : 0);
 
   if (cfg.showWeekdays) {
@@ -410,27 +378,29 @@ function renderMonth({ monthIndex, year, x, y, w, h, cfg, theme, labels, now }) 
     const isToday = cfg.accentToday && date.isSame(now, 'day');
     const isWeekend = isRestDay(date);
     const isPast = date.isBefore(now, 'day') && now.month() === monthIndex;
-    const textColor = isToday ? theme.text : isWeekend ? theme.weekend : isPast ? alpha(theme.text, 0.88) : theme.muted;
+    const textColor = isToday ? theme.text : isWeekend ? theme.weekend : isPast ? alpha(theme.text, 0.6) : theme.text;
 
     if (isToday) {
       if (cfg.style === 'outline') {
-        out += `<rect x="${cx - cellW * 0.38}" y="${cy - cellH * 0.58}" width="${cellW * 0.76}" height="${cellH * 0.72}" rx="${cellH * 0.28}" fill="none" stroke="${theme.accent}" stroke-width="${Math.max(2, w * 0.006)}"/>`;
+        // Уменьшена рамка, чтобы не наезжать на соседние дни
+        out += `<rect x="${cx - cellW * 0.45}" y="${cy - cellH * 0.6}" width="${cellW * 0.9}" height="${cellH * 0.8}" rx="${Math.min(cellW, cellH) * 0.2}" fill="none" stroke="${theme.accent}" stroke-width="${Math.max(1.5, w * 0.005)}"/>`;
       } else {
-        out += `<rect x="${cx - cellW * 0.38}" y="${cy - cellH * 0.58}" width="${cellW * 0.76}" height="${cellH * 0.72}" rx="${cellH * 0.28}" fill="${alpha(theme.accent, cfg.style === 'numbers' ? 0.24 : 0.18)}" stroke="${alpha(theme.accent2, 0.34)}"/>`;
+        out += `<rect x="${cx - cellW * 0.45}" y="${cy - cellH * 0.6}" width="${cellW * 0.9}" height="${cellH * 0.8}" rx="${Math.min(cellW, cellH) * 0.2}" fill="${alpha(theme.accent, cfg.style === 'numbers' ? 0.24 : 0.18)}" stroke="${alpha(theme.accent2, 0.34)}"/>`;
       }
     }
 
     if (cfg.style === 'dots') {
-      const r = Math.min(cellW, cellH) * (isToday ? 0.2 : 0.14);
-      out += `<circle cx="${cx}" cy="${cy - cellH * 0.15}" r="${r}" fill="${isToday ? theme.accent : isPast ? theme.accent2 : isWeekend ? alpha(theme.weekend, 0.9) : alpha(theme.text, 0.26)}"/>`;
-      out += `<text x="${cx}" y="${cy + cellH * 0.36}" text-anchor="middle" fill="${textColor}" font-size="${Math.round(numberSize * 0.9)}" font-family="Inter, Arial, sans-serif" font-weight="700">${day}</text>`;
+      const r = Math.min(cellW, cellH) * (isToday ? 0.18 : 0.12);
+      // Точка сдвинута выше, а текст ниже, чтобы уместиться в cellH
+      out += `<circle cx="${cx}" cy="${cy - cellH * 0.2}" r="${r}" fill="${isToday ? theme.accent : isPast ? theme.accent2 : isWeekend ? alpha(theme.weekend, 0.9) : alpha(theme.text, 0.26)}"/>`;
+      out += `<text x="${cx}" y="${cy + cellH * 0.3}" text-anchor="middle" fill="${textColor}" font-size="${Math.round(numberSize * 0.85)}" font-family="Inter, Arial, sans-serif" font-weight="700">${day}</text>`;
     } else if (cfg.style === 'focus') {
-      out += `<text x="${cx}" y="${cy}" text-anchor="middle" fill="${textColor}" font-size="${Math.round(numberSize * (isToday ? 1.08 : 1))}" font-family="Inter, Arial, sans-serif" font-weight="${isToday || isCurrent ? 800 : 600}">${day}</text>`;
+      out += `<text x="${cx}" y="${cy}" text-anchor="middle" fill="${textColor}" font-size="${Math.round(numberSize * (isToday ? 1.05 : 1))}" font-family="Inter, Arial, sans-serif" font-weight="${isToday || isCurrent ? 800 : 600}">${day}</text>`;
       if (isCurrent && !isToday) {
-        out += `<line x1="${cx - cellW * 0.18}" y1="${cy + cellH * 0.17}" x2="${cx + cellW * 0.18}" y2="${cy + cellH * 0.17}" stroke="${alpha(theme.accent2, 0.35)}" stroke-linecap="round" />`;
+        out += `<line x1="${cx - cellW * 0.15}" y1="${cy + cellH * 0.15}" x2="${cx + cellW * 0.15}" y2="${cy + cellH * 0.15}" stroke="${alpha(theme.accent2, 0.35)}" stroke-linecap="round" stroke-width="2"/>`;
       }
     } else {
-      out += `<text x="${cx}" y="${cy}" text-anchor="middle" fill="${textColor}" font-size="${numberSize}" font-family="Inter, Arial, sans-serif" font-weight="${isToday ? 800 : 650}">${day}</text>`;
+      out += `<text x="${cx}" y="${cy}" text-anchor="middle" fill="${textColor}" font-size="${numberSize}" font-family="Inter, Arial, sans-serif" font-weight="${isToday ? 800 : 600}">${day}</text>`;
     }
   }
 
@@ -439,7 +409,7 @@ function renderMonth({ monthIndex, year, x, y, w, h, cfg, theme, labels, now }) 
       const date = first.add(row * 7 - firstWeekday, 'day');
       const wx = x + pad + cellW / 2;
       const wy = gridTop + row * cellH + cellH * 0.68;
-      out += `<text x="${wx}" y="${wy}" text-anchor="middle" fill="${alpha(theme.muted, 0.8)}" font-size="${Math.round(numberSize * 0.78)}" font-family="Inter, Arial, sans-serif">${weekNumberLabel(date)}</text>`;
+      out += `<text x="${wx}" y="${wy}" text-anchor="middle" fill="${alpha(theme.muted, 0.7)}" font-size="${Math.round(numberSize * 0.7)}" font-family="Inter, Arial, sans-serif">${dayjs(date).week()}</text>`;
     });
   }
 
@@ -490,9 +460,9 @@ function renderSvg(cfg) {
   const now = zonedNow(cfg.timezone);
   const stats = yearStats(now);
   const { width, height } = cfg;
-  const padding = Math.round(width * 0.06);
-  const topArea = Math.round(height * (cfg.calendarSize === 'compact' ? 0.11 : 0.15));
-  const footerArea = Math.round(height * (cfg.calendarSize === 'large' ? 0.1 : 0.12));
+  const padding = Math.round(width * 0.05); // Слегка уменьшен padding
+  const topArea = Math.round(height * (cfg.calendarSize === 'compact' ? 0.11 : 0.14));
+  const footerArea = Math.round(height * (cfg.calendarSize === 'large' ? 0.1 : 0.11));
   const contentTop = padding + topArea;
   const contentBottom = height - padding - footerArea;
   const contentH = contentBottom - contentTop;
@@ -501,7 +471,7 @@ function renderSvg(cfg) {
   if (cfg.monthLayout === 'grid_4x3') { cols = 4; rows = 3; }
   if (cfg.monthLayout === 'list_1x12') { cols = 1; rows = 12; }
 
-  const gap = Math.round(width * (cfg.monthLayout === 'list_1x12' ? 0.03 : 0.025));
+  const gap = Math.round(width * (cfg.monthLayout === 'list_1x12' ? 0.03 : 0.02));
   const monthW = (width - padding * 2 - gap * (cols - 1)) / cols;
   const monthH = (contentH - gap * (rows - 1)) / rows;
 
@@ -555,7 +525,7 @@ app.get('/wallpaper.png', async (req, res) => {
     res.setHeader('Content-Type', 'image/png');
     res.send(png);
   } catch (err) {
-    res.status(500).json({ error: 'Failed to render wallpaper', details: err.message });
+    res.status(500).json({ error: 'ОШИБКА ГЕНЕРАЦИИ ОБОЕВ', details: err.message });
   }
 });
 
@@ -564,5 +534,5 @@ app.get('/', (req, res) => {
 });
 
 app.listen(PORT, () => {
-  console.log(`Wallpaper Calendar Pro listening on http://localhost:${PORT}`);
+  console.log(`Сервер запущен на http://localhost:${PORT}`);
 });
