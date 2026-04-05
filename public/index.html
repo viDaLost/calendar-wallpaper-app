@@ -101,7 +101,7 @@
   <div class="app">
     <section class="hero">
       <h1>Wallpaper Calendar Pro</h1>
-      <p>Серверный рендеринг, интеграция погоды, кастомные даты и идеальные PNG для экрана блокировки.</p>
+      <p>Серверный рендеринг, интеграция погоды (до 3 городов), кастомные даты и идеальные PNG для экрана блокировки.</p>
     </section>
 
     <div class="layout">
@@ -123,6 +123,11 @@
                 <option value="capsule">Мягкая форма</option>
                 <option value="ring">Орбита дня</option>
                 <option value="micro">Микро-акцент</option>
+                <option value="slash">Диагональный штрих</option>
+                <option value="underline">Нижнее подчеркивание</option>
+                <option value="bracket">Скобки акцента</option>
+                <option value="block">Инвертированный блок</option>
+                <option value="marker">Маркер-текстовыделитель</option>
               </select>
             </div>
             <div class="field"><label for="theme">Цветовая палитра</label><select id="theme"></select></div>
@@ -130,6 +135,7 @@
             <div class="field">
               <label for="month_layout">Архитектура месяцев</label>
               <select id="month_layout">
+                <option value="current_month_only">✨ Только текущий месяц крупно</option>
                 <option value="grid_3x4">3 колонки × 4 ряда</option>
                 <option value="grid_4x3">4 колонки × 3 ряда</option>
                 <option value="grid_2x6">2 колонки × 6 рядов</option>
@@ -137,7 +143,11 @@
                 <option value="grid_3x4_compact">3 × 4 компактно</option>
                 <option value="list_1x12">1 колонка (список)</option>
                 <option value="list_1x12_compact">1 × 12 компактно</option>
-                <option value="single_month_focus">Фокус на одном месяце</option>
+                <option value="single_month_focus">Фокус на одном + мини</option>
+                <option value="grid_4x3_compact">4 × 3 компактно</option>
+                <option value="list_2x6">2 колонки (список)</option>
+                <option value="grid_3x4_spaced">3 × 4 (широкие отступы)</option>
+                <option value="current_plus_next_two">Текущий и два следующих</option>
               </select>
             </div>
             <div class="field">
@@ -195,9 +205,11 @@
               </div>
             </div>
 
-            <div class="field">
-              <label for="city">Город (Погода)</label>
-              <input type="text" id="city" placeholder="Например: Москва" />
+            <div class="field full">
+              <label>Города (Погода) — до 3 городов</label>
+              <input type="text" id="city1" placeholder="Город 1 (Например: Москва)" style="margin-bottom:8px" />
+              <input type="text" id="city2" placeholder="Город 2 (Например: Санкт-Петербург)" style="margin-bottom:8px" />
+              <input type="text" id="city3" placeholder="Город 3 (Например: Сочи)" />
             </div>
 
             <div class="field full">
@@ -208,7 +220,7 @@
                 <option value="today_card">Фокус на сегодня</option>
                 <option value="next_event">Ближайшее событие</option>
                 <option value="seasonal_focus">Сезонный режим</option>
-                <option value="weather_strip">Сводка среды</option>
+                <option value="weather_strip">Сводка среды (вмещает 3 города)</option>
                 <option value="day_weather">Прогноз погоды на день</option>
                 <option value="quote">Цитата</option>
                 <option value="custom_note">Своя заметка</option>
@@ -273,16 +285,16 @@
   <script>
     const defaults = {
       model:'iphone_17_pro', font:'inter', style:'numbers', theme:'graphite_orange', bg_style:'mesh_organic',
-      month_layout:'grid_3x4_compact', weekend_mode:'weekends_only',
+      month_layout:'current_month_only', weekend_mode:'weekends_only',
       lang:'ru', timezone:'3', footer:'year_summary', note:'', width:'1179', height:'2556',
-      events: '', city:'', c_today:'#ff8f2d', c_event:'#ff8f2d',
+      events: '', city1:'', city2:'', city3:'', c_today:'#ff8f2d', c_event:'#ff8f2d',
       show_weekdays:true, accent_today:true, show_progress_ring:true, show_week_numbers:false,
       quarter_dividers:true, month_badges:true, focus_current_month:true,
       show_header_meta:true, strong_weekend_tint:true, glass_panels:true,
       c_bg: '#0a0d12', c_panel: '#131823', c_text: '#edf2ff', c_muted: '#8994a7', c_accent: '#ff8f2d', c_accent2: '#ffbc6f', c_weekend: '#ff8f7b'
     };
     const colorFields = ['c_bg', 'c_panel', 'c_text', 'c_muted', 'c_accent', 'c_accent2', 'c_weekend', 'c_today', 'c_event'];
-    const fields = ['model','font','style','theme','bg_style','month_layout','weekend_mode','lang','timezone','footer','note','width','height','events','city', ...colorFields];
+    const fields = ['model','font','style','theme','bg_style','month_layout','weekend_mode','lang','timezone','footer','note','width','height','events','city1','city2','city3', ...colorFields];
     const checks = ['show_header_meta','show_weekdays','accent_today','strong_weekend_tint','show_progress_ring','show_week_numbers','quarter_dividers','month_badges','focus_current_month','glass_panels'];
     const els = Object.fromEntries([...fields, ...checks].map(id => [id, document.getElementById(id)]));
     
@@ -293,7 +305,7 @@
     
     let optionsCache = null;
     const accentSwatches = ['#ff8f2d','#ffb84d','#ffd166','#5db6ff','#57d2ab','#9d72ff','#ff6d96','#ff5050','#c8d2e5','#d4af37'];
-
+    
     async function loadOptions(){
       const res = await fetch('/api/options');
       optionsCache = await res.json();
@@ -304,7 +316,6 @@
       Object.entries(optionsCache.bgStyles).forEach(([k, name]) => els.bg_style.add(new Option(name, k)));
 
       for(let i=-12;i<=14;i++) els.timezone.add(new Option(`UTC${i>=0?'+'+i:i}`, i));
-
       els.theme.addEventListener('change', () => {
         customThemeGroup.style.display = els.theme.value === 'custom_palette' ? 'block' : 'none';
       });
@@ -324,7 +335,7 @@
       fields.forEach(id => { 
         if((id === 'width' || id === 'height') && els.model.value !== 'custom') return;
         if(colorFields.includes(id) && id !== 'c_event' && els.theme.value !== 'custom_palette') return;
-        if(els[id].value) q.set(id, els[id].value); 
+        if(els[id] && els[id].value) q.set(id, els[id].value); 
       });
       checks.forEach(id => q.set(id, els[id].checked ? '1' : '0'));
       return q;
@@ -341,14 +352,13 @@
       
       if(push) history.replaceState({}, '', `${location.origin}/?${q.toString()}`);
       preview.src = `${location.origin}/wallpaper.svg?${q.toString()}&_ts=${Date.now()}`;
-
       document.getElementById('downloadBtn').onclick = () => window.open(pngUrl, '_blank');
       document.getElementById('openSvgBtn').onclick = () => window.open(`${location.origin}/wallpaper.svg?${q.toString()}`, '_blank');
       document.getElementById('copyPngUrlBtn').onclick = async () => { await navigator.clipboard.writeText(pngUrl); alert('PNG‑ссылка скопирована!'); };
     }
 
     preview.onload = () => preview.classList.remove('loading');
-
+    
     function renderColorSwatches(){
       document.querySelectorAll('.swatches').forEach(box => {
         const target = box.dataset.target;
@@ -404,7 +414,7 @@
       items.unshift({ name, url: location.href });
       setSavedPresets(items.slice(0, 12)); alert('Пресет сохранён!');
     });
-
+    
     document.getElementById('randomBtn').addEventListener('click', () => {
       const r = o => Object.keys(o)[Math.floor(Math.random() * Object.keys(o).length)];
       const themeKeys = Object.keys(optionsCache.themes);
@@ -412,25 +422,24 @@
       customThemeGroup.style.display = 'none';
       els.bg_style.value = r(optionsCache.bgStyles);
       els.font.value = r(optionsCache.fonts); 
-      els.style.value = ['numbers','dots','outline','focus','capsule','ring','micro'][Math.floor(Math.random()*7)];
+      els.style.value = ['numbers','dots','outline','focus','capsule','ring','micro','slash','underline','bracket','block','marker'][Math.floor(Math.random()*12)];
       updatePreview();
     });
-
+    
     document.getElementById('resetBtn').addEventListener('click', () => { fillDefaults(); updatePreview(); });
     
     let typingTimer;
     [...fields, ...checks].forEach(id => {
       const el = els[id];
-      if(el.tagName === 'INPUT' && (el.type === 'text' || el.type === 'number') || el.tagName === 'TEXTAREA') {
+      if(el && (el.tagName === 'INPUT' && (el.type === 'text' || el.type === 'number') || el.tagName === 'TEXTAREA')) {
         el.addEventListener('input', () => {
           clearTimeout(typingTimer);
           typingTimer = setTimeout(() => updatePreview(), 800);
         });
-      } else {
+      } else if (el) {
         el.addEventListener('change', () => updatePreview());
       }
     });
-
     els.model.addEventListener('change', () => { applyPresetSize(); updatePreview(); });
     (async function init(){ await loadOptions(); renderColorSwatches(); loadFromQuery(); renderPresets(); })();
   </script>
