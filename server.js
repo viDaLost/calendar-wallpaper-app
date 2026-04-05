@@ -17,12 +17,12 @@ const Engine = require('./public/engine.js');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// In-memory Кеш PNG картинок (Очистка каждый час)
+// In-memory Кеш PNG картинок
 const pngCache = new Map();
 const cacheSweepTimer = setInterval(() => pngCache.clear(), 1000 * 60 * 60);
 if (cacheSweepTimer.unref) cacheSweepTimer.unref();
 
-const RENDER_VERSION = '2026-04-05-font-weather-fix-1';
+const RENDER_VERSION = '2026-04-05-font-weather-fix-final';
 
 const FONTS = {
   inter: { name: 'Inter (Стандарт)', file: 'inter.ttf', family: 'Inter', resvgFamily: 'Inter 24pt' },
@@ -65,16 +65,20 @@ const PHONE_PRESETS = {
   custom: { label: 'Свой размер', width: 1179, height: 2556 }
 };
 
+// ИСПРАВЛЕНИЕ: Проверяем пути как локально (__dirname), так и на Vercel (process.cwd())
 const fontCache = {};
-const fontsDir = path.join(__dirname, 'fonts');
-if (fs.existsSync(fontsDir)) {
+const fontsDir1 = path.join(__dirname, 'fonts');
+const fontsDir2 = path.join(process.cwd(), 'fonts');
+const fontsDir = fs.existsSync(fontsDir1) ? fontsDir1 : (fs.existsSync(fontsDir2) ? fontsDir2 : null);
+
+if (fontsDir) {
   for (const [key, fontDef] of Object.entries(FONTS)) {
     const fp = path.join(fontsDir, fontDef.file);
     if (fs.existsSync(fp)) fontCache[key] = fs.readFileSync(fp).toString('base64');
   }
+} else {
+  console.error("ВНИМАНИЕ: Папка 'fonts' не найдена! Шрифты не будут загружены.");
 }
-
-
 
 function buildFontPayload(fontKey) {
   const selectedDef = FONTS[fontKey] || FONTS.inter;
@@ -268,18 +272,18 @@ app.get('/wallpaper.png', async (req, res) => {
 
     const cfg = getConfig(req.query);
     
-    // Запрашиваем погоду по городу (если указан)
+    // Запрашиваем погоду по городу
     cfg.weatherData = await fetchWeatherByCity(cfg.city);
     
-    // ИСПРАВЛЕНИЕ: Флаг, чтобы engine.js знал, что мы рендерим для сервера
-    cfg.isServer = true;
-
     const fontKey = req.query.font || 'inter';
     let svg = Engine.renderSvg(cfg, dayjs, buildFontPayload(fontKey));
     
-    // ИСПРАВЛЕНИЕ: Убираем строгие веса шрифтов, чтобы Resvg не удалял текст, 
-    // если у загруженного .ttf файла нет нужного жирного начертания.
-    svg = svg.replace(/font-weight="\d+"/g, 'font-weight="normal"');
+    // ИСПРАВЛЕНИЕ: КРИТИЧЕСКИ ВАЖНО для Resvg!
+    // Мы полностью стираем ЛЮБЫЕ упоминания font-weight. 
+    // Если SVG просит font-weight="800", а у нас только обычный файл шрифта (Regular), 
+    // Resvg откажется его рендерить и удалит весь текст. 
+    // Принудительное применение "normal" спасает ситуацию.
+    svg = svg.replace(/font-weight="[^"]+"/g, 'font-weight="normal"');
 
     const fontBuffers = buildResvgFontBuffers(fontKey);
     const defaultFontFamily = getResvgDefaultFontFamily(fontKey);
@@ -288,7 +292,7 @@ app.get('/wallpaper.png', async (req, res) => {
       fitTo: { mode: 'original' },
       font: {
         fontBuffers,
-        loadSystemFonts: true, // ИСПРАВЛЕНИЕ: Включаем загрузку системных шрифтов как подстраховку
+        loadSystemFonts: true,
         defaultFontFamily,
       }
     });
