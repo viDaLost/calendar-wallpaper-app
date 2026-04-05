@@ -95,7 +95,6 @@ const THEMES = {
   anomaly_zone: { name: 'Зов аномалии', bg: '#1a1c17', panel: '#24261f', text: '#d9d4a8', muted: '#8a8d7a', accent: '#ff7300', accent2: '#e59e5c', weekend: '#ff5050' },
   eden_light: { name: 'Свет Эдема', bg: '#fdfbf7', panel: '#f0ece1', text: '#1b2419', muted: '#72826d', accent: '#d4af37', accent2: '#e6cc80', weekend: '#c74b4b' },
   syndicate: { name: 'Синдикат (Неон)', bg: '#050505', panel: '#121212', text: '#e0e0e0', muted: '#666666', accent: '#fcee0a', accent2: '#00f0ff', weekend: '#ff003c' },
-  // НОВЫЕ ТЕМЫ (5+)
   neon_cyberpunk: { name: 'Неоновый киберпанк', bg: '#090014', panel: '#150030', text: '#00ffcc', muted: '#b300ff', accent: '#ff0055', accent2: '#00ffcc', weekend: '#ff0055' },
   pastel_dream: { name: 'Пастельная мечта', bg: '#fdfbfb', panel: '#f4eff4', text: '#5c5c70', muted: '#a5a5b4', accent: '#ffb3ba', accent2: '#baffc9', weekend: '#ffdfba' },
   vintage_sepia: { name: 'Винтажная сепия', bg: '#e4d5b7', panel: '#d5c4a1', text: '#5c4b37', muted: '#8f7d65', accent: '#a83c09', accent2: '#3f5721', weekend: '#c44512' },
@@ -120,7 +119,6 @@ const BG_STYLES = {
   orbit: 'Орбиты (Orbit)',
   velvet: 'Бархат (Velvet)',
   static_noise: 'Шум эфира (Noise)',
-  // НОВЫЕ ТЕКСТУРЫ (5+)
   hexagons: 'Гексагональная сетка',
   circuit_board: 'Кибер-линии (Circuit)',
   starlight: 'Звездная пыль (Starlight)',
@@ -391,8 +389,6 @@ function renderBackground(cfg, theme, width, height) {
   if (bgType === 'velvet') return `<defs>${proceduralFilters}<linearGradient id="v_grad" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="${theme.bg}"/><stop offset="40%" stop-color="${alpha(theme.panel, 0.9)}"/><stop offset="60%" stop-color="${theme.bg}"/><stop offset="85%" stop-color="${alpha(theme.panel, 0.9)}"/><stop offset="100%" stop-color="${theme.bg}"/></linearGradient></defs><rect width="100%" height="100%" fill="url(#v_grad)"/><rect width="100%" height="100%" filter="url(#tex_paper)" opacity="0.6"/>`;
   if (bgType === 'noir') return `<defs><radialGradient id="vignette" cx="50%" cy="40%" r="95%"><stop offset="15%" stop-color="${alpha(theme.accent, 0.1)}"/><stop offset="50%" stop-color="${theme.bg}"/><stop offset="100%" stop-color="#000000"/></radialGradient></defs><rect width="100%" height="100%" fill="url(#vignette)"/>`;
   if (bgType === 'static_noise') return renderStaticNoiseBackground(theme, width, height);
-  
-  // НОВЫЕ ФОНЫ
   if (bgType === 'hexagons') return `<defs><pattern id="hex" width="40" height="69.28" patternUnits="userSpaceOnUse"><path d="M20 0 L40 11.55 L40 34.64 L20 46.19 L0 34.64 L0 11.55 Z" fill="none" stroke="${alpha(theme.accent, 0.12)}" stroke-width="1.5"/><path d="M20 69.28 L40 57.74 L40 34.64 L20 46.19 L0 34.64 L0 57.74 Z" fill="none" stroke="${alpha(theme.accent2, 0.08)}" stroke-width="1"/></pattern><radialGradient id="h_glow" cx="50%" cy="30%" r="80%"><stop offset="0%" stop-color="${alpha(theme.accent, 0.15)}"/><stop offset="100%" stop-color="${alpha(theme.bg, 0)}"/></radialGradient></defs><rect width="100%" height="100%" fill="${theme.bg}"/><rect width="100%" height="100%" fill="url(#hex)"/><rect width="100%" height="100%" fill="url(#h_glow)"/>`;
   if (bgType === 'circuit_board') return `<defs><pattern id="circuit" width="80" height="80" patternUnits="userSpaceOnUse"><path d="M0,40 H30 L40,30 V0 M40,50 V80 M50,40 L60,30 H80 M15,15 A2,2 0 1,1 15,15.01 M65,65 A2,2 0 1,1 65,65.01" fill="none" stroke="${alpha(theme.accent2, 0.2)}" stroke-width="1.5"/></pattern><radialGradient id="cb_glow" cx="80%" cy="20%" r="70%"><stop offset="0%" stop-color="${alpha(theme.accent, 0.2)}"/><stop offset="100%" stop-color="${alpha(theme.bg, 0)}"/></radialGradient></defs><rect width="100%" height="100%" fill="${theme.bg}"/><rect width="100%" height="100%" fill="url(#circuit)"/><rect width="100%" height="100%" fill="url(#cb_glow)"/>`;
   if (bgType === 'starlight') return `<defs><pattern id="stars" width="120" height="120" patternUnits="userSpaceOnUse"><circle cx="20" cy="20" r="1.5" fill="${theme.text}" opacity="0.8"/><circle cx="90" cy="80" r="1" fill="${theme.accent}" opacity="0.6"/><circle cx="60" cy="40" r="2" fill="${theme.accent2}" opacity="0.4"/><circle cx="30" cy="100" r="0.8" fill="${theme.text}" opacity="0.5"/><circle cx="100" cy="30" r="1.2" fill="${theme.text}" opacity="0.7"/></pattern><radialGradient id="star_nebula" cx="40%" cy="20%" r="80%"><stop offset="0%" stop-color="${alpha(theme.accent, 0.25)}"/><stop offset="100%" stop-color="${alpha(theme.bg, 0)}"/></radialGradient></defs><rect width="100%" height="100%" fill="${theme.bg}"/><rect width="100%" height="100%" fill="url(#star_nebula)"/><rect width="100%" height="100%" fill="url(#stars)"/>`;
@@ -415,7 +411,6 @@ function getLayoutMetrics(cfg, width, height, contentH, sidePadding) {
     list_1x12: { cols: 1, rows: 12, gap: Math.round(width * 0.012), mode: 'list' },
     list_1x12_compact: { cols: 1, rows: 12, gap: Math.round(width * 0.010), mode: 'list_compact' },
     single_month_focus: { cols: 1, rows: 1, gap: Math.round(width * 0.016), mode: 'focus' },
-    // НОВЫЕ АРХИТЕКТУРЫ
     current_month_only: { cols: 1, rows: 1, gap: 0, mode: 'focus_single' },
     grid_4x3_compact: { cols: 4, rows: 3, gap: Math.round(width * 0.012), mode: 'grid_compact' },
     list_2x6: { cols: 2, rows: 6, gap: Math.round(width * 0.016), mode: 'list' },
@@ -474,17 +469,15 @@ function renderHeader(cfg, theme, labels, now, stats, width, padding, topY, FONT
 
   let rightSvg = '';
   
-  // РЕНДЕР ПОГОДЫ ДЛЯ МНОЖЕСТВА ГОРОДОВ В ШАПКЕ
   if (cfg.weatherDataList && cfg.weatherDataList.length > 0) {
     const weatherX = width - padding;
     const isMulti = cfg.weatherDataList.length > 1;
-    // Уменьшаем шрифт, если городов несколько, чтобы уместилось и не налезло на календарь
     const wTitleSize = Math.round(subtitleSize * (isMulti ? 1.05 : 1.42));
     const wSubSize = Math.round(subtitleSize * (isMulti ? 0.75 : 0.9));
     const stepY = isMulti ? Math.round(wTitleSize * 1.8) : Math.round(subtitleSize * 2);
     
     let currentY = yearY - yearSize * 0.45;
-    if (isMulti) currentY -= wTitleSize * 0.3; // Смещаем чуть выше, если несколько строк
+    if (isMulti) currentY -= wTitleSize * 0.3;
 
     cfg.weatherDataList.slice(0, 3).forEach((wd) => {
       const cityLabel = String(wd.cityLabel || '').split(',')[0].trim();
@@ -600,7 +593,6 @@ function renderMonthGrid({ monthIndex, year, x, y, w, h, cfg, theme, labels, now
       if (isToday) out += `<circle cx="${cx}" cy="${cy - cellHReal * 0.2}" r="${Math.min(cellW, cellHReal) * 0.28}" fill="none" stroke="${theme.accent}" stroke-width="${Math.max(1.2, w * 0.004)}"/>`;
       out += `<text x="${cx}" y="${cy}" text-anchor="middle" fill="${textColor}" font-size="${numSize}" font-family="${FONT}" font-weight="${isToday ? 800 : 600}">${day}</text>`;
     } else {
-      // numbers, outline, and default
       if (isToday) {
         const rect = `<rect x="${cx - cellW * 0.45}" y="${cy - cellHReal * 0.6}" width="${cellW * 0.9}" height="${cellHReal * 0.8}" rx="${Math.min(cellW, cellHReal) * 0.2}"`;
         out += cfg.style === 'outline' ? `${rect} fill="none" stroke="${theme.accent}" stroke-width="${Math.max(1.2, w * 0.004)}"/>` : `${rect} fill="${alpha(theme.accent, cfg.style === 'numbers' ? 0.24 : 0.18)}" stroke="${alpha(theme.accent2, 0.34)}"/>`;
@@ -681,7 +673,6 @@ function renderFooter(cfg, theme, labels, now, stats, width, footerBox, FONT) {
   
   if (cfg.footer === 'weather_strip') {
     if (cfg.weatherDataList && cfg.weatherDataList.length > 1) {
-      // Много городов - распределяем горизонтально
       const numCities = cfg.weatherDataList.length;
       const slotW = (w - pad * 2) / numCities;
       let out = base + `<text x="${x + pad}" y="${y + h * 0.28}" fill="${theme.accent2}" font-size="${subSize}" font-family="${FONT}" font-weight="700">${cfg.lang === 'ru' ? 'Сводка среды' : 'Ambient summary'}</text>`;
@@ -696,17 +687,76 @@ function renderFooter(cfg, theme, labels, now, stats, width, footerBox, FONT) {
   }
   
   if (cfg.footer === 'day_weather') {
-    const wd = (cfg.weatherDataList && cfg.weatherDataList[0]) ? cfg.weatherDataList[0] : null;
-    const items = wd?.hourly || [];
-    if (!items.length) return base + `<text x="${x + pad}" y="${y + h * 0.34}" fill="${theme.accent2}" font-size="${subSize}" font-family="${FONT}" font-weight="700">${cfg.lang === 'ru' ? 'Прогноз на день' : 'Day forecast'}</text><text x="${x + pad}" y="${y + h * 0.66}" fill="${theme.text}" font-size="${textSize * 0.8}" font-family="${FONT}" font-weight="700">${cfg.lang === 'ru' ? 'Добавь город для погоды' : 'Add city for forecast'}</text>`;
-    let chips = `<text x="${x + pad}" y="${y + h * 0.23}" fill="${theme.accent2}" font-size="${subSize}" font-family="${FONT}" font-weight="700">${cfg.lang === 'ru' ? 'Прогноз на день' : 'Day forecast'}</text>`;
-    if (wd.cityLabel) chips += `<text x="${x + pad}" y="${y + h * 0.40}" fill="${theme.muted}" font-size="${subSize * 0.88}" font-family="${FONT}" font-weight="600">${escapeXml(wd.cityLabel)}</text>`;
-    const chipW = (w - pad * 2 - Math.max(10, Math.round(w * 0.012)) * (items.length - 1)) / items.length;
-    items.forEach((item, i) => {
-      const cx = x + pad + i * (chipW + Math.max(10, Math.round(w * 0.012)));
-      chips += `<rect x="${cx}" y="${y + h * 0.50}" width="${chipW}" height="${h * 0.30}" rx="${h * 0.30 * 0.24}" fill="${alpha(theme.bg, 0.18)}" stroke="${alpha(theme.accent2, 0.10)}"/><text x="${cx + chipW / 2}" y="${y + h * 0.50 + h * 0.30 * 0.28}" text-anchor="middle" fill="${theme.muted}" font-size="${subSize * 0.72}" font-family="${FONT}" font-weight="700">${escapeXml(item.hour)}</text><text x="${cx + chipW / 2}" y="${y + h * 0.50 + h * 0.30 * 0.56}" text-anchor="middle" fill="${theme.text}" font-size="${subSize * 0.95}" font-family="${FONT}" font-weight="700">${item.icon}</text><text x="${cx + chipW / 2}" y="${y + h * 0.50 + h * 0.30 * 0.82}" text-anchor="middle" fill="${theme.text}" font-size="${textSize * 0.64}" font-family="${FONT}" font-weight="800">${escapeXml(item.temp)}°</text>`;
-    });
-    return base + chips;
+    if (!cfg.weatherDataList || cfg.weatherDataList.length === 0) {
+      return base + `<text x="${x + pad}" y="${y + h * 0.34}" fill="${theme.accent2}" font-size="${subSize}" font-family="${FONT}" font-weight="700">${cfg.lang === 'ru' ? 'Прогноз на день' : 'Day forecast'}</text><text x="${x + pad}" y="${y + h * 0.66}" fill="${theme.text}" font-size="${textSize * 0.8}" font-family="${FONT}" font-weight="700">${cfg.lang === 'ru' ? 'Добавь город для погоды' : 'Add city for forecast'}</text>`;
+    }
+
+    if (cfg.weatherDataList.length === 1) {
+      // Режим 1: Одиночный город (Исправлено наложение эмодзи и цифр)
+      const wd = cfg.weatherDataList[0];
+      const items = wd.hourly || [];
+      let chips = `<text x="${x + pad}" y="${y + h * 0.23}" fill="${theme.accent2}" font-size="${subSize}" font-family="${FONT}" font-weight="700">${cfg.lang === 'ru' ? 'Прогноз на день' : 'Day forecast'}</text>`;
+      if (wd.cityLabel) chips += `<text x="${x + pad}" y="${y + h * 0.40}" fill="${theme.muted}" font-size="${subSize * 0.88}" font-family="${FONT}" font-weight="600">${escapeXml(wd.cityLabel)}</text>`;
+      
+      const chipW = (w - pad * 2 - Math.max(10, Math.round(w * 0.012)) * (items.length - 1)) / items.length;
+      items.forEach((item, i) => {
+        const cx = x + pad + i * (chipW + Math.max(10, Math.round(w * 0.012)));
+        chips += `<rect x="${cx}" y="${y + h * 0.48}" width="${chipW}" height="${h * 0.40}" rx="${h * 0.40 * 0.24}" fill="${alpha(theme.bg, 0.18)}" stroke="${alpha(theme.accent2, 0.10)}"/>`;
+        chips += `<text x="${cx + chipW / 2}" y="${y + h * 0.48 + h * 0.40 * 0.30}" text-anchor="middle" fill="${theme.muted}" font-size="${subSize * 0.70}" font-family="${FONT}" font-weight="700">${escapeXml(item.hour)}</text>`;
+        chips += `<text x="${cx + chipW / 2}" y="${y + h * 0.48 + h * 0.40 * 0.65}" text-anchor="middle" fill="${theme.text}" font-size="${subSize * 1.1}" font-family="${FONT}" font-weight="700">${item.icon}</text>`;
+        chips += `<text x="${cx + chipW / 2}" y="${y + h * 0.48 + h * 0.40 * 0.92}" text-anchor="middle" fill="${theme.text}" font-size="${textSize * 0.60}" font-family="${FONT}" font-weight="800">${escapeXml(item.temp)}°</text>`;
+      });
+      return base + chips;
+
+    } else {
+      // Режим 2: Мульти-города (Круглые циферблаты в стиле Apple Watch)
+      let out = base + `<text x="${x + pad}" y="${y + h * 0.20}" fill="${theme.accent2}" font-size="${subSize}" font-family="${FONT}" font-weight="700">${cfg.lang === 'ru' ? 'Прогноз на день' : 'Day forecast'}</text>`;
+      const numCities = cfg.weatherDataList.length;
+      const slotW = (w - pad * 2) / numCities;
+
+      cfg.weatherDataList.forEach((wd, i) => {
+          const cx = x + pad + i * slotW + slotW / 2;
+          const cy = y + h * 0.58;
+          const R = Math.min(slotW * 0.28, h * 0.30); // Радиус циферблата
+
+          // Название города
+          const cityLabel = wd.cityLabel.split(',')[0].trim();
+          out += `<text x="${cx}" y="${y + h * 0.30}" text-anchor="middle" fill="${theme.muted}" font-size="${subSize * 0.8}" font-family="${FONT}" font-weight="700">${escapeXml(cityLabel.length > 15 ? cityLabel.slice(0, 14) + '…' : cityLabel)}</text>`;
+
+          // Контур часов
+          out += `<circle cx="${cx}" cy="${cy}" r="${R}" fill="none" stroke="${alpha(theme.accent2, 0.25)}" stroke-dasharray="4 6" stroke-width="2"/>`;
+
+          // Текущая температура в центре
+          out += `<text x="${cx}" y="${cy + textSize * 0.25}" text-anchor="middle" fill="${theme.text}" font-size="${textSize * 0.85}" font-family="${FONT}" font-weight="800">${wd.temp}°</text>`;
+
+          const hourly = wd.hourly || [];
+          const positions = [
+              { pt: hourly[0], dx: 0, dy: -R },     // 12 (Топ)
+              { pt: hourly[1], dx: R, dy: 0 },      // 3 (Право)
+              { pt: hourly[2], dx: 0, dy: R },      // 6 (Низ)
+              { pt: hourly[3], dx: -R, dy: 0 }      // 9 (Лево)
+          ];
+
+          positions.forEach(pos => {
+              if (!pos.pt) return;
+              const px = cx + pos.dx;
+              const py = cy + pos.dy;
+
+              const pillW = Math.min(slotW * 0.32, w * 0.08);
+              const pillH = h * 0.28;
+
+              // Плашка-подложка для четкости
+              out += `<rect x="${px - pillW/2}" y="${py - pillH/2}" width="${pillW}" height="${pillH}" rx="${pillH*0.25}" fill="${alpha(theme.panel, 0.95)}" stroke="${alpha(theme.accent, 0.15)}"/>`;
+              // Время
+              out += `<text x="${px}" y="${py - pillH*0.18}" text-anchor="middle" fill="${theme.muted}" font-size="${subSize * 0.55}" font-family="${FONT}" font-weight="600">${pos.pt.hour}</text>`;
+              // Иконка
+              out += `<text x="${px}" y="${py + pillH*0.15}" text-anchor="middle" fill="${theme.text}" font-size="${subSize * 0.85}" font-family="${FONT}" font-weight="700">${pos.pt.icon}</text>`;
+              // Температура
+              out += `<text x="${px}" y="${py + pillH*0.42}" text-anchor="middle" fill="${theme.text}" font-size="${textSize * 0.50}" font-family="${FONT}" font-weight="800">${pos.pt.temp}°</text>`;
+          });
+      });
+      return out;
+    }
   }
   
   if (cfg.footer === 'custom_note' && cfg.note) return base + (cfg.note).split('\n').map((line, i) => `<text x="${x + pad}" y="${y + h * 0.38 + i * subSize * 1.6}" fill="${theme.text}" font-size="${subSize}" font-family="${FONT}" font-weight="700">${escapeXml(line)}</text>`).join('');
@@ -753,12 +803,10 @@ function renderSvg(cfg) {
       monthsSvg += renderMonthGrid({ monthIndex, year: now.year(), x: sidePadding + (i % 4) * (miniW + heroGap), y: miniTop + Math.floor(i / 4) * (miniH + heroGap), w: miniW, h: miniH, cfg: { ...cfg, monthLayout: 'grid_3x4_compact', focusCurrentMonth: false, monthBadges: false, showWeekNumbers: false, showWeekdays: true }, theme, labels, now, FONT: FONT_FAMILY });
     });
   } else if (layout.mode === 'focus_single') {
-    // НОВЫЙ РЕЖИМ: ТОЛЬКО ТЕКУЩИЙ МЕСЯЦ
     const heroH = Math.round(contentH * 0.65); 
     const heroY = contentTop + (contentH - heroH) / 2;
     monthsSvg += renderMonthGrid({ monthIndex: now.month(), year: now.year(), x: sidePadding, y: heroY, w: width - sidePadding * 2, h: heroH, cfg: { ...cfg, monthLayout: 'current_month_only', monthBadges: true, showWeekNumbers: true }, theme, labels, now, FONT: FONT_FAMILY });
   } else if (layout.mode === 'current_three') {
-    // НОВЫЙ РЕЖИМ: ТЕКУЩИЙ И СЛЕДУЮЩИЕ ДВА
     for (let i = 0; i < 3; i++) {
         const targetDate = now.add(i, 'month');
         const h = layout.monthH;
