@@ -11,7 +11,9 @@ dayjs.extend(utc);
 dayjs.extend(isLeapYear);
 dayjs.extend(weekOfYear);
 
+// Импортируем ядро
 const Engine = require('./public/engine.js');
+
 const app = express();
 const PORT = process.env.PORT || 3000;
 
@@ -19,10 +21,8 @@ const pngCache = new Map();
 const cacheSweepTimer = setInterval(() => pngCache.clear(), 1000 * 60 * 60);
 if (cacheSweepTimer.unref) cacheSweepTimer.unref();
 
-const RENDER_VERSION = '2026-04-05-font-weather-fix-final-v2';
+const RENDER_VERSION = '2026-04-05-v6-perfect-fonts';
 
-// ИСПРАВЛЕНИЕ #2: Очищенные названия шрифтов, 
-// чтобы defaultFontFamily идеально совпадал с внутренним именем TTF.
 const FONTS = {
   inter: { name: 'Inter (Стандарт)', file: 'inter.ttf', family: 'Inter' },
   montserrat: { name: 'Montserrat (Геометрия)', file: 'montserrat.ttf', family: 'Montserrat' },
@@ -84,24 +84,8 @@ function buildFontPayload(fontKey) {
   const selectedDef = FONTS[fontKey] || FONTS.inter;
   return {
     selected: fontCache[fontKey] || fontCache.inter || '',
-    inter: fontCache.inter || '',
-    ubuntu: fontCache.ubuntu || '',
     browserFamily: selectedDef.family
   };
-}
-
-function buildResvgFontBuffers(fontKey) {
-  const preferred = [fontKey, 'inter', 'ubuntu'];
-  const remaining = Object.keys(fontCache).filter((key) => !preferred.includes(key));
-  const order = [...preferred, ...remaining];
-  const seen = new Set();
-  const buffers = [];
-  for (const key of order) {
-    if (!key || seen.has(key) || !fontCache[key]) continue;
-    seen.add(key);
-    buffers.push(Buffer.from(fontCache[key], 'base64'));
-  }
-  return buffers;
 }
 
 async function fetchJsonWithTimeout(url, timeoutMs = 2200) {
@@ -264,28 +248,32 @@ app.get('/wallpaper.png', async (req, res) => {
     }
 
     const cfg = getConfig(req.query);
-    
     cfg.weatherData = await fetchWeatherByCity(cfg.city);
     
-    // ИСПРАВЛЕНИЕ: Передаем флаг, чтобы engine.js сгенерировал "чистый" SVG без Base64.
-    cfg.isServer = true;
-
     const fontKey = req.query.font || 'inter';
     let svg = Engine.renderSvg(cfg, dayjs, buildFontPayload(fontKey));
+
+    // Возвращаем логику загрузки файлов из v5 для подстраховки
+    const fontFiles = [];
+    if (fontsDir) {
+      for (const f of Object.values(FONTS)) {
+         const p = path.join(fontsDir, f.file);
+         if (fs.existsSync(p)) fontFiles.push(p);
+      }
+    }
     
-    // ИСПРАВЛЕНИЕ: Гарантированно вырезаем все font-weight.
-    // Библиотека resvg удалит текст, если попросить у неё несуществующее жирное начертание.
-    svg = svg.replace(/font-weight="[^"]+"/g, '');
+    const selectedDef = FONTS[fontKey] || FONTS.inter;
 
-    const fontBuffers = buildResvgFontBuffers(fontKey);
-    const defaultFontFamily = FONTS[fontKey] ? FONTS[fontKey].family : 'Inter';
-
+    // В точности конфигурация Resvg из v5, которая работает!
     const resvg = new Resvg(svg, {
       fitTo: { mode: 'original' },
       font: {
-        fontBuffers,
-        loadSystemFonts: false, // Отключаем системные шрифты, заставляя парсер искать только в fontBuffers
-        defaultFontFamily,      // Указываем четкое имя шрифта (например, 'Inter')
+        fontFiles,
+        loadSystemFonts: true,
+        defaultFontFamily: selectedDef.family,
+        sansSerifFamily: selectedDef.family,
+        serifFamily: selectedDef.family,
+        monospaceFamily: selectedDef.family,
       }
     });
     
