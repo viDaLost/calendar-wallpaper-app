@@ -83,6 +83,13 @@
     .preset-actions{display:flex;gap:8px}
     .preset-actions button{padding:10px 12px;border-radius:12px;font-size:12px}
     .footer-note{font-size:12px;color:var(--muted)}
+    .color-stack{display:grid;gap:10px}
+    .color-control{display:grid;gap:10px;padding:12px 14px;border-radius:18px;background:rgba(255,255,255,.03);border:1px solid var(--line)}
+    .color-control input[type="color"]{width:100%;height:48px;border:none;background:transparent;padding:0;border-radius:14px;overflow:hidden;cursor:pointer}
+    .color-control input[type="color"]::-webkit-color-swatch-wrapper{padding:0}
+    .color-control input[type="color"]::-webkit-color-swatch{border:none;border-radius:14px}
+    .swatches{display:flex;flex-wrap:wrap;gap:8px}
+    .swatch{width:26px;height:26px;border-radius:999px;border:2px solid rgba(255,255,255,.16);box-shadow:0 4px 12px rgba(0,0,0,.22);cursor:pointer}
     #customSizeWrap{display:none}
     
     @media (max-width:1080px){.layout{grid-template-columns:1fr}.controls{position:static}.preview-shell{min-height:auto}}
@@ -171,9 +178,20 @@
               <textarea id="events" placeholder="Пример: 04-20: Релиз, 12-31: Новый Год"></textarea>
             </div>
             
-            <div class="field">
-              <label for="c_event">Цвет события</label>
-              <input type="color" id="c_event" value="#ff8f2d" style="width: 100%;">
+            <div class="field full">
+              <label>Цветовые акценты дат</label>
+              <div class="color-stack">
+                <div class="color-control">
+                  <label for="c_today">Цвет выделенной даты (сегодня)</label>
+                  <input type="color" id="c_today" value="#ff8f2d">
+                  <div class="swatches" data-target="c_today"></div>
+                </div>
+                <div class="color-control">
+                  <label for="c_event">Цвет событий и маркеров</label>
+                  <input type="color" id="c_event" value="#ff8f2d">
+                  <div class="swatches" data-target="c_event"></div>
+                </div>
+              </div>
             </div>
 
             <div class="field">
@@ -256,14 +274,14 @@
       model:'iphone_17_pro', font:'inter', style:'numbers', theme:'graphite_orange', bg_style:'mesh_organic',
       month_layout:'grid_3x4_compact', weekend_mode:'weekends_only',
       lang:'ru', timezone:'3', footer:'year_summary', note:'', width:'1179', height:'2556',
-      events: '', city:'', c_event:'#ff8f2d',
+      events: '', city:'', c_today:'#ff8f2d', c_event:'#ff8f2d',
       show_weekdays:true, accent_today:true, show_progress_ring:true, show_week_numbers:false,
       quarter_dividers:true, month_badges:true, focus_current_month:true,
       show_header_meta:true, strong_weekend_tint:true, glass_panels:true,
       c_bg: '#0a0d12', c_panel: '#131823', c_text: '#edf2ff', c_muted: '#8994a7', c_accent: '#ff8f2d', c_accent2: '#ffbc6f', c_weekend: '#ff8f7b'
     };
 
-    const colorFields = ['c_bg', 'c_panel', 'c_text', 'c_muted', 'c_accent', 'c_accent2', 'c_weekend', 'c_event'];
+    const colorFields = ['c_bg', 'c_panel', 'c_text', 'c_muted', 'c_accent', 'c_accent2', 'c_weekend', 'c_today', 'c_event'];
     const fields = ['model','font','style','theme','bg_style','month_layout','weekend_mode','lang','timezone','footer','note','width','height','events','city', ...colorFields];
     const checks = ['show_header_meta','show_weekdays','accent_today','strong_weekend_tint','show_progress_ring','show_week_numbers','quarter_dividers','month_badges','focus_current_month','glass_panels'];
     const els = Object.fromEntries([...fields, ...checks].map(id => [id, document.getElementById(id)]));
@@ -274,6 +292,7 @@
     const customThemeGroup = document.getElementById('customThemeGroup');
     
     let optionsCache = null;
+    const accentSwatches = ['#ff8f2d','#ffb84d','#ffd166','#5db6ff','#57d2ab','#9d72ff','#ff6d96','#ff5050','#c8d2e5','#d4af37'];
 
     async function loadOptions(){
       const res = await fetch('/api/options');
@@ -332,6 +351,22 @@
     }
 
     preview.onload = () => preview.classList.remove('loading');
+
+    function renderColorSwatches(){
+      document.querySelectorAll('.swatches').forEach(box => {
+        const target = box.dataset.target;
+        box.innerHTML = '';
+        accentSwatches.forEach(color => {
+          const btn = document.createElement('button');
+          btn.type = 'button';
+          btn.className = 'swatch';
+          btn.style.background = color;
+          btn.title = color;
+          btn.onclick = () => { els[target].value = color; updatePreview(); };
+          box.appendChild(btn);
+        });
+      });
+    }
 
     function fillDefaults(){
       fields.forEach(id => { if(els[id]) els[id].value = defaults[id]; });
@@ -402,7 +437,7 @@
 
     els.model.addEventListener('change', () => { applyPresetSize(); updatePreview(); });
 
-    (async function init(){ await loadOptions(); loadFromQuery(); renderPresets(); })();
+    (async function init(){ await loadOptions(); renderColorSwatches(); loadFromQuery(); renderPresets(); })();
   </script>
 </body>
 </html>
