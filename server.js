@@ -11,30 +11,29 @@ dayjs.extend(utc);
 dayjs.extend(isLeapYear);
 dayjs.extend(weekOfYear);
 
-// Импортируем ядро
 const Engine = require('./public/engine.js');
-
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// In-memory Кеш PNG картинок
 const pngCache = new Map();
 const cacheSweepTimer = setInterval(() => pngCache.clear(), 1000 * 60 * 60);
 if (cacheSweepTimer.unref) cacheSweepTimer.unref();
 
-const RENDER_VERSION = '2026-04-05-font-weather-fix-final';
+const RENDER_VERSION = '2026-04-05-font-weather-fix-final-v2';
 
+// ИСПРАВЛЕНИЕ #2: Очищенные названия шрифтов, 
+// чтобы defaultFontFamily идеально совпадал с внутренним именем TTF.
 const FONTS = {
-  inter: { name: 'Inter (Стандарт)', file: 'inter.ttf', family: 'Inter', resvgFamily: 'Inter 24pt' },
-  montserrat: { name: 'Montserrat (Геометрия)', file: 'montserrat.ttf', family: 'Montserrat', resvgFamily: 'Montserrat' },
-  roboto_mono: { name: 'Roboto Mono (Код)', file: 'roboto-mono.ttf', family: 'Roboto Mono', resvgFamily: 'Roboto Mono' },
-  playfair: { name: 'Playfair Display (Журнал)', file: 'playfair.ttf', family: 'Playfair Display', resvgFamily: 'Playfair Display' },
-  comfortaa: { name: 'Comfortaa (Круглый)', file: 'comfortaa.ttf', family: 'Comfortaa', resvgFamily: 'Comfortaa' },
-  jura: { name: 'Jura (Футуристичный)', file: 'jura.ttf', family: 'Jura', resvgFamily: 'Jura' },
-  caveat: { name: 'Caveat (Рукописный)', file: 'caveat.ttf', family: 'Caveat', resvgFamily: 'Caveat' },
-  russo_one: { name: 'Russo One (Плакатный)', file: 'russo-one.ttf', family: 'Russo One', resvgFamily: 'Russo One' },
-  lora: { name: 'Lora (Книжный)', file: 'lora.ttf', family: 'Lora', resvgFamily: 'Lora' },
-  ubuntu: { name: 'Ubuntu (Мягкий)', file: 'ubuntu.ttf', family: 'Ubuntu', resvgFamily: 'Ubuntu' }
+  inter: { name: 'Inter (Стандарт)', file: 'inter.ttf', family: 'Inter' },
+  montserrat: { name: 'Montserrat (Геометрия)', file: 'montserrat.ttf', family: 'Montserrat' },
+  roboto_mono: { name: 'Roboto Mono (Код)', file: 'roboto-mono.ttf', family: 'Roboto Mono' },
+  playfair: { name: 'Playfair Display (Журнал)', file: 'playfair.ttf', family: 'Playfair Display' },
+  comfortaa: { name: 'Comfortaa (Круглый)', file: 'comfortaa.ttf', family: 'Comfortaa' },
+  jura: { name: 'Jura (Футуристичный)', file: 'jura.ttf', family: 'Jura' },
+  caveat: { name: 'Caveat (Рукописный)', file: 'caveat.ttf', family: 'Caveat' },
+  russo_one: { name: 'Russo One (Плакатный)', file: 'russo-one.ttf', family: 'Russo One' },
+  lora: { name: 'Lora (Книжный)', file: 'lora.ttf', family: 'Lora' },
+  ubuntu: { name: 'Ubuntu (Мягкий)', file: 'ubuntu.ttf', family: 'Ubuntu' }
 };
 
 const PHONE_PRESETS = {
@@ -65,7 +64,6 @@ const PHONE_PRESETS = {
   custom: { label: 'Свой размер', width: 1179, height: 2556 }
 };
 
-// ИСПРАВЛЕНИЕ: Проверяем пути как локально (__dirname), так и на Vercel (process.cwd())
 const fontCache = {};
 const fontsDir1 = path.join(__dirname, 'fonts');
 const fontsDir2 = path.join(process.cwd(), 'fonts');
@@ -74,10 +72,12 @@ const fontsDir = fs.existsSync(fontsDir1) ? fontsDir1 : (fs.existsSync(fontsDir2
 if (fontsDir) {
   for (const [key, fontDef] of Object.entries(FONTS)) {
     const fp = path.join(fontsDir, fontDef.file);
-    if (fs.existsSync(fp)) fontCache[key] = fs.readFileSync(fp).toString('base64');
+    if (fs.existsSync(fp)) {
+        fontCache[key] = fs.readFileSync(fp).toString('base64');
+    }
   }
 } else {
-  console.error("ВНИМАНИЕ: Папка 'fonts' не найдена! Шрифты не будут загружены.");
+  console.error("ВНИМАНИЕ: Папка 'fonts' не найдена при старте сервера.");
 }
 
 function buildFontPayload(fontKey) {
@@ -86,14 +86,8 @@ function buildFontPayload(fontKey) {
     selected: fontCache[fontKey] || fontCache.inter || '',
     inter: fontCache.inter || '',
     ubuntu: fontCache.ubuntu || '',
-    browserFamily: selectedDef.family,
-    resvgFamily: selectedDef.resvgFamily || selectedDef.family || 'Ubuntu'
+    browserFamily: selectedDef.family
   };
-}
-
-function getResvgDefaultFontFamily(fontKey) {
-  const selectedDef = FONTS[fontKey] || FONTS.inter;
-  return selectedDef.resvgFamily || selectedDef.family || 'Ubuntu';
 }
 
 function buildResvgFontBuffers(fontKey) {
@@ -122,7 +116,6 @@ async function fetchJsonWithTimeout(url, timeoutMs = 2200) {
   }
 }
 
-// Получение погоды по названию города (Open-Meteo Geocoding)
 function weatherIconFromCode(code) {
   let icon = '☀️';
   if (code >= 1 && code <= 3) icon = '⛅';
@@ -272,30 +265,30 @@ app.get('/wallpaper.png', async (req, res) => {
 
     const cfg = getConfig(req.query);
     
-    // Запрашиваем погоду по городу
     cfg.weatherData = await fetchWeatherByCity(cfg.city);
     
+    // ИСПРАВЛЕНИЕ: Передаем флаг, чтобы engine.js сгенерировал "чистый" SVG без Base64.
+    cfg.isServer = true;
+
     const fontKey = req.query.font || 'inter';
     let svg = Engine.renderSvg(cfg, dayjs, buildFontPayload(fontKey));
     
-    // ИСПРАВЛЕНИЕ: КРИТИЧЕСКИ ВАЖНО для Resvg!
-    // Мы полностью стираем ЛЮБЫЕ упоминания font-weight. 
-    // Если SVG просит font-weight="800", а у нас только обычный файл шрифта (Regular), 
-    // Resvg откажется его рендерить и удалит весь текст. 
-    // Принудительное применение "normal" спасает ситуацию.
-    svg = svg.replace(/font-weight="[^"]+"/g, 'font-weight="normal"');
+    // ИСПРАВЛЕНИЕ: Гарантированно вырезаем все font-weight.
+    // Библиотека resvg удалит текст, если попросить у неё несуществующее жирное начертание.
+    svg = svg.replace(/font-weight="[^"]+"/g, '');
 
     const fontBuffers = buildResvgFontBuffers(fontKey);
-    const defaultFontFamily = getResvgDefaultFontFamily(fontKey);
+    const defaultFontFamily = FONTS[fontKey] ? FONTS[fontKey].family : 'Inter';
 
     const resvg = new Resvg(svg, {
       fitTo: { mode: 'original' },
       font: {
         fontBuffers,
-        loadSystemFonts: true,
-        defaultFontFamily,
+        loadSystemFonts: false, // Отключаем системные шрифты, заставляя парсер искать только в fontBuffers
+        defaultFontFamily,      // Указываем четкое имя шрифта (например, 'Inter')
       }
     });
+    
     const png = Buffer.from(resvg.render().asPng());
 
     if (pngCache.size < 1000) pngCache.set(cacheKey, png);
