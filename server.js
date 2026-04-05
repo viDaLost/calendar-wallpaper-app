@@ -8,6 +8,7 @@ const isLeapYear = require('dayjs/plugin/isLeapYear');
 const weekOfYear = require('dayjs/plugin/weekOfYear');
 const advancedFormat = require('dayjs/plugin/advancedFormat');
 const fs = require('fs');
+const https = require('https');
 
 dayjs.extend(utc);
 dayjs.extend(isLeapYear);
@@ -19,8 +20,7 @@ const PORT = process.env.PORT || 3000;
 
 // Кеш для оптимизации нагрузки на Vercel (очищается каждый час)
 const pngCache = new Map();
-const weatherCache = new Map();
-const cacheSweepTimer = setInterval(() => { pngCache.clear(); weatherCache.clear(); }, 1000 * 60 * 60);
+const cacheSweepTimer = setInterval(() => pngCache.clear(), 1000 * 60 * 60);
 if (cacheSweepTimer.unref) cacheSweepTimer.unref();
 
 const RENDER_VERSION = 'v6-stable-core';
@@ -126,37 +126,6 @@ function alpha(hex, opacity) {
   return `rgba(${(bigint >> 16) & 255},${(bigint >> 8) & 255},${bigint & 255},${opacity})`;
 }
 
-function hexToRgb(hex) {
-  const clean = String(hex || '').replace('#', '').trim();
-  if (clean.length !== 6) return null;
-  const bigint = parseInt(clean, 16);
-  if (!Number.isFinite(bigint)) return null;
-  return { r: (bigint >> 16) & 255, g: (bigint >> 8) & 255, b: bigint & 255 };
-}
-
-function mixColors(hex1, hex2, ratio = 0.5) {
-  const a = hexToRgb(hex1);
-  const b = hexToRgb(hex2);
-  if (!a || !b) return hex1 || hex2 || '#ffffff';
-  const t = clamp(ratio, 0, 1);
-  const rgb = {
-    r: Math.round(a.r + (b.r - a.r) * t),
-    g: Math.round(a.g + (b.g - a.g) * t),
-    b: Math.round(a.b + (b.b - a.b) * t)
-  };
-  return `#${[rgb.r, rgb.g, rgb.b].map(v => v.toString(16).padStart(2, '0')).join('')}`;
-}
-
-function translitRuToLat(input) {
-  const map = { а:'a', б:'b', в:'v', г:'g', д:'d', е:'e', ё:'e', ж:'zh', з:'z', и:'i', й:'y', к:'k', л:'l', м:'m', н:'n', о:'o', п:'p', р:'r', с:'s', т:'t', у:'u', ф:'f', х:'kh', ц:'ts', ч:'ch', ш:'sh', щ:'sch', ъ:'', ы:'y', ь:'', э:'e', ю:'yu', я:'ya' };
-  return String(input || '').split('').map(ch => {
-    const lower = ch.toLowerCase();
-    const out = map[lower];
-    if (out == null) return ch;
-    return ch === lower ? out : out.charAt(0).toUpperCase() + out.slice(1);
-  }).join('');
-}
-
 function parseEvents(eventsStr) {
   const map = {};
   if (!eventsStr) return map;
@@ -179,15 +148,47 @@ function getLabels(lang) {
     : { months: ['January','February','March','April','May','June','July','August','September','October','November','December'], monthsShort: ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'], monthsMedium: ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sept','Oct','Nov','Dec'], weekdays: ['Mo','Tu','We','Th','Fr','Sa','Su'], weekdaysFull: ['monday','tuesday','wednesday','thursday','friday','saturday','sunday'], today: 'Today', year: 'year', daysLeft: 'days left', passed: 'passed', week: 'Week' };
 }
 
-// === ЛОГИКА ПОГОДЫ (из v6) ===
-async function fetchJsonWithTimeout(url, timeoutMs = 2200) {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
-  try {
-    const resp = await fetch(url, { signal: controller.signal, headers: { 'accept': 'application/json' } });
-    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-    return await resp.json();
-  } finally { clearTimeout(timer); }
+// === ЛОГИКА ПОГОДЫ ===
+async function fetchJsonWithTimeout(url, timeoutMs = 3000) {
+  if (typeof fetch === 'function') {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      const resp = await fetch(url, {
+        signal: controller.signal,
+        headers: {
+          'accept': 'application/json',
+          'user-agent': 'WallpaperCalendarPro/1.0'
+        }
+      });
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      return await resp.json();
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  return await new Promise((resolve, reject) => {
+    const req = https.get(url, {
+      headers: {
+        'accept': 'application/json',
+        'user-agent': 'WallpaperCalendarPro/1.0'
+      }
+    }, (resp) => {
+      let raw = '';
+      resp.setEncoding('utf8');
+      resp.on('data', chunk => raw += chunk);
+      resp.on('end', () => {
+        if (resp.statusCode < 200 || resp.statusCode >= 300) {
+          return reject(new Error(`HTTP ${resp.statusCode}`));
+        }
+        try { resolve(JSON.parse(raw)); }
+        catch (err) { reject(err); }
+      });
+    });
+    req.setTimeout(timeoutMs, () => req.destroy(new Error('timeout')));
+    req.on('error', reject);
+  });
 }
 
 function weatherIconFromCode(code) {
@@ -200,32 +201,34 @@ function weatherIconFromCode(code) {
   return '☀️';
 }
 
+async function geocodeCity(city, lang = 'ru') {
+  const url = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(city)}&count=5&language=${lang}&format=json`;
+  const geoData = await fetchJsonWithTimeout(url, 4500);
+  if (!Array.isArray(geoData?.results) || !geoData.results.length) return null;
+  return geoData.results[0];
+}
+
 async function fetchWeatherByCity(city) {
   const normalizedCity = String(city || '').split(',')[0].trim();
   if (!normalizedCity) return null;
 
-  const cacheKey = normalizedCity.toLowerCase();
-  const cached = weatherCache.get(cacheKey);
-  if (cached && (Date.now() - cached.ts) < 1000 * 60 * 30) return cached.value;
-
-  const geoQueries = [...new Set([normalizedCity, translitRuToLat(normalizedCity)].filter(Boolean))];
+  const cacheKey = `weather:${normalizedCity.toLowerCase()}`;
+  const cached = pngCache.get(cacheKey);
+  if (cached && (Date.now() - cached.ts < 1000 * 60 * 30)) return cached.data;
 
   try {
     let place = null;
-    for (const query of geoQueries) {
-      for (const lang of ['ru', 'en']) {
-        const geoData = await fetchJsonWithTimeout(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(query)}&count=5&language=${lang}&format=json`, 5000);
-        if (Array.isArray(geoData?.results) && geoData.results.length) {
-          place = geoData.results.find(r => String(r.name || '').toLowerCase() === normalizedCity.toLowerCase()) || geoData.results[0];
-          if (place) break;
-        }
-      }
-      if (place) break;
+    for (const lang of ['ru', 'en']) {
+      try {
+        place = await geocodeCity(normalizedCity, lang);
+        if (place) break;
+      } catch (_) {}
     }
-    if (!place) return null;
+    if (!place || typeof place.latitude !== 'number' || typeof place.longitude !== 'number') return null;
 
     const tz = place.timezone || 'auto';
-    const data = await fetchJsonWithTimeout(`https://api.open-meteo.com/v1/forecast?latitude=${place.latitude}&longitude=${place.longitude}&current=temperature_2m,weather_code,time&hourly=temperature_2m,weather_code&daily=temperature_2m_max,temperature_2m_min,weather_code&forecast_days=2&timezone=${encodeURIComponent(tz)}`, 6500);
+    const forecastUrl = `https://api.open-meteo.com/v1/forecast?latitude=${place.latitude}&longitude=${place.longitude}&current=temperature_2m,weather_code,is_day,time&hourly=temperature_2m,weather_code&daily=temperature_2m_max,temperature_2m_min,weather_code&forecast_days=2&timezone=${encodeURIComponent(tz)}`;
+    const data = await fetchJsonWithTimeout(forecastUrl, 5000);
     if (!data?.current || typeof data.current.temperature_2m !== 'number') return null;
 
     const code = Number(data.current.weather_code || 0);
@@ -236,40 +239,48 @@ async function fetchWeatherByCity(city) {
 
     if (times.length && temps.length) {
       const nowIso = String(data.current.time || '');
-      let nowIndex = times.findIndex(t => t === nowIso);
-      if (nowIndex < 0) nowIndex = Math.max(0, times.findIndex(t => String(t) > nowIso));
-      if (nowIndex < 0) nowIndex = 0;
+      let nowIndex = times.findIndex(t => String(t) === nowIso);
+      if (nowIndex < 0 && nowIso) {
+        const currentHour = String(nowIso).slice(0, 13);
+        nowIndex = times.findIndex(t => String(t).slice(0, 13) === currentHour);
+      }
+      nowIndex = Math.max(0, nowIndex);
 
-      const finalIndexes = [];
-      for (let i = nowIndex; i < times.length && finalIndexes.length < 6; i++) {
-        const hh = Number(String(times[i]).slice(11, 13));
-        if ([6,9,12,15,18,21].includes(hh) || (finalIndexes.length === 0 && i === nowIndex)) finalIndexes.push(i);
+      const preferredHours = new Set([6, 9, 12, 15, 18, 21]);
+      const preferredIndexes = [];
+      for (let i = 0; i < times.length && preferredIndexes.length < 10; i++) {
+        const hour = Number(String(times[i]).slice(11, 13));
+        if (preferredHours.has(hour)) preferredIndexes.push(i);
       }
-      if (!finalIndexes.length) {
-        for (let i = nowIndex; i < Math.min(times.length, nowIndex + 6); i++) finalIndexes.push(i);
-      }
-      for (const idx of finalIndexes.slice(0, 6)) {
+      const futurePreferred = preferredIndexes.filter(i => i >= nowIndex);
+      const finalIndexes = (futurePreferred.length >= 4 ? futurePreferred : preferredIndexes).slice(0, 6);
+      for (const idx of finalIndexes) {
         const t = Math.round(Number(temps[idx]));
         if (!Number.isFinite(t)) continue;
-        hourly.push({ hour: `${String(times[idx]).slice(11, 13)}:00`, temp: t > 0 ? `+${t}` : `${t}`, icon: weatherIconFromCode(Number(codes[idx] ?? code)) });
+        hourly.push({
+          hour: `${String(times[idx]).slice(11, 13)}:00`,
+          temp: t > 0 ? `+${t}` : `${t}`,
+          icon: weatherIconFromCode(Number(codes[idx] ?? code))
+        });
       }
     }
 
-    const temp = Math.round(data.current.temperature_2m);
+    const temp = Math.round(Number(data.current.temperature_2m));
     const dailyMax = Array.isArray(data.daily?.temperature_2m_max) ? Math.round(Number(data.daily.temperature_2m_max[0])) : null;
     const dailyMin = Array.isArray(data.daily?.temperature_2m_min) ? Math.round(Number(data.daily.temperature_2m_min[0])) : null;
 
-    const value = {
+    const result = {
       temp: temp > 0 ? `+${temp}` : `${temp}`,
       icon: weatherIconFromCode(code),
-      cityLabel: [place.name, place.admin1 || place.country].filter(Boolean).join(', '),
+      cityLabel: String(place.name || normalizedCity).trim(),
       timezone: tz,
-      dailyMax: typeof dailyMax === 'number' && Number.isFinite(dailyMax) ? (dailyMax > 0 ? `+${dailyMax}` : `${dailyMax}`) : null,
-      dailyMin: typeof dailyMin === 'number' && Number.isFinite(dailyMin) ? (dailyMin > 0 ? `+${dailyMin}` : `${dailyMin}`) : null,
+      dailyMax: Number.isFinite(dailyMax) ? (dailyMax > 0 ? `+${dailyMax}` : `${dailyMax}`) : null,
+      dailyMin: Number.isFinite(dailyMin) ? (dailyMin > 0 ? `+${dailyMin}` : `${dailyMin}`) : null,
       hourly
     };
-    weatherCache.set(cacheKey, { ts: Date.now(), value });
-    return value;
+
+    if (pngCache.size < 1000) pngCache.set(cacheKey, { ts: Date.now(), data: result });
+    return result;
   } catch (e) {
     return null;
   }
@@ -306,14 +317,12 @@ function getConfig(query) {
     footer: query.footer || 'year_summary', note: (query.note || '').slice(0, 120),
     events: query.events || '', city: String(query.city || '').split(',')[0].trim(),
     eventColor: query.c_event || themeObj.accent,
-    todayColor: query.c_today || themeObj.accent,
-    todayColor2: mixColors(query.c_today || themeObj.accent, query.c_accent2 || themeObj.accent2, 0.45),
     showWeekdays: String(query.show_weekdays || '1') === '1', accentToday: String(query.accent_today || '1') === '1',
     showProgressRing: String(query.show_progress_ring || '1') === '1', showWeekNumbers: String(query.show_week_numbers || '0') === '1',
     quarterDividers: String(query.quarter_dividers || '1') === '1', monthBadges: String(query.month_badges || '1') === '1',
     focusCurrentMonth: String(query.focus_current_month || '1') === '1', lockscreenSafe: String(query.lockscreen_safe || '1') === '1',
     showHeaderMeta: String(query.show_header_meta || '1') === '1', strongWeekendTint: String(query.strong_weekend_tint || '1') === '1',
-    glassPanels: String(query.glass_panels || '1') === '1', pngSafeFont: query.__target === 'png', pngSafeRender: query.__target === 'png'
+    glassPanels: String(query.glass_panels || '1') === '1', pngSafeFont: query.__target === 'png'
   };
 }
 
@@ -358,9 +367,36 @@ function getSafeInsets(cfg, width, height) {
   return { top: Math.round(height * 0.165 + width * 0.04), bottom: Math.round(height * 0.105 + width * 0.03), side: baseSide };
 }
 
+function buildStaticNoisePattern(theme, width, height, opacity = 0.22) {
+  const stripeGap = Math.max(12, Math.round(width * 0.018));
+  const stripeWidth = Math.max(3, Math.round(stripeGap * 0.32));
+  const stripes = [];
+  for (let x = -stripeGap; x < width + stripeGap; x += stripeGap) {
+    stripes.push(`<rect x="${x}" y="0" width="${stripeWidth}" height="${height}" fill="${alpha('#ffffff', opacity * 0.16)}" opacity="0.9"/>`);
+  }
+  const dots = [];
+  const dotGap = Math.max(24, Math.round(width * 0.04));
+  const dotRadius = Math.max(0.8, Math.round(width * 0.0015) / 2);
+  for (let y = 0; y < height; y += dotGap) {
+    for (let x = (Math.floor(y / dotGap) % 2) * (dotGap / 2); x < width; x += dotGap) {
+      dots.push(`<circle cx="${x}" cy="${y}" r="${dotRadius}" fill="${alpha('#ffffff', opacity * 0.20)}"/>`);
+    }
+  }
+  return `
+    <radialGradient id="sn_vignette_safe" cx="50%" cy="50%" r="85%">
+      <stop offset="0%" stop-color="${theme.bg}"/>
+      <stop offset="65%" stop-color="${alpha(theme.panel, 0.72)}"/>
+      <stop offset="100%" stop-color="${alpha(theme.panel, 0.96)}"/>
+    </radialGradient>
+    <pattern id="sn_lines_safe" width="${stripeGap}" height="${height}" patternUnits="userSpaceOnUse">${stripes.join('')}</pattern>
+    <pattern id="sn_dots_safe" width="${dotGap}" height="${dotGap}" patternUnits="userSpaceOnUse">
+      <circle cx="${dotGap/2}" cy="${dotGap/2}" r="${dotRadius}" fill="${alpha('#ffffff', opacity * 0.22)}"/>
+    </pattern>`;
+}
+
 function renderBackground(cfg, theme, width, height) {
   const bgType = cfg.bgStyle;
-  const pngSafe = !!cfg.pngSafeRender;
+  const isPngSafe = cfg.renderTarget === 'png';
   const proceduralFilters = `
     <filter id="tex_paper" x="0" y="0" width="100%" height="100%"><feTurbulence type="fractalNoise" baseFrequency="0.008" numOctaves="5" result="noise"/><feColorMatrix type="matrix" values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  1 0 0 0 0" in="noise"/><feComponentTransfer><feFuncA type="linear" slope="0.12"/></feComponentTransfer></filter>
     <filter id="tex_stone" x="0" y="0" width="100%" height="100%"><feTurbulence type="fractalNoise" baseFrequency="0.02" numOctaves="6" result="noise"/><feColorMatrix type="matrix" values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  1 0 0 0 0" in="noise"/><feComponentTransfer><feFuncA type="linear" slope="0.25"/></feComponentTransfer></filter>
@@ -369,20 +405,23 @@ function renderBackground(cfg, theme, width, height) {
   `;
 
   if (bgType === 'mesh_organic') return `<defs><radialGradient id="mo1" cx="20%" cy="10%" r="65%"><stop offset="0%" stop-color="${alpha(theme.accent, 0.45)}"/><stop offset="100%" stop-color="${alpha(theme.bg, 0)}"/></radialGradient><radialGradient id="mo2" cx="80%" cy="75%" r="75%"><stop offset="0%" stop-color="${alpha(theme.accent2, 0.4)}"/><stop offset="100%" stop-color="${alpha(theme.bg, 0)}"/></radialGradient><radialGradient id="mo3" cx="65%" cy="25%" r="60%"><stop offset="0%" stop-color="${alpha(theme.panel, 0.95)}"/><stop offset="100%" stop-color="${alpha(theme.bg, 0)}"/></radialGradient><radialGradient id="mo4" cx="15%" cy="85%" r="70%"><stop offset="0%" stop-color="${alpha(theme.accent, 0.25)}"/><stop offset="100%" stop-color="${alpha(theme.bg, 0)}"/></radialGradient></defs><rect width="100%" height="100%" fill="${theme.bg}"/><rect width="100%" height="100%" fill="url(#mo1)"/><rect width="100%" height="100%" fill="url(#mo2)"/><rect width="100%" height="100%" fill="url(#mo3)"/><rect width="100%" height="100%" fill="url(#mo4)"/><rect width="100%" height="100%" fill="${alpha(theme.bg, 0.1)}" opacity="0.5"/>`;
-  if (bgType === 'paper') return pngSafe ? `<defs><linearGradient id="p_grad" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="${theme.bg}"/><stop offset="100%" stop-color="${alpha(theme.panel, 0.86)}"/></linearGradient><pattern id="p_lines" width="28" height="28" patternUnits="userSpaceOnUse"><rect width="28" height="28" fill="transparent"/><path d="M0 8 H28 M0 20 H28" stroke="${alpha('#ffffff', 0.035)}" stroke-width="1"/></pattern><radialGradient id="p_vignette" cx="50%" cy="50%" r="75%"><stop offset="60%" stop-color="#000000" stop-opacity="0"/><stop offset="100%" stop-color="#000000" stop-opacity="0.25"/></radialGradient></defs><rect width="100%" height="100%" fill="url(#p_grad)"/><rect width="100%" height="100%" fill="url(#p_lines)"/><rect width="100%" height="100%" fill="url(#p_vignette)"/>` : `<defs>${proceduralFilters}<linearGradient id="p_grad" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="${theme.bg}"/><stop offset="100%" stop-color="${alpha(theme.panel, 0.8)}"/></linearGradient><radialGradient id="p_vignette" cx="50%" cy="50%" r="75%"><stop offset="60%" stop-color="#000000" stop-opacity="0"/><stop offset="100%" stop-color="#000000" stop-opacity="0.25"/></radialGradient></defs><rect width="100%" height="100%" fill="url(#p_grad)"/><rect width="100%" height="100%" filter="url(#tex_paper)"/><rect width="100%" height="100%" fill="url(#p_vignette)"/>`;
+  if (bgType === 'paper') return `<defs>${proceduralFilters}<linearGradient id="p_grad" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="${theme.bg}"/><stop offset="100%" stop-color="${alpha(theme.panel, 0.8)}"/></linearGradient><radialGradient id="p_vignette" cx="50%" cy="50%" r="75%"><stop offset="60%" stop-color="#000000" stop-opacity="0"/><stop offset="100%" stop-color="#000000" stop-opacity="0.25"/></radialGradient></defs><rect width="100%" height="100%" fill="url(#p_grad)"/><rect width="100%" height="100%" filter="url(#tex_paper)"/><rect width="100%" height="100%" fill="url(#p_vignette)"/>`;
   if (bgType === 'stone') return `<defs>${proceduralFilters}<radialGradient id="s_vignette" cx="50%" cy="50%" r="80%"><stop offset="40%" stop-color="#000000" stop-opacity="0"/><stop offset="100%" stop-color="#000000" stop-opacity="0.4"/></radialGradient><radialGradient id="s_spot1" cx="20%" cy="10%" r="50%"><stop offset="0%" stop-color="${alpha(theme.panel, 0.6)}"/><stop offset="100%" stop-color="${alpha(theme.panel, 0)}"/></radialGradient><radialGradient id="s_spot2" cx="80%" cy="80%" r="60%"><stop offset="0%" stop-color="${alpha(theme.accent, 0.1)}"/><stop offset="100%" stop-color="${alpha(theme.accent, 0)}"/></radialGradient></defs><rect width="100%" height="100%" fill="${theme.bg}"/><rect width="100%" height="100%" fill="url(#s_spot1)"/><rect width="100%" height="100%" fill="url(#s_spot2)"/><rect width="100%" height="100%" filter="url(#tex_stone)"/><rect width="100%" height="100%" fill="url(#s_vignette)"/>`;
-  if (bgType === 'metal') return pngSafe ? `<defs><linearGradient id="m_base" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="${theme.panel}"/><stop offset="30%" stop-color="${theme.bg}"/><stop offset="50%" stop-color="${theme.panel}"/><stop offset="70%" stop-color="${theme.bg}"/><stop offset="100%" stop-color="${theme.panel}"/></linearGradient><pattern id="m_lines" width="16" height="16" patternUnits="userSpaceOnUse"><path d="M0 8 H16" stroke="${alpha('#ffffff', 0.035)}" stroke-width="1"/></pattern><linearGradient id="m_shade" x1="0%" y1="0%" x2="100%" y2="0%"><stop offset="0%" stop-color="#000000" stop-opacity="0.3"/><stop offset="20%" stop-color="#000000" stop-opacity="0"/><stop offset="80%" stop-color="#000000" stop-opacity="0"/><stop offset="100%" stop-color="#000000" stop-opacity="0.3"/></linearGradient></defs><rect width="100%" height="100%" fill="url(#m_base)"/><rect width="100%" height="100%" fill="url(#m_lines)" opacity="0.9"/><polygon points="0,${height*0.1} ${width},${height*0.55} ${width},${height*0.7} 0,${height*0.25}" fill="${alpha('#ffffff', 0.05)}"/><rect width="100%" height="100%" fill="url(#m_shade)"/>` : `<defs>${proceduralFilters}<linearGradient id="m_base" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="${theme.panel}"/><stop offset="30%" stop-color="${theme.bg}"/><stop offset="50%" stop-color="${theme.panel}"/><stop offset="70%" stop-color="${theme.bg}"/><stop offset="100%" stop-color="${theme.panel}"/></linearGradient><linearGradient id="m_shade" x1="0%" y1="0%" x2="100%" y2="0%"><stop offset="0%" stop-color="#000000" stop-opacity="0.3"/><stop offset="20%" stop-color="#000000" stop-opacity="0"/><stop offset="80%" stop-color="#000000" stop-opacity="0"/><stop offset="100%" stop-color="#000000" stop-opacity="0.3"/></linearGradient></defs><rect width="100%" height="100%" fill="url(#m_base)"/><rect width="100%" height="100%" filter="url(#tex_metal)"/><polygon points="0,${height*0.1} ${width},${height*0.55} ${width},${height*0.7} 0,${height*0.25}" fill="${alpha('#ffffff', 0.05)}"/><rect width="100%" height="100%" fill="url(#m_shade)"/>`;
+  if (bgType === 'metal') return `<defs>${proceduralFilters}<linearGradient id="m_base" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="${theme.panel}"/><stop offset="30%" stop-color="${theme.bg}"/><stop offset="50%" stop-color="${theme.panel}"/><stop offset="70%" stop-color="${theme.bg}"/><stop offset="100%" stop-color="${theme.panel}"/></linearGradient><linearGradient id="m_shade" x1="0%" y1="0%" x2="100%" y2="0%"><stop offset="0%" stop-color="#000000" stop-opacity="0.3"/><stop offset="20%" stop-color="#000000" stop-opacity="0"/><stop offset="80%" stop-color="#000000" stop-opacity="0"/><stop offset="100%" stop-color="#000000" stop-opacity="0.3"/></linearGradient></defs><rect width="100%" height="100%" fill="url(#m_base)"/><rect width="100%" height="100%" filter="url(#tex_metal)"/><polygon points="0,${height*0.1} ${width},${height*0.55} ${width},${height*0.7} 0,${height*0.25}" fill="${alpha('#ffffff', 0.05)}"/><rect width="100%" height="100%" fill="url(#m_shade)"/>`;
   if (bgType === 'carbon') { const cs = Math.max(16, Math.round(width * 0.015)); return `<defs><pattern id="carbon_mesh" width="${cs}" height="${cs}" patternUnits="userSpaceOnUse"><rect x="0" y="0" width="${cs/2}" height="${cs/2}" fill="${alpha(theme.panel, 0.7)}"/><rect x="${cs/2}" y="${cs/2}" width="${cs/2}" height="${cs/2}" fill="${alpha(theme.panel, 0.4)}"/><rect x="0" y="${cs/2}" width="${cs/2}" height="${cs/2}" fill="${alpha('#000000', 0.3)}"/><rect x="${cs/2}" y="0" width="${cs/2}" height="${cs/2}" fill="${alpha('#000000', 0.5)}"/></pattern><radialGradient id="c_glow" cx="50%" cy="10%" r="80%"><stop offset="0%" stop-color="${alpha(theme.accent, 0.15)}"/><stop offset="100%" stop-color="${alpha(theme.bg, 0)}"/></radialGradient><radialGradient id="c_shade" cx="50%" cy="50%" r="80%"><stop offset="40%" stop-color="#000000" stop-opacity="0"/><stop offset="100%" stop-color="#000000" stop-opacity="0.5"/></radialGradient></defs><rect width="100%" height="100%" fill="${theme.bg}"/><rect width="100%" height="100%" fill="url(#carbon_mesh)"/><rect width="100%" height="100%" fill="url(#c_glow)"/><rect width="100%" height="100%" fill="url(#c_shade)"/>`; }
-  if (bgType === 'liquid_glass') return pngSafe ? `<defs><radialGradient id="g_blob1" cx="15%" cy="15%" r="60%"><stop offset="0%" stop-color="${alpha(theme.accent, 0.35)}"/><stop offset="100%" stop-color="${alpha(theme.accent, 0)}"/></radialGradient><radialGradient id="g_blob2" cx="85%" cy="85%" r="70%"><stop offset="0%" stop-color="${alpha(theme.accent2, 0.25)}"/><stop offset="100%" stop-color="${alpha(theme.accent2, 0)}"/></radialGradient><radialGradient id="g_blob3" cx="60%" cy="30%" r="45%"><stop offset="0%" stop-color="${alpha(theme.panel, 0.9)}"/><stop offset="100%" stop-color="${alpha(theme.panel, 0)}"/></radialGradient><linearGradient id="g_sheen" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="${alpha('#ffffff', 0.1)}"/><stop offset="35%" stop-color="${alpha('#ffffff', 0)}"/><stop offset="65%" stop-color="${alpha('#ffffff', 0)}"/><stop offset="100%" stop-color="${alpha('#000000', 0.25)}"/></linearGradient><pattern id="g_grid" width="24" height="24" patternUnits="userSpaceOnUse"><path d="M0 12 H24" stroke="${alpha('#ffffff', 0.018)}" stroke-width="1"/><path d="M12 0 V24" stroke="${alpha('#ffffff', 0.014)}" stroke-width="1"/></pattern></defs><rect width="100%" height="100%" fill="${theme.bg}"/><rect width="100%" height="100%" fill="url(#g_blob1)"/><rect width="100%" height="100%" fill="url(#g_blob2)"/><rect width="100%" height="100%" fill="url(#g_blob3)"/><rect width="100%" height="100%" fill="url(#g_grid)"/><rect width="100%" height="100%" fill="url(#g_sheen)"/>` : `<defs>${proceduralFilters}<radialGradient id="g_blob1" cx="15%" cy="15%" r="60%"><stop offset="0%" stop-color="${alpha(theme.accent, 0.35)}"/><stop offset="100%" stop-color="${alpha(theme.accent, 0)}"/></radialGradient><radialGradient id="g_blob2" cx="85%" cy="85%" r="70%"><stop offset="0%" stop-color="${alpha(theme.accent2, 0.25)}"/><stop offset="100%" stop-color="${alpha(theme.accent2, 0)}"/></radialGradient><radialGradient id="g_blob3" cx="60%" cy="30%" r="45%"><stop offset="0%" stop-color="${alpha(theme.panel, 0.9)}"/><stop offset="100%" stop-color="${alpha(theme.panel, 0)}"/></radialGradient><linearGradient id="g_sheen" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="${alpha('#ffffff', 0.1)}"/><stop offset="35%" stop-color="${alpha('#ffffff', 0)}"/><stop offset="65%" stop-color="${alpha('#ffffff', 0)}"/><stop offset="100%" stop-color="${alpha('#000000', 0.25)}"/></linearGradient></defs><rect width="100%" height="100%" fill="${theme.bg}"/><rect width="100%" height="100%" fill="url(#g_blob1)"/><rect width="100%" height="100%" fill="url(#g_blob2)"/><rect width="100%" height="100%" fill="url(#g_blob3)"/><rect width="100%" height="100%" fill="url(#g_sheen)"/><rect width="100%" height="100%" filter="url(#tex_static)" opacity="0.6"/>`;
+  if (bgType === 'liquid_glass') return `<defs>${proceduralFilters}<radialGradient id="g_blob1" cx="15%" cy="15%" r="60%"><stop offset="0%" stop-color="${alpha(theme.accent, 0.35)}"/><stop offset="100%" stop-color="${alpha(theme.accent, 0)}"/></radialGradient><radialGradient id="g_blob2" cx="85%" cy="85%" r="70%"><stop offset="0%" stop-color="${alpha(theme.accent2, 0.25)}"/><stop offset="100%" stop-color="${alpha(theme.accent2, 0)}"/></radialGradient><radialGradient id="g_blob3" cx="60%" cy="30%" r="45%"><stop offset="0%" stop-color="${alpha(theme.panel, 0.9)}"/><stop offset="100%" stop-color="${alpha(theme.panel, 0)}"/></radialGradient><linearGradient id="g_sheen" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="${alpha('#ffffff', 0.1)}"/><stop offset="35%" stop-color="${alpha('#ffffff', 0)}"/><stop offset="65%" stop-color="${alpha('#ffffff', 0)}"/><stop offset="100%" stop-color="${alpha('#000000', 0.25)}"/></linearGradient></defs><rect width="100%" height="100%" fill="${theme.bg}"/><rect width="100%" height="100%" fill="url(#g_blob1)"/><rect width="100%" height="100%" fill="url(#g_blob2)"/><rect width="100%" height="100%" fill="url(#g_blob3)"/><rect width="100%" height="100%" fill="url(#g_sheen)"/><rect width="100%" height="100%" filter="url(#tex_static)" opacity="0.6"/>`;
   if (bgType === 'spotlight') return `<defs><radialGradient id="spot1" cx="50%" cy="0%" r="90%"><stop offset="0%" stop-color="${alpha(theme.accent2, 0.22)}"/><stop offset="25%" stop-color="${alpha(theme.accent, 0.15)}"/><stop offset="60%" stop-color="${theme.bg}"/></radialGradient></defs><rect width="100%" height="100%" fill="${theme.bg}"/><rect width="100%" height="100%" fill="url(#spot1)"/>`;
-  if (bgType === 'waves') return `<defs>${proceduralFilters}</defs><rect width="100%" height="100%" fill="${theme.bg}"/><path d="M0,${height*0.25} C${width*0.4},${height*0.05} ${width*0.6},${height*0.45} ${width},${height*0.2} L${width},0 L0,0 Z" fill="${alpha(theme.panel, 0.8)}"/><path d="M0,${height*0.27} C${width*0.4},${height*0.07} ${width*0.6},${height*0.47} ${width},${height*0.22}" fill="none" stroke="${cfg.todayColor}" stroke-width="2" opacity="0.6"/><path d="M0,${height*0.75} C${width*0.3},${height*0.95} ${width*0.7},${height*0.6} ${width},${height*0.8} L${width},${height} L0,${height} Z" fill="${alpha(theme.panel, 0.6)}"/><path d="M0,${height*0.73} C${width*0.3},${height*0.93} ${width*0.7},${height*0.58} ${width},${height*0.78}" fill="none" stroke="${theme.accent2}" stroke-width="1.5" opacity="0.5"/><rect width="100%" height="100%" filter="url(#tex_static)" opacity="0.3"/>`;
+  if (bgType === 'waves') return `<defs>${proceduralFilters}</defs><rect width="100%" height="100%" fill="${theme.bg}"/><path d="M0,${height*0.25} C${width*0.4},${height*0.05} ${width*0.6},${height*0.45} ${width},${height*0.2} L${width},0 L0,0 Z" fill="${alpha(theme.panel, 0.8)}"/><path d="M0,${height*0.27} C${width*0.4},${height*0.07} ${width*0.6},${height*0.47} ${width},${height*0.22}" fill="none" stroke="${theme.accent}" stroke-width="2" opacity="0.6"/><path d="M0,${height*0.75} C${width*0.3},${height*0.95} ${width*0.7},${height*0.6} ${width},${height*0.8} L${width},${height} L0,${height} Z" fill="${alpha(theme.panel, 0.6)}"/><path d="M0,${height*0.73} C${width*0.3},${height*0.93} ${width*0.7},${height*0.58} ${width},${height*0.78}" fill="none" stroke="${theme.accent2}" stroke-width="1.5" opacity="0.5"/><rect width="100%" height="100%" filter="url(#tex_static)" opacity="0.3"/>`;
   if (bgType === 'topography') return `<defs>${proceduralFilters}</defs><rect width="100%" height="100%" fill="${theme.bg}"/><g stroke="${alpha(theme.accent, 0.18)}" fill="none" stroke-width="1.5"><path d="M -${width*0.2} ${height*0.1} Q ${width*0.4} ${height*0.3}, ${width*1.2} -${height*0.1}"/><path d="M -${width*0.2} ${height*0.14} Q ${width*0.4} ${height*0.34}, ${width*1.2} -${height*0.06}"/><path d="M -${width*0.2} ${height*0.18} Q ${width*0.4} ${height*0.38}, ${width*1.2} -${height*0.02}"/></g><g stroke="${alpha(theme.accent2, 0.12)}" fill="none" stroke-width="1"><path d="M -${width*0.2} ${height*0.8} Q ${width*0.6} ${height*0.6}, ${width*1.2} ${height*1.1}"/><path d="M -${width*0.2} ${height*0.84} Q ${width*0.6} ${height*0.64}, ${width*1.2} ${height*1.14}"/><path d="M -${width*0.2} ${height*0.88} Q ${width*0.6} ${height*0.68}, ${width*1.2} ${height*1.18}"/></g><circle cx="${width*0.85}" cy="${height*0.15}" r="${width*0.25}" fill="none" stroke="${alpha(theme.panel, 0.6)}" stroke-width="15"/><circle cx="${width*0.85}" cy="${height*0.15}" r="${width*0.32}" fill="none" stroke="${alpha(theme.panel, 0.3)}" stroke-width="1"/><rect width="100%" height="100%" filter="url(#tex_static)" opacity="0.4"/>`;
   if (bgType === 'bloom') return `<defs><radialGradient id="b1" cx="10%" cy="40%" r="70%"><stop offset="0%" stop-color="${alpha(theme.accent2, 0.22)}"/><stop offset="100%" stop-color="${alpha(theme.bg, 0)}"/></radialGradient><radialGradient id="b2" cx="90%" cy="90%" r="80%"><stop offset="0%" stop-color="${alpha(theme.accent, 0.18)}"/><stop offset="100%" stop-color="${alpha(theme.bg, 0)}"/></radialGradient></defs><rect width="100%" height="100%" fill="${theme.bg}"/><rect width="100%" height="100%" fill="url(#b1)"/><rect width="100%" height="100%" fill="url(#b2)"/>`;
   if (bgType === 'diagonal') return `<rect width="100%" height="100%" fill="${theme.bg}"/><path d="M0,0 L${width*0.7},0 L0,${height*0.4} Z" fill="${alpha(theme.accent, 0.08)}"/><path d="M${width},${height} L${width*0.3},${height} L${width},${height*0.6} Z" fill="${alpha(theme.accent2, 0.06)}"/><line x1="0" y1="${height*0.3}" x2="${width}" y2="${height*0.8}" stroke="${alpha(theme.accent, 0.12)}" stroke-width="2"/><line x1="0" y1="${height*0.32}" x2="${width}" y2="${height*0.82}" stroke="${alpha(theme.accent, 0.05)}" stroke-width="1"/>`;
   if (bgType === 'orbit') return `<rect width="100%" height="100%" fill="${theme.bg}"/><circle cx="50%" cy="35%" r="${width*0.45}" fill="none" stroke="${alpha(theme.accent, 0.1)}" stroke-width="${Math.max(1, width*0.003)}" stroke-dasharray="8 12"/><circle cx="50%" cy="35%" r="${width*0.65}" fill="none" stroke="${alpha(theme.accent2, 0.06)}" stroke-width="${Math.max(1, width*0.002)}"/><circle cx="50%" cy="35%" r="${width*0.85}" fill="none" stroke="${alpha(theme.accent, 0.04)}" stroke-width="${Math.max(2, width*0.005)}"/>`;
   if (bgType === 'velvet') return `<defs>${proceduralFilters}<linearGradient id="v_grad" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="${theme.bg}"/><stop offset="40%" stop-color="${alpha(theme.panel, 0.9)}"/><stop offset="60%" stop-color="${theme.bg}"/><stop offset="85%" stop-color="${alpha(theme.panel, 0.9)}"/><stop offset="100%" stop-color="${theme.bg}"/></linearGradient></defs><rect width="100%" height="100%" fill="url(#v_grad)"/><rect width="100%" height="100%" filter="url(#tex_paper)" opacity="0.6"/>`;
   if (bgType === 'noir') return `<defs><radialGradient id="vignette" cx="50%" cy="40%" r="95%"><stop offset="15%" stop-color="${alpha(theme.accent, 0.1)}"/><stop offset="50%" stop-color="${theme.bg}"/><stop offset="100%" stop-color="#000000"/></radialGradient></defs><rect width="100%" height="100%" fill="url(#vignette)"/>`;
-  if (bgType === 'static_noise') return pngSafe ? `<defs><radialGradient id="sn_vignette" cx="50%" cy="50%" r="85%"><stop offset="0%" stop-color="${theme.bg}"/><stop offset="100%" stop-color="${alpha(theme.panel, 0.95)}"/></radialGradient><pattern id="sn_lines" width="18" height="18" patternUnits="userSpaceOnUse"><rect width="18" height="18" fill="transparent"/><path d="M0 9 H18" stroke="${alpha('#ffffff', 0.025)}" stroke-width="1"/><path d="M9 0 V18" stroke="${alpha('#000000', 0.018)}" stroke-width="1"/></pattern></defs><rect width="100%" height="100%" fill="url(#sn_vignette)"/><rect width="100%" height="100%" fill="url(#sn_lines)" opacity="0.9"/>` : `<defs>${proceduralFilters}<radialGradient id="sn_vignette" cx="50%" cy="50%" r="85%"><stop offset="0%" stop-color="${theme.bg}"/><stop offset="100%" stop-color="${alpha(theme.panel, 0.95)}"/></radialGradient></defs><rect width="100%" height="100%" fill="url(#sn_vignette)"/><rect width="100%" height="100%" filter="url(#tex_static)" opacity="1.2"/>`;
+  if (bgType === 'static_noise') {
+    if (isPngSafe) return `<defs>${buildStaticNoisePattern(theme, width, height, 0.34)}</defs><rect width="100%" height="100%" fill="url(#sn_vignette_safe)"/><rect width="100%" height="100%" fill="url(#sn_lines_safe)" opacity="0.65"/><rect width="100%" height="100%" fill="url(#sn_dots_safe)" opacity="0.7"/><path d="M0,0 L${width*0.72},0 L${width*0.18},${height} L0,${height} Z" fill="${alpha('#ffffff', 0.035)}"/><path d="M${width*0.58},0 L${width},0 L${width},${height} L${width*0.84},${height} Z" fill="${alpha('#000000', 0.09)}"/>`;
+    return `<defs>${proceduralFilters}<radialGradient id="sn_vignette" cx="50%" cy="50%" r="85%"><stop offset="0%" stop-color="${theme.bg}"/><stop offset="100%" stop-color="${alpha(theme.panel, 0.95)}"/></radialGradient></defs><rect width="100%" height="100%" fill="url(#sn_vignette)"/><rect width="100%" height="100%" filter="url(#tex_static)" opacity="1.2"/>`;
+  }
 
   return `<defs><radialGradient id="au1" cx="20%" cy="-10%" r="85%"><stop offset="0%" stop-color="${alpha(theme.accent, 0.35)}"/><stop offset="100%" stop-color="${alpha(theme.bg, 0)}"/></radialGradient><radialGradient id="au2" cx="110%" cy="40%" r="75%"><stop offset="0%" stop-color="${alpha(theme.accent2, 0.25)}"/><stop offset="100%" stop-color="${alpha(theme.bg, 0)}"/></radialGradient><radialGradient id="au3" cx="-10%" cy="110%" r="80%"><stop offset="0%" stop-color="${alpha(theme.panel, 0.9)}"/><stop offset="100%" stop-color="${alpha(theme.bg, 0)}"/></radialGradient></defs><rect width="100%" height="100%" fill="${theme.bg}"/><rect width="100%" height="100%" fill="url(#au1)"/><rect width="100%" height="100%" fill="url(#au2)"/><rect width="100%" height="100%" fill="url(#au3)"/>`;
 }
@@ -461,7 +500,7 @@ function renderHeader(cfg, theme, labels, now, stats, width, padding, topY, FONT
     const ringCx = width - padding - ringR;
     const ringCy = yearY - yearSize * 0.25;
     const dash = (Math.PI * 2 * ringR) * (stats.percentPassed / 100);
-    rightSvg += `<circle cx="${ringCx}" cy="${ringCy}" r="${ringR}" fill="none" stroke="${alpha(theme.panel, 0.92)}" stroke-width="${ringR * 0.28}" /><circle cx="${ringCx}" cy="${ringCy}" r="${ringR}" fill="none" stroke="${cfg.todayColor}" stroke-width="${ringR * 0.28}" stroke-linecap="round" stroke-dasharray="${dash} ${Math.PI * 2 * ringR}" transform="rotate(-90 ${ringCx} ${ringCy})" /><text x="${ringCx}" y="${ringCy + width * 0.008}" text-anchor="middle" fill="${theme.text}" font-size="${Math.round(width * 0.02)}" font-family="${FONT}" font-weight="800">${stats.percentPassed}%</text>`;
+    rightSvg += `<circle cx="${ringCx}" cy="${ringCy}" r="${ringR}" fill="none" stroke="${alpha(theme.panel, 0.92)}" stroke-width="${ringR * 0.28}" /><circle cx="${ringCx}" cy="${ringCy}" r="${ringR}" fill="none" stroke="${theme.accent}" stroke-width="${ringR * 0.28}" stroke-linecap="round" stroke-dasharray="${dash} ${Math.PI * 2 * ringR}" transform="rotate(-90 ${ringCx} ${ringCy})" /><text x="${ringCx}" y="${ringCy + width * 0.008}" text-anchor="middle" fill="${theme.text}" font-size="${Math.round(width * 0.02)}" font-family="${FONT}" font-weight="800">${stats.percentPassed}%</text>`;
   }
   return yearSvg + todaySvg + badgeSvg + rightSvg;
 }
@@ -537,19 +576,19 @@ function renderMonthGrid({ monthIndex, year, x, y, w, h, cfg, theme, labels, now
 
     if (isToday) {
       const rect = `<rect x="${cx - cellW * 0.45}" y="${cy - cellHReal * 0.6}" width="${cellW * 0.9}" height="${cellHReal * 0.8}" rx="${Math.min(cellW, cellHReal) * 0.2}"`;
-      out += cfg.style === 'outline' ? `${rect} fill="none" stroke="${cfg.todayColor}" stroke-width="${Math.max(1.2, w * 0.004)}"/>` : `${rect} fill="${alpha(cfg.todayColor, cfg.style === 'numbers' ? 0.24 : 0.18)}" stroke="${alpha(cfg.todayColor2, 0.34)}"/>`;
+      out += cfg.style === 'outline' ? `${rect} fill="none" stroke="${theme.accent}" stroke-width="${Math.max(1.2, w * 0.004)}"/>` : `${rect} fill="${alpha(theme.accent, cfg.style === 'numbers' ? 0.24 : 0.18)}" stroke="${alpha(theme.accent2, 0.34)}"/>`;
     }
 
     if (cfg.style === 'dots' || cfg.style === 'micro') {
-      out += `<circle cx="${cx}" cy="${cy - cellHReal * (cfg.style === 'dots' ? 0.2 : 0.18)}" r="${Math.max(1.1, Math.min(cellW, cellHReal) * (cfg.style === 'dots' ? (isToday ? 0.18 : 0.12) : 0.08))}" fill="${isToday ? cfg.todayColor : isRestDay(date) ? theme.weekend : alpha(theme.text, 0.24)}"/><text x="${cx}" y="${cy + cellHReal * (cfg.style === 'dots' ? 0.3 : 0.24)}" text-anchor="middle" fill="${textColor}" font-size="${Math.round(numSize * (cfg.style === 'dots' ? 0.82 : 0.72))}" font-family="${FONT}" font-weight="700">${day}</text>`;
+      out += `<circle cx="${cx}" cy="${cy - cellHReal * (cfg.style === 'dots' ? 0.2 : 0.18)}" r="${Math.max(1.1, Math.min(cellW, cellHReal) * (cfg.style === 'dots' ? (isToday ? 0.18 : 0.12) : 0.08))}" fill="${isToday ? theme.accent : isRestDay(date) ? theme.weekend : alpha(theme.text, 0.24)}"/><text x="${cx}" y="${cy + cellHReal * (cfg.style === 'dots' ? 0.3 : 0.24)}" text-anchor="middle" fill="${textColor}" font-size="${Math.round(numSize * (cfg.style === 'dots' ? 0.82 : 0.72))}" font-family="${FONT}" font-weight="700">${day}</text>`;
     } else if (cfg.style === 'focus') {
       out += `<text x="${cx}" y="${cy}" text-anchor="middle" fill="${textColor}" font-size="${Math.round(numSize * (isToday ? 1.05 : 1))}" font-family="${FONT}" font-weight="${isToday || isCurrent ? 800 : 600}">${day}</text>`;
       if (isCurrent && !isToday && !opts.tiny) out += `<line x1="${cx - cellW * 0.15}" y1="${cy + cellHReal * 0.15}" x2="${cx + cellW * 0.15}" y2="${cy + cellHReal * 0.15}" stroke="${alpha(theme.accent2, 0.35)}" stroke-linecap="round" stroke-width="2"/>`;
     } else if (cfg.style === 'capsule') {
-      if (isToday || isRestDay(date)) out += `<rect x="${cx - cellW * 0.38}" y="${cy - cellHReal * 0.48}" width="${cellW * 0.76}" height="${cellHReal * 0.56}" rx="${cellHReal * 0.28}" fill="${isToday ? alpha(cfg.todayColor, 0.25) : alpha(theme.weekend, 0.12)}"/>`;
+      if (isToday || isRestDay(date)) out += `<rect x="${cx - cellW * 0.38}" y="${cy - cellHReal * 0.48}" width="${cellW * 0.76}" height="${cellHReal * 0.56}" rx="${cellHReal * 0.28}" fill="${isToday ? alpha(theme.accent, 0.25) : alpha(theme.weekend, 0.12)}"/>`;
       out += `<text x="${cx}" y="${cy}" text-anchor="middle" fill="${textColor}" font-size="${numSize}" font-family="${FONT}" font-weight="${isToday ? 800 : 600}">${day}</text>`;
     } else if (cfg.style === 'ring') {
-      if (isToday) out += `<circle cx="${cx}" cy="${cy - cellHReal * 0.2}" r="${Math.min(cellW, cellHReal) * 0.28}" fill="none" stroke="${cfg.todayColor}" stroke-width="${Math.max(1.2, w * 0.004)}"/>`;
+      if (isToday) out += `<circle cx="${cx}" cy="${cy - cellHReal * 0.2}" r="${Math.min(cellW, cellHReal) * 0.28}" fill="none" stroke="${theme.accent}" stroke-width="${Math.max(1.2, w * 0.004)}"/>`;
       out += `<text x="${cx}" y="${cy}" text-anchor="middle" fill="${textColor}" font-size="${numSize}" font-family="${FONT}" font-weight="${isToday ? 800 : 600}">${day}</text>`;
     } else {
       out += `<text x="${cx}" y="${cy}" text-anchor="middle" fill="${textColor}" font-size="${numSize}" font-family="${FONT}" font-weight="${isToday ? 800 : 600}">${day}</text>`;
@@ -597,8 +636,8 @@ function renderMonthListRow({ monthIndex, year, x, y, w, h, cfg, theme, labels, 
     if (isCustomEvent && !isToday) textColor = cfg.eventColor;
 
     if (isCustomEvent) out += `<rect x="${cx - cellW * 0.35}" y="${cy - cellH * 0.65}" width="${cellW * 0.7}" height="${cellH * 0.75}" rx="${Math.min(cellW, cellH) * 0.2}" fill="${alpha(cfg.eventColor, 0.18)}" stroke="${alpha(cfg.eventColor, 0.34)}"/>`;
-    if (isToday) out += `<rect x="${cx - cellW * 0.34}" y="${cy - cellH * 0.58}" width="${cellW * 0.68}" height="${cellH * 0.72}" rx="${Math.min(cellW, cellH) * 0.22}" fill="${alpha(cfg.todayColor, 0.24)}" stroke="${alpha(cfg.todayColor2, 0.28)}"/>`;
-    if (cfg.style === 'dots' || cfg.style === 'micro') out += `<circle cx="${cx}" cy="${cy - cellH * 0.24}" r="${Math.max(1.1, Math.min(cellW, cellH) * 0.08)}" fill="${isToday ? cfg.todayColor : isRestDay(date) ? theme.weekend : alpha(theme.text, 0.22)}"/>`;
+    if (isToday) out += `<rect x="${cx - cellW * 0.34}" y="${cy - cellH * 0.58}" width="${cellW * 0.68}" height="${cellH * 0.72}" rx="${Math.min(cellW, cellH) * 0.22}" fill="${alpha(theme.accent, 0.24)}" stroke="${alpha(theme.accent2, 0.28)}"/>`;
+    if (cfg.style === 'dots' || cfg.style === 'micro') out += `<circle cx="${cx}" cy="${cy - cellH * 0.24}" r="${Math.max(1.1, Math.min(cellW, cellH) * 0.08)}" fill="${isToday ? theme.accent : isRestDay(date) ? theme.weekend : alpha(theme.text, 0.22)}"/>`;
     out += `<text x="${cx}" y="${cy + (cfg.style === 'dots' || cfg.style === 'micro' ? cellH * 0.18 : 0)}" text-anchor="middle" fill="${textColor}" font-size="${Math.max(8, Math.round(Math.min(cellW, cellH) * (compact ? 0.40 : 0.44)))}" font-family="${FONT}" font-weight="${isToday ? 800 : 600}">${day}</text>`;
   }
   return out;
@@ -710,9 +749,19 @@ app.get('/api/options', (req, res) => {
   res.json({ presets: PHONE_PRESETS, themes: THEMES, bgStyles: BG_STYLES, fonts: Object.fromEntries(Object.entries(FONTS).map(([k, v]) => [k, v.name])) });
 });
 
+
+app.get('/api/weather', async (req, res) => {
+  const city = String(req.query.city || '').trim();
+  if (!city) return res.status(400).json({ error: 'city required' });
+  const data = await fetchWeatherByCity(city);
+  if (!data) return res.status(404).json({ error: 'weather_not_found', city });
+  res.json(data);
+});
+
 // Добавлено получение погоды для браузерного Live-превью!
 app.get('/wallpaper.svg', async (req, res) => {
-  const cfg = getConfig({ ...req.query, __target: 'svg' });
+  const cfg = getConfig(req.query);
+  cfg.renderTarget = 'svg';
   cfg.weatherData = await fetchWeatherByCity(cfg.city);
   res.type('image/svg+xml').send(renderSvg(cfg));
 });
@@ -726,7 +775,8 @@ app.get('/wallpaper.png', async (req, res) => {
       return res.send(pngCache.get(cacheKey));
     }
 
-    const cfg = getConfig({ ...req.query, __target: 'png' });
+    const cfg = getConfig(req.query);
+    cfg.renderTarget = 'png';
     cfg.weatherData = await fetchWeatherByCity(cfg.city);
     const svg = renderSvg(cfg);
 
