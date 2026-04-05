@@ -200,7 +200,6 @@
     };
   }
 
-  // --- HEADER ---
   function renderHeader(cfg, theme, labels, now, stats, width, padding, topY, FONT) {
     const subtitleSize = Math.round(width * 0.033);
     const chipWidth = Math.round(width * 0.23);
@@ -212,11 +211,11 @@
     const leftTextY = yearY - yearSize * 0.45;
     const badgeY = yearY - yearSize * 0.15;
 
-    const yearSvg = `<text x="${width / 2}" y="${yearY}" text-anchor="middle" fill="${theme.text}" font-size="${yearSize}" font-family="${FONT}" font-weight="900" letter-spacing="-0.03em">${now.year()}</text>`;
+    const yearSvg = `<text x="${width / 2}" y="${yearY}" text-anchor="middle" fill="${theme.text}" font-size="${yearSize}" font-family="${FONT}">${now.year()}</text>`;
     const todaySvg = cfg.showHeaderMeta === false ? '' : `<text x="${padding}" y="${leftTextY}" fill="${theme.muted}" font-size="${subtitleSize}" font-family="${FONT}">${escapeXml(dateText)}</text>`;
     const badgeSvg = cfg.showHeaderMeta === false ? '' : `
       <rect x="${padding}" y="${badgeY}" width="${chipWidth}" height="${chipHeight}" rx="${chipHeight / 2}" fill="${alpha(theme.panel, 0.92)}" stroke="${alpha(theme.accent2, 0.22)}"/>
-      <text x="${padding + chipWidth / 2}" y="${badgeY + chipHeight * 0.66}" text-anchor="middle" fill="${theme.accent2}" font-size="${Math.round(width * 0.024)}" font-family="${FONT}" font-weight="700">${labels.week} ${now.week()}</text>`;
+      <text x="${padding + chipWidth / 2}" y="${badgeY + chipHeight * 0.66}" text-anchor="middle" fill="${theme.accent2}" font-size="${Math.round(width * 0.024)}" font-family="${FONT}">${labels.week} ${now.week()}</text>`;
 
     let rightSvg = '';
     if (cfg.weatherData) {
@@ -225,8 +224,8 @@
       const cityLineY = weatherY + subtitleSize * 1.15;
       const rawCity = String(cfg.weatherData.cityLabel || '').split(',')[0].trim();
       const cityLabel = rawCity.length > 18 ? `${rawCity.slice(0, 17)}…` : rawCity;
-      rightSvg += `<text x="${weatherX}" y="${weatherY}" text-anchor="end" fill="${theme.text}" font-size="${subtitleSize * 1.42}" font-family="${FONT}" font-weight="700">${cfg.weatherData.temp}°C ${cfg.weatherData.icon}</text>`;
-      if (cityLabel) rightSvg += `<text x="${weatherX}" y="${cityLineY}" text-anchor="end" fill="${theme.muted}" font-size="${Math.round(subtitleSize * 0.9)}" font-family="${FONT}" font-weight="600">${escapeXml(cityLabel)}</text>`;
+      rightSvg += `<text x="${weatherX}" y="${weatherY}" text-anchor="end" fill="${theme.text}" font-size="${subtitleSize * 1.42}" font-family="${FONT}">${cfg.weatherData.temp}°C ${cfg.weatherData.icon}</text>`;
+      if (cityLabel) rightSvg += `<text x="${weatherX}" y="${cityLineY}" text-anchor="end" fill="${theme.muted}" font-size="${Math.round(subtitleSize * 0.9)}" font-family="${FONT}">${escapeXml(cityLabel)}</text>`;
     } else if (cfg.showProgressRing && stats) {
       const ringCx = width - padding - ringR;
       const ringCy = yearY - yearSize * 0.25;
@@ -234,7 +233,7 @@
       rightSvg += `
         <circle cx="${ringCx}" cy="${ringCy}" r="${ringR}" fill="none" stroke="${alpha(theme.panel, 0.92)}" stroke-width="${ringR * 0.28}" />
         <circle cx="${ringCx}" cy="${ringCy}" r="${ringR}" fill="none" stroke="${theme.accent}" stroke-width="${ringR * 0.28}" stroke-linecap="round" stroke-dasharray="${dash} ${Math.PI * 2 * ringR}" transform="rotate(-90 ${ringCx} ${ringCy})" />
-        <text x="${ringCx}" y="${ringCy + width * 0.008}" text-anchor="middle" fill="${theme.text}" font-size="${Math.round(width * 0.02)}" font-family="${FONT}" font-weight="800">${stats.percentPassed}%</text>`;
+        <text x="${ringCx}" y="${ringCy + width * 0.008}" text-anchor="middle" fill="${theme.text}" font-size="${Math.round(width * 0.02)}" font-family="${FONT}">${stats.percentPassed}%</text>`;
     }
     return yearSvg + todaySvg + badgeSvg + rightSvg;
   }
@@ -277,12 +276,12 @@
     
     let out = `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${radius}" fill="${cardFill}" stroke="${cardStroke}" />`;
     if (cfg.glassPanels !== false) out += `<rect x="${x + 1.5}" y="${y + 1.5}" width="${Math.max(0, w - 3)}" height="${Math.max(0, h - 3)}" rx="${Math.max(0, radius - 1.5)}" fill="none" stroke="${alpha(theme.accent2, isCurrent ? 0.10 : 0.04)}" />`;
-    if (focusHero) { out += `<text x="${x + pad}" y="${titleY}" fill="${theme.text}" font-size="${titleSize}" font-family="${FONT}" font-weight="800">${titleLabel}</text>`; } 
-    else { out += `<text x="${x + pad}" y="${y + pad + titleSize * 0.75}" fill="${theme.text}" font-size="${titleSize}" font-family="${FONT}" font-weight="800">${titleLabel}</text>`; }
+    if (focusHero) { out += `<text x="${x + pad}" y="${titleY}" fill="${theme.text}" font-size="${titleSize}" font-family="${FONT}">${titleLabel}</text>`; } 
+    else { out += `<text x="${x + pad}" y="${y + pad + titleSize * 0.75}" fill="${theme.text}" font-size="${titleSize}" font-family="${FONT}">${titleLabel}</text>`; }
     
     if (opts.showBadge || focusHero) {
       out += `<rect x="${x + w - pad - badgeW}" y="${y + pad * (focusHero ? 0.9 : 0.55)}" width="${badgeW}" height="${badgeH}" rx="${badgeH / 2}" fill="${isCurrent ? alpha(theme.accent, 0.18) : alpha('#ffffff', 0.05)}" />`;
-      out += `<text x="${x + w - pad - badgeW / 2}" y="${y + pad * (focusHero ? 0.9 : 0.55) + badgeH * 0.65}" text-anchor="middle" fill="${isCurrent ? theme.accent2 : theme.muted}" font-size="${Math.round(badgeH * (focusHero ? 0.50 : 0.56))}" font-family="${FONT}" font-weight="700">${daysInMonth}${cfg.lang === 'ru' ? 'д' : 'd'}</text>`;
+      out += `<text x="${x + w - pad - badgeW / 2}" y="${y + pad * (focusHero ? 0.9 : 0.55) + badgeH * 0.65}" text-anchor="middle" fill="${isCurrent ? theme.accent2 : theme.muted}" font-size="${Math.round(badgeH * (focusHero ? 0.50 : 0.56))}" font-family="${FONT}">${daysInMonth}${cfg.lang === 'ru' ? 'д' : 'd'}</text>`;
     }
     const weekdayY = focusHero ? (y + pad + titleSize + h * 0.065) : (y + (opts.sixWide ? h * 0.18 : h * 0.23));
     const gridTop = y + topBand;
@@ -295,7 +294,7 @@
     }
     if (opts.showWeekdays) {
       if (weekNumberCol) out += `<text x="${x + pad + cellW / 2}" y="${weekdayY}" text-anchor="middle" fill="${theme.muted}" font-size="${weekdaySize}" font-family="${FONT}">#</text>`;
-      labels.weekdays.forEach((wd, i) => out += `<text x="${startX + i * cellW + cellW / 2}" y="${weekdayY}" text-anchor="middle" fill="${i >= 5 ? alpha(theme.weekend, 0.95) : theme.muted}" font-size="${weekdaySize}" font-family="${FONT}" font-weight="700">${wd}</text>`);
+      labels.weekdays.forEach((wd, i) => out += `<text x="${startX + i * cellW + cellW / 2}" y="${weekdayY}" text-anchor="middle" fill="${i >= 5 ? alpha(theme.weekend, 0.95) : theme.muted}" font-size="${weekdaySize}" font-family="${FONT}">${wd}</text>`);
     }
     const isRestDay = isRestDayFactory(cfg, year, dayjsInst);
     const usedWeekRows = new Set();
@@ -329,21 +328,21 @@
 
       if (cfg.style === 'dots') {
         out += `<circle cx="${cx}" cy="${cy - cellHReal * 0.2}" r="${Math.min(cellW, cellHReal) * (isToday ? 0.18 : 0.12)}" fill="${isToday ? theme.accent : isPast ? theme.accent2 : isWeekend ? alpha(theme.weekend, 0.9) : alpha(theme.text, 0.26)}"/>`;
-        out += `<text x="${cx}" y="${cy + cellHReal * 0.3}" text-anchor="middle" fill="${textColor}" font-size="${Math.round(numSize * 0.82)}" font-family="${FONT}" font-weight="700">${day}</text>`;
+        out += `<text x="${cx}" y="${cy + cellHReal * 0.3}" text-anchor="middle" fill="${textColor}" font-size="${Math.round(numSize * 0.82)}" font-family="${FONT}">${day}</text>`;
       } else if (cfg.style === 'focus') {
-        out += `<text x="${cx}" y="${cy}" text-anchor="middle" fill="${textColor}" font-size="${Math.round(numSize * (isToday ? 1.05 : 1))}" font-family="${FONT}" font-weight="${isToday || isCurrent ? 800 : 600}">${day}</text>`;
+        out += `<text x="${cx}" y="${cy}" text-anchor="middle" fill="${textColor}" font-size="${Math.round(numSize * (isToday ? 1.05 : 1))}" font-family="${FONT}">${day}</text>`;
         if (isCurrent && !isToday && !opts.tiny) out += `<line x1="${cx - cellW * 0.15}" y1="${cy + cellHReal * 0.15}" x2="${cx + cellW * 0.15}" y2="${cy + cellHReal * 0.15}" stroke="${alpha(theme.accent2, 0.35)}" stroke-linecap="round" stroke-width="2"/>`;
       } else if (cfg.style === 'capsule') {
         if (isToday || isWeekend) out += `<rect x="${cx - cellW * 0.38}" y="${cy - cellHReal * 0.48}" width="${cellW * 0.76}" height="${cellHReal * 0.56}" rx="${cellHReal * 0.28}" fill="${isToday ? alpha(theme.accent, 0.25) : alpha(theme.weekend, 0.12)}"/>`;
-        out += `<text x="${cx}" y="${cy}" text-anchor="middle" fill="${textColor}" font-size="${numSize}" font-family="${FONT}" font-weight="${isToday ? 800 : 600}">${day}</text>`;
+        out += `<text x="${cx}" y="${cy}" text-anchor="middle" fill="${textColor}" font-size="${numSize}" font-family="${FONT}">${day}</text>`;
       } else if (cfg.style === 'ring') {
         if (isToday) out += `<circle cx="${cx}" cy="${cy - cellHReal * 0.2}" r="${Math.min(cellW, cellHReal) * 0.28}" fill="none" stroke="${theme.accent}" stroke-width="${Math.max(1.2, w * 0.004)}"/>`;
-        out += `<text x="${cx}" y="${cy}" text-anchor="middle" fill="${textColor}" font-size="${numSize}" font-family="${FONT}" font-weight="${isToday ? 800 : 600}">${day}</text>`;
+        out += `<text x="${cx}" y="${cy}" text-anchor="middle" fill="${textColor}" font-size="${numSize}" font-family="${FONT}">${day}</text>`;
       } else if (cfg.style === 'micro') {
         out += `<circle cx="${cx}" cy="${cy - cellHReal * 0.18}" r="${Math.max(1.1, Math.min(cellW, cellHReal) * 0.08)}" fill="${isToday ? theme.accent : isWeekend ? theme.weekend : alpha(theme.text, 0.24)}"/>`;
-        out += `<text x="${cx}" y="${cy + cellHReal * 0.24}" text-anchor="middle" fill="${textColor}" font-size="${Math.round(numSize * 0.72)}" font-family="${FONT}" font-weight="700">${day}</text>`;
+        out += `<text x="${cx}" y="${cy + cellHReal * 0.24}" text-anchor="middle" fill="${textColor}" font-size="${Math.round(numSize * 0.72)}" font-family="${FONT}">${day}</text>`;
       } else {
-        out += `<text x="${cx}" y="${cy}" text-anchor="middle" fill="${textColor}" font-size="${numSize}" font-family="${FONT}" font-weight="${isToday ? 800 : 600}">${day}</text>`;
+        out += `<text x="${cx}" y="${cy}" text-anchor="middle" fill="${textColor}" font-size="${numSize}" font-family="${FONT}">${day}</text>`;
       }
 
     }
@@ -376,13 +375,13 @@
     
     let out = `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${radius}" fill="${isCurrent ? alpha(theme.panel, 0.95) : alpha(theme.panel, 0.72)}" stroke="${isCurrent ? alpha(theme.accent2, cfg.glassPanels === false ? 0.24 : 0.38) : alpha('#ffffff', cfg.glassPanels === false ? 0.05 : 0.08)}"/>`;
     if (cfg.glassPanels !== false) out += `<rect x="${x + 1.5}" y="${y + 1.5}" width="${Math.max(0, w - 3)}" height="${Math.max(0, h - 3)}" rx="${Math.max(0, radius - 1.5)}" fill="none" stroke="${alpha(theme.accent2, isCurrent ? 0.09 : 0.04)}"/>`;
-    out += `<text x="${x + padX}" y="${y + h * 0.28}" fill="${theme.text}" font-size="${Math.max(12, Math.round(Math.min(h * (compact ? 0.16 : 0.19), nameW * 0.22)))}" font-family="${FONT}" font-weight="800">${pickMonthLabel(labels, monthIndex, nameW, 'list')}</text>`;
+    out += `<text x="${x + padX}" y="${y + h * 0.28}" fill="${theme.text}" font-size="${Math.max(12, Math.round(Math.min(h * (compact ? 0.16 : 0.19), nameW * 0.22)))}" font-family="${FONT}">${pickMonthLabel(labels, monthIndex, nameW, 'list')}</text>`;
     if (cfg.monthBadges) {
       out += `<rect x="${x + w - padX - badgeW}" y="${y + h * 0.17}" width="${badgeW}" height="${h * 0.20}" rx="${h * 0.10}" fill="${isCurrent ? alpha(theme.accent, 0.18) : alpha('#ffffff', 0.05)}"/>`;
-      out += `<text x="${x + w - padX - badgeW / 2}" y="${y + h * 0.30}" text-anchor="middle" fill="${isCurrent ? theme.accent2 : theme.muted}" font-size="${Math.round(h * 0.10)}" font-family="${FONT}" font-weight="700">${daysInMonth}${cfg.lang === 'ru' ? 'д' : 'd'}</text>`;
+      out += `<text x="${x + w - padX - badgeW / 2}" y="${y + h * 0.30}" text-anchor="middle" fill="${isCurrent ? theme.accent2 : theme.muted}" font-size="${Math.round(h * 0.10)}" font-family="${FONT}">${daysInMonth}${cfg.lang === 'ru' ? 'д' : 'd'}</text>`;
     }
     if (cfg.showWeekdays) {
-      labels.weekdays.forEach((wd, i) => out += `<text x="${innerX + i * cellW + cellW / 2}" y="${y + h * 0.24}" text-anchor="middle" fill="${i >= 5 ? alpha(theme.weekend, 0.95) : theme.muted}" font-size="${Math.max(8, Math.round(Math.min(h * (compact ? 0.078 : 0.088), cellW * 0.24)))}" font-family="${FONT}" font-weight="700">${wd}</text>`);
+      labels.weekdays.forEach((wd, i) => out += `<text x="${innerX + i * cellW + cellW / 2}" y="${y + h * 0.24}" text-anchor="middle" fill="${i >= 5 ? alpha(theme.weekend, 0.95) : theme.muted}" font-size="${Math.max(8, Math.round(Math.min(h * (compact ? 0.078 : 0.088), cellW * 0.24)))}" font-family="${FONT}">${wd}</text>`);
     }
     const gridTop = y + topPad + (cfg.showWeekdays ? h * (compact ? 0.04 : 0.05) : 0);
     if (cfg.strongWeekendTint) {
@@ -410,7 +409,7 @@
       if (isToday) out += `<rect x="${cx - cellW * 0.34}" y="${cy - cellH * 0.58}" width="${cellW * 0.68}" height="${cellH * 0.72}" rx="${Math.min(cellW, cellH) * 0.22}" fill="${alpha(theme.accent, 0.24)}" stroke="${alpha(theme.accent2, 0.28)}"/>`;
       if (cfg.style === 'dots' || cfg.style === 'micro') out += `<circle cx="${cx}" cy="${cy - cellH * 0.24}" r="${Math.max(1.1, Math.min(cellW, cellH) * 0.08)}" fill="${isToday ? theme.accent : isRestDay(date) ? theme.weekend : alpha(theme.text, 0.22)}"/>`;
       
-      out += `<text x="${cx}" y="${cy + (cfg.style === 'dots' || cfg.style === 'micro' ? cellH * 0.18 : 0)}" text-anchor="middle" fill="${textColor}" font-size="${numberSize}" font-family="${FONT}" font-weight="${isToday ? 800 : 600}">${day}</text>`;
+      out += `<text x="${cx}" y="${cy + (cfg.style === 'dots' || cfg.style === 'micro' ? cellH * 0.18 : 0)}" text-anchor="middle" fill="${textColor}" font-size="${numberSize}" font-family="${FONT}">${day}</text>`;
       
     }
     return out;
@@ -428,32 +427,32 @@
     
     if (cfg.footer === 'quote') {
       const lines = wrap(cfg.note || randomQuote(cfg.lang, now.year()), 34);
-      return base + lines.map((line, i) => `<text x="${x + w / 2}" y="${y + h * 0.38 + i * subSize * 1.45}" text-anchor="middle" fill="${theme.text}" font-size="${subSize}" font-family="${FONT}" font-weight="700">${escapeXml(line)}</text>`).join('');
+      return base + lines.map((line, i) => `<text x="${x + w / 2}" y="${y + h * 0.38 + i * subSize * 1.45}" text-anchor="middle" fill="${theme.text}" font-size="${subSize}" font-family="${FONT}">${escapeXml(line)}</text>`).join('');
     }
     if (cfg.footer === 'progress_bar') {
       const barX = x + pad, barY = y + h * 0.55, barW = w - pad * 2, barH = h * 0.12;
-      return base + `<text x="${x + pad}" y="${y + h * 0.32}" fill="${theme.text}" font-size="${textSize}" font-family="${FONT}" font-weight="800">${stats.percentPassed}% ${labels.passed}</text><rect x="${barX}" y="${barY}" width="${barW}" height="${barH}" rx="${barH / 2}" fill="${alpha(theme.bg, 0.7)}" /><rect x="${barX}" y="${barY}" width="${barW * stats.percentPassed / 100}" height="${barH}" rx="${barH / 2}" fill="${theme.accent}" />`;
+      return base + `<text x="${x + pad}" y="${y + h * 0.32}" fill="${theme.text}" font-size="${textSize}" font-family="${FONT}">${stats.percentPassed}% ${labels.passed}</text><rect x="${barX}" y="${barY}" width="${barW}" height="${barH}" rx="${barH / 2}" fill="${alpha(theme.bg, 0.7)}" /><rect x="${barX}" y="${barY}" width="${barW * stats.percentPassed / 100}" height="${barH}" rx="${barH / 2}" fill="${theme.accent}" />`;
     }
     if (cfg.footer === 'today_card') {
       const dateLabel = cfg.lang === 'ru' ? `${labels.weekdaysFull[(now.day() + 6) % 7]}, ${now.date()} ${labels.months[now.month()].toLowerCase()}` : `${labels.weekdaysFull[(now.day() + 6) % 7]}, ${labels.months[now.month()]} ${now.date()}`;
-      return base + `<text x="${x + pad}" y="${y + h * 0.34}" fill="${theme.accent2}" font-size="${subSize}" font-family="${FONT}" font-weight="700">${labels.today}</text><text x="${x + pad}" y="${y + h * 0.68}" fill="${theme.text}" font-size="${textSize}" font-family="${FONT}" font-weight="800">${escapeXml(dateLabel)}</text>`;
+      return base + `<text x="${x + pad}" y="${y + h * 0.34}" fill="${theme.accent2}" font-size="${subSize}" font-family="${FONT}">${labels.today}</text><text x="${x + pad}" y="${y + h * 0.68}" fill="${theme.text}" font-size="${textSize}" font-family="${FONT}">${escapeXml(dateLabel)}</text>`;
     }
     if (cfg.footer === 'next_event') {
       const title = nextEvent ? nextEvent.title : (cfg.lang === 'ru' ? 'События не добавлены' : 'No events added');
       const meta = nextEvent ? (cfg.lang === 'ru' ? `Через ${nextEvent.diff} дн. · ${nextEvent.label}` : `In ${nextEvent.diff} days · ${nextEvent.label}`) : weatherSummary(cfg, cfg.lang);
-      return base + `<text x="${x + pad}" y="${y + h * 0.32}" fill="${theme.accent2}" font-size="${subSize}" font-family="${FONT}" font-weight="700">${cfg.lang === 'ru' ? 'Ближайший ориентир' : 'Next marker'}</text><text x="${x + pad}" y="${y + h * 0.62}" fill="${theme.text}" font-size="${textSize}" font-family="${FONT}" font-weight="800">${escapeXml(title)}</text><text x="${x + pad}" y="${y + h * 0.82}" fill="${theme.muted}" font-size="${subSize}" font-family="${FONT}" font-weight="600">${escapeXml(meta)}</text>`;
+      return base + `<text x="${x + pad}" y="${y + h * 0.32}" fill="${theme.accent2}" font-size="${subSize}" font-family="${FONT}">${cfg.lang === 'ru' ? 'Ближайший ориентир' : 'Next marker'}</text><text x="${x + pad}" y="${y + h * 0.62}" fill="${theme.text}" font-size="${textSize}" font-family="${FONT}">${escapeXml(title)}</text><text x="${x + pad}" y="${y + h * 0.82}" fill="${theme.muted}" font-size="${subSize}" font-family="${FONT}">${escapeXml(meta)}</text>`;
     }
     if (cfg.footer === 'seasonal_focus') {
       const season = getSeasonLabel(cfg.lang, now.month());
       const detail = cfg.lang === 'ru' ? `${season} · ${stats.daysLeft} дн. до конца года` : `${season} · ${stats.daysLeft} days left this year`;
       const focusText = cfg.note || (cfg.lang === 'ru' ? 'Спокойный темп, ясный фокус, один главный приоритет.' : 'Calm pace, clear focus, one main priority.');
       const lines = wrap(focusText, 48).slice(0, 2);
-      return base + `<text x="${x + pad}" y="${y + h * 0.26}" fill="${theme.accent2}" font-size="${subSize}" font-family="${FONT}" font-weight="700">${cfg.lang === 'ru' ? 'Сезонный режим' : 'Season mode'}</text><text x="${x + pad}" y="${y + h * 0.5}" fill="${theme.text}" font-size="${textSize}" font-family="${FONT}" font-weight="800">${escapeXml(detail)}</text>${lines.map((line, i) => `<text x="${x + pad}" y="${y + h * 0.72 + i * subSize * 1.4}" fill="${theme.muted}" font-size="${subSize}" font-family="${FONT}" font-weight="600">${escapeXml(line)}</text>`).join('')}`;
+      return base + `<text x="${x + pad}" y="${y + h * 0.26}" fill="${theme.accent2}" font-size="${subSize}" font-family="${FONT}">${cfg.lang === 'ru' ? 'Сезонный режим' : 'Season mode'}</text><text x="${x + pad}" y="${y + h * 0.5}" fill="${theme.text}" font-size="${textSize}" font-family="${FONT}">${escapeXml(detail)}</text>${lines.map((line, i) => `<text x="${x + pad}" y="${y + h * 0.72 + i * subSize * 1.4}" fill="${theme.muted}" font-size="${subSize}" font-family="${FONT}">${escapeXml(line)}</text>`).join('')}`;
     }
     if (cfg.footer === 'weather_strip') {
       const weatherLine = weatherSummary(cfg, cfg.lang);
       const tzLine = `UTC${cfg.timezone >= 0 ? '+' + cfg.timezone : cfg.timezone} · ${labels.months[now.month()]} ${now.date()}`;
-      return base + `<text x="${x + pad}" y="${y + h * 0.34}" fill="${theme.accent2}" font-size="${subSize}" font-family="${FONT}" font-weight="700">${cfg.lang === 'ru' ? 'Сводка среды' : 'Ambient summary'}</text><text x="${x + pad}" y="${y + h * 0.62}" fill="${theme.text}" font-size="${textSize}" font-family="${FONT}" font-weight="800">${escapeXml(weatherLine)}</text><text x="${x + pad}" y="${y + h * 0.82}" fill="${theme.muted}" font-size="${subSize}" font-family="${FONT}" font-weight="600">${escapeXml(tzLine)}</text>`;
+      return base + `<text x="${x + pad}" y="${y + h * 0.34}" fill="${theme.accent2}" font-size="${subSize}" font-family="${FONT}">${cfg.lang === 'ru' ? 'Сводка среды' : 'Ambient summary'}</text><text x="${x + pad}" y="${y + h * 0.62}" fill="${theme.text}" font-size="${textSize}" font-family="${FONT}">${escapeXml(weatherLine)}</text><text x="${x + pad}" y="${y + h * 0.82}" fill="${theme.muted}" font-size="${subSize}" font-family="${FONT}">${escapeXml(tzLine)}</text>`;
     }
     if (cfg.footer === 'day_weather') {
       const items = (cfg.weatherData && Array.isArray(cfg.weatherData.hourly) ? cfg.weatherData.hourly.slice(0, 6) : []);
@@ -461,7 +460,7 @@
       const city = cfg.weatherData && cfg.weatherData.cityLabel ? String(cfg.weatherData.cityLabel).split(',')[0].trim() : '';
       const hiLo = cfg.weatherData && cfg.weatherData.dailyMax && cfg.weatherData.dailyMin ? `${cfg.weatherData.dailyMax} / ${cfg.weatherData.dailyMin}` : '';
       if (!items.length) {
-        return base + `<text x="${x + pad}" y="${y + h * 0.34}" fill="${theme.accent2}" font-size="${subSize}" font-family="${FONT}" font-weight="700">${title}</text><text x="${x + pad}" y="${y + h * 0.66}" fill="${theme.text}" font-size="${textSize * 0.8}" font-family="${FONT}" font-weight="700">${cfg.lang === 'ru' ? 'Добавь город для погодного блока' : 'Add a city for forecast'}</text>`;
+        return base + `<text x="${x + pad}" y="${y + h * 0.34}" fill="${theme.accent2}" font-size="${subSize}" font-family="${FONT}">${title}</text><text x="${x + pad}" y="${y + h * 0.66}" fill="${theme.text}" font-size="${textSize * 0.8}" font-family="${FONT}">${cfg.lang === 'ru' ? 'Добавь город для погодного блока' : 'Add a city for forecast'}</text>`;
       }
       const titleY = y + h * 0.23;
       const metaY = y + h * 0.40;
@@ -469,25 +468,25 @@
       const stripH = h * 0.30;
       const gap = Math.max(10, Math.round(w * 0.012));
       const chipW = (w - pad * 2 - gap * (items.length - 1)) / items.length;
-      let chips = `<text x="${x + pad}" y="${titleY}" fill="${theme.accent2}" font-size="${subSize}" font-family="${FONT}" font-weight="700">${title}</text>`;
+      let chips = `<text x="${x + pad}" y="${titleY}" fill="${theme.accent2}" font-size="${subSize}" font-family="${FONT}">${title}</text>`;
       if (city || hiLo) {
         const meta = [city, hiLo].filter(Boolean).join(' · ');
-        chips += `<text x="${x + pad}" y="${metaY}" fill="${theme.muted}" font-size="${subSize * 0.88}" font-family="${FONT}" font-weight="600">${escapeXml(meta)}</text>`;
+        chips += `<text x="${x + pad}" y="${metaY}" fill="${theme.muted}" font-size="${subSize * 0.88}" font-family="${FONT}">${escapeXml(meta)}</text>`;
       }
       items.forEach((item, i) => {
         const cx = x + pad + i * (chipW + gap);
         chips += `<rect x="${cx}" y="${stripTop}" width="${chipW}" height="${stripH}" rx="${stripH * 0.24}" fill="${alpha(theme.bg, 0.18)}" stroke="${alpha(theme.accent2, 0.10)}"/>`;
-        chips += `<text x="${cx + chipW / 2}" y="${stripTop + stripH * 0.28}" text-anchor="middle" fill="${theme.muted}" font-size="${subSize * 0.72}" font-family="${FONT}" font-weight="700">${escapeXml(item.hour)}</text>`;
-        chips += `<text x="${cx + chipW / 2}" y="${stripTop + stripH * 0.56}" text-anchor="middle" fill="${theme.text}" font-size="${subSize * 0.95}" font-family="${FONT}" font-weight="700">${item.icon}</text>`;
-        chips += `<text x="${cx + chipW / 2}" y="${stripTop + stripH * 0.82}" text-anchor="middle" fill="${theme.text}" font-size="${textSize * 0.64}" font-family="${FONT}" font-weight="800">${escapeXml(item.temp)}°</text>`;
+        chips += `<text x="${cx + chipW / 2}" y="${stripTop + stripH * 0.28}" text-anchor="middle" fill="${theme.muted}" font-size="${subSize * 0.72}" font-family="${FONT}">${escapeXml(item.hour)}</text>`;
+        chips += `<text x="${cx + chipW / 2}" y="${stripTop + stripH * 0.56}" text-anchor="middle" fill="${theme.text}" font-size="${subSize * 0.95}" font-family="${FONT}">${item.icon}</text>`;
+        chips += `<text x="${cx + chipW / 2}" y="${stripTop + stripH * 0.82}" text-anchor="middle" fill="${theme.text}" font-size="${textSize * 0.64}" font-family="${FONT}">${escapeXml(item.temp)}°</text>`;
       });
       return base + chips;
     }
     if (cfg.footer === 'custom_note'  && cfg.note) {
       const lines = wrap(cfg.note, 36).slice(0, 2);
-      return base + lines.map((line, i) => `<text x="${x + pad}" y="${y + h * 0.38 + i * subSize * 1.6}" fill="${theme.text}" font-size="${subSize}" font-family="${FONT}" font-weight="700">${escapeXml(line)}</text>`).join('');
+      return base + lines.map((line, i) => `<text x="${x + pad}" y="${y + h * 0.38 + i * subSize * 1.6}" fill="${theme.text}" font-size="${subSize}" font-family="${FONT}">${escapeXml(line)}</text>`).join('');
     }
-    return base + `<text x="${x + pad}" y="${y + h * 0.36}" fill="${theme.text}" font-size="${textSize}" font-family="${FONT}" font-weight="800">${stats.daysLeft} ${labels.daysLeft}</text><text x="${x + pad}" y="${y + h * 0.66}" fill="${theme.muted}" font-size="${subSize}" font-family="${FONT}">${stats.percentPassed}% ${labels.passed}</text>`;
+    return base + `<text x="${x + pad}" y="${y + h * 0.36}" fill="${theme.text}" font-size="${textSize}" font-family="${FONT}">${stats.daysLeft} ${labels.daysLeft}</text><text x="${x + pad}" y="${y + h * 0.66}" fill="${theme.muted}" font-size="${subSize}" font-family="${FONT}">${stats.percentPassed}% ${labels.passed}</text>`;
   }
 
   Engine.renderSvg = function(cfg, dayjsInst, fontPayload) {
@@ -502,36 +501,33 @@
     const padTop = cfg.lockscreenSafe ? Math.round(height * 0.165 + width * 0.04) : padSide;
     const padBottom = height - (cfg.lockscreenSafe ? Math.round(height * 0.105 + width * 0.03) : padSide);
     
-    // Безопасный стек шрифтов 
+    // ИСПРАВЛЕНИЕ #1: Разделяем поведение для сервера и браузера
+    const isServer = cfg.isServer === true;
+    
     const fontMap = (fontPayload && typeof fontPayload === 'object' && !Array.isArray(fontPayload))
       ? fontPayload
       : (fontPayload ? { selected: fontPayload } : {});
-    const selectedB64 = fontMap.selected || '';
-    const interB64 = fontMap.inter || '';
-    const ubuntuB64 = fontMap.ubuntu || '';
+      
     const browserFamily = fontMap.browserFamily || cfg.fontFamily || 'Inter';
     
-    // ИСПРАВЛЕНИЕ #1: ВСЕГДА отдаем Base64 шрифты (убрана проверка isServer). 
-    // Это гарантирует, что Resvg получит шрифт из памяти именно под именем AppPrimary, 
-    // обходя любые проблемы с путями на Vercel и несовпадения внутренних имен TTF.
-    const extraFaces = [];
-    if (selectedB64) {
-      extraFaces.push(`@font-face { font-family: 'AppPrimary'; src: url(data:font/ttf;base64,${selectedB64}); }`);
-    }
-    if (interB64) {
-      extraFaces.push(`@font-face { font-family: 'AppInter'; src: url(data:font/ttf;base64,${interB64}); }`);
-    }
-    if (ubuntuB64) {
-      extraFaces.push(`@font-face { font-family: 'AppUbuntu'; src: url(data:font/ttf;base64,${ubuntuB64}); }`);
-    }
+    let fontDefs = '';
+    let FONT_FAMILY = browserFamily;
 
-    // ИСПРАВЛЕНИЕ #2: Строго обернутые в кавычки названия шрифтов
-    const FONT_FAMILY = `'AppPrimary', '${browserFamily}', 'AppUbuntu', 'Ubuntu', 'AppInter', 'Inter', sans-serif`;
-    
-    const fontDefs = `<style>
-      ${extraFaces.join('\n')}
-      text, tspan { font-family: ${FONT_FAMILY}; }
-    </style>`;
+    // Вставляем Base64 ТОЛЬКО для браузера (превью).
+    // Если вставить Base64 на сервере, внутренний парсер Resvg сломается и не отрендерит SVG.
+    if (!isServer) {
+      const selectedB64 = fontMap.selected || '';
+      const interB64 = fontMap.inter || '';
+      const ubuntuB64 = fontMap.ubuntu || '';
+      
+      const extraFaces = [];
+      if (selectedB64) extraFaces.push(`@font-face { font-family: 'AppPrimary'; src: url(data:font/ttf;base64,${selectedB64}); }`);
+      if (interB64) extraFaces.push(`@font-face { font-family: 'AppInter'; src: url(data:font/ttf;base64,${interB64}); }`);
+      if (ubuntuB64) extraFaces.push(`@font-face { font-family: 'AppUbuntu'; src: url(data:font/ttf;base64,${ubuntuB64}); }`);
+      
+      FONT_FAMILY = `AppPrimary, ${browserFamily}, sans-serif`;
+      fontDefs = `<style>\n${extraFaces.join('\n')}\ntext, tspan { font-family: ${FONT_FAMILY}; }\n</style>`;
+    }
 
     const listLike = isListLayout(cfg.monthLayout);
     const compactLike = isCompactGridLayout(cfg.monthLayout) || listLike;
@@ -573,7 +569,6 @@
       }
     }
 
-    // ИСПРАВЛЕНИЕ #3: Добавляем font-family прямо на корень <svg> как fallback
     return `<?xml version="1.0" encoding="UTF-8"?><svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" font-family="${escapeXml(FONT_FAMILY)}"><defs>${fontDefs}</defs>${renderBackground(cfg, theme, width, height)}${renderHeader(cfg, theme, labels, now, stats, width, padSide, padTop, FONT_FAMILY)}${quarterLines}${monthsSvg}${renderFooter(cfg, theme, labels, now, stats, width, { x: padSide, y: padBottom - footerHeight, w: width - padSide * 2, h: Math.round(footerHeight * 0.92) }, FONT_FAMILY)}</svg>`;
   };
 
