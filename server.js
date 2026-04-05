@@ -18,12 +18,12 @@ dayjs.extend(advancedFormat);
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Кеш для оптимизации нагрузки на Vercel (очищается каждый час)
+// Кеш для оптимизации нагрузки на Vercel
 const pngCache = new Map();
 const cacheSweepTimer = setInterval(() => pngCache.clear(), 1000 * 60 * 60);
 if (cacheSweepTimer.unref) cacheSweepTimer.unref();
 
-const RENDER_VERSION = 'v6-stable-core';
+const RENDER_VERSION = 'v7-multi-city';
 
 const FONTS = {
   inter: { name: 'Inter (Стандарт)', file: 'inter.ttf', family: 'Inter' },
@@ -94,11 +94,17 @@ const THEMES = {
   moon_silver: { name: 'Лунное серебро', bg: '#0d1118', panel: '#161c27', text: '#f0f4fb', muted: '#99a4b7', accent: '#c8d2e5', accent2: '#eef3ff', weekend: '#b7c3da' },
   anomaly_zone: { name: 'Зов аномалии', bg: '#1a1c17', panel: '#24261f', text: '#d9d4a8', muted: '#8a8d7a', accent: '#ff7300', accent2: '#e59e5c', weekend: '#ff5050' },
   eden_light: { name: 'Свет Эдема', bg: '#fdfbf7', panel: '#f0ece1', text: '#1b2419', muted: '#72826d', accent: '#d4af37', accent2: '#e6cc80', weekend: '#c74b4b' },
-  syndicate: { name: 'Синдикат (Неон)', bg: '#050505', panel: '#121212', text: '#e0e0e0', muted: '#666666', accent: '#fcee0a', accent2: '#00f0ff', weekend: '#ff003c' }
+  syndicate: { name: 'Синдикат (Неон)', bg: '#050505', panel: '#121212', text: '#e0e0e0', muted: '#666666', accent: '#fcee0a', accent2: '#00f0ff', weekend: '#ff003c' },
+  // НОВЫЕ ТЕМЫ (5+)
+  neon_cyberpunk: { name: 'Неоновый киберпанк', bg: '#090014', panel: '#150030', text: '#00ffcc', muted: '#b300ff', accent: '#ff0055', accent2: '#00ffcc', weekend: '#ff0055' },
+  pastel_dream: { name: 'Пастельная мечта', bg: '#fdfbfb', panel: '#f4eff4', text: '#5c5c70', muted: '#a5a5b4', accent: '#ffb3ba', accent2: '#baffc9', weekend: '#ffdfba' },
+  vintage_sepia: { name: 'Винтажная сепия', bg: '#e4d5b7', panel: '#d5c4a1', text: '#5c4b37', muted: '#8f7d65', accent: '#a83c09', accent2: '#3f5721', weekend: '#c44512' },
+  arctic_aurora: { name: 'Арктическая аврора', bg: '#021019', panel: '#0a1d2e', text: '#e0f7fa', muted: '#6f9da8', accent: '#00e5ff', accent2: '#1de9b6', weekend: '#00b0ff' },
+  lava_flow: { name: 'Магмовый поток', bg: '#170404', panel: '#2a0808', text: '#ffddcc', muted: '#a85b4b', accent: '#ff3300', accent2: '#ff8800', weekend: '#ff0033' }
 };
 
 const BG_STYLES = {
-  mesh_organic: 'Органический Mesh (Новое)',
+  mesh_organic: 'Органический Mesh',
   liquid_glass: 'Жидкое стекло (Glass)',
   paper: 'Пергамент / Бумага (Paper)',
   stone: 'Камень / Бетон (Stone)',
@@ -113,7 +119,13 @@ const BG_STYLES = {
   diagonal: 'Динамика лучей (Diagonal)',
   orbit: 'Орбиты (Orbit)',
   velvet: 'Бархат (Velvet)',
-  static_noise: 'Шум эфира (Noise)'
+  static_noise: 'Шум эфира (Noise)',
+  // НОВЫЕ ТЕКСТУРЫ (5+)
+  hexagons: 'Гексагональная сетка',
+  circuit_board: 'Кибер-линии (Circuit)',
+  starlight: 'Звездная пыль (Starlight)',
+  watercolor: 'Акварельные пятна (Watercolor)',
+  matrix: 'Цифровой дождь (Matrix)'
 };
 
 function num(v, fallback) { const n = Number(v); return Number.isFinite(n) ? n : fallback; }
@@ -156,7 +168,7 @@ function fetchJsonViaHttps(url, timeoutMs = 6000, customHeaders = {}) {
     const req = https.get(url, {
       headers: {
         'accept': 'application/json',
-        'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36',
+        'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
         ...customHeaders
       },
       timeout: timeoutMs,
@@ -165,11 +177,8 @@ function fetchJsonViaHttps(url, timeoutMs = 6000, customHeaders = {}) {
       res.setEncoding('utf8');
       res.on('data', chunk => data += chunk);
       res.on('end', () => {
-        if (res.statusCode < 200 || res.statusCode >= 300) {
-          return reject(new Error(`HTTP ${res.statusCode}`));
-        }
-        try { resolve(JSON.parse(data)); }
-        catch (e) { reject(new Error(`INVALID_JSON: ${e.message}`)); }
+        if (res.statusCode < 200 || res.statusCode >= 300) return reject(new Error(`HTTP ${res.statusCode}`));
+        try { resolve(JSON.parse(data)); } catch (e) { reject(new Error(`INVALID_JSON`)); }
       });
     });
     req.on('timeout', () => req.destroy(new Error('TIMEOUT')));
@@ -178,11 +187,7 @@ function fetchJsonViaHttps(url, timeoutMs = 6000, customHeaders = {}) {
 }
 
 async function fetchJsonWithTimeout(url, timeoutMs = 6000) {
-  const headers = {
-    'accept': 'application/json',
-    'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36'
-  };
-  
+  const headers = { 'accept': 'application/json', 'user-agent': 'Mozilla/5.0' };
   if (typeof fetch === 'function') {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
@@ -214,7 +219,6 @@ async function geocodeCity(normalizedCity, lang = 'ru') {
     `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(normalizedCity)}&count=5&language=${lang}&format=json`,
     `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(normalizedCity)}&count=5&language=en&format=json`
   ];
-
   for (const url of queries) {
     try {
       const geoData = await fetchJsonWithTimeout(url, 4000);
@@ -230,22 +234,18 @@ async function geocodeCity(normalizedCity, lang = 'ru') {
 async function fetchWeatherByCity(city, lang = 'ru') {
   const normalizedCity = String(city || '').split(',')[0].trim();
   if (!normalizedCity) return null;
-
   const cacheKey = normalizedCity.toLowerCase();
   const cached = weatherCache.get(cacheKey);
   if (cached && cached.expiresAt > Date.now()) return cached.data;
 
   try {
     const place = await geocodeCity(normalizedCity, lang);
-    if (!place || typeof place.latitude !== 'number' || typeof place.longitude !== 'number') return null;
+    if (!place || typeof place.latitude !== 'number') return null;
 
     const tz = place.timezone || 'auto';
-    // ИСПРАВЛЕНИЕ: Убрал параметр time из current=..., который крашил запрос на сервере
     const url = `https://api.open-meteo.com/v1/forecast?latitude=${place.latitude}&longitude=${place.longitude}&current=temperature_2m,weather_code,is_day&hourly=temperature_2m,weather_code&daily=temperature_2m_max,temperature_2m_min,weather_code&forecast_days=2&timezone=${encodeURIComponent(tz)}`;
     
-    // ИСПРАВЛЕНИЕ: Увеличен таймаут для преодоления задержек Vercel Cold Start
     const data = await fetchJsonWithTimeout(url, 6000);
-    
     if (!data?.current || data.current.temperature_2m == null) return null;
 
     const code = Number(data.current.weather_code || 0);
@@ -256,21 +256,12 @@ async function fetchWeatherByCity(city, lang = 'ru') {
 
     if (times.length && temps.length) {
       let nowIso = String(data.current.time || '');
-      // ИСПРАВЛЕНИЕ: Обрезаем минуты, чтобы всегда точно попадать в час (формат "YYYY-MM-DDTHH:00")
-      if (nowIso.length >= 13) {
-         nowIso = nowIso.slice(0, 13) + ':00';
-      }
-      
+      if (nowIso.length >= 13) nowIso = nowIso.slice(0, 13) + ':00';
       let nowIndex = times.findIndex(t => t >= nowIso);
       if (nowIndex < 0) nowIndex = 0;
-
       for (let idx = nowIndex; idx < times.length && hourly.length < 6; idx += 3) {
         const t = Math.round(Number(temps[idx] || 0));
-        hourly.push({
-          hour: `${String(times[idx]).slice(11, 13)}:00`,
-          temp: t > 0 ? `+${t}` : `${t}`,
-          icon: weatherIconFromCode(Number(codes[idx] ?? code))
-        });
+        hourly.push({ hour: `${String(times[idx]).slice(11, 13)}:00`, temp: t > 0 ? `+${t}` : `${t}`, icon: weatherIconFromCode(Number(codes[idx] ?? code)) });
       }
     }
 
@@ -287,12 +278,9 @@ async function fetchWeatherByCity(city, lang = 'ru') {
       dailyMin: typeof dailyMin === 'number' && Number.isFinite(dailyMin) ? (dailyMin > 0 ? `+${dailyMin}` : `${dailyMin}`) : null,
       hourly
     };
-
     weatherCache.set(cacheKey, { data: result, expiresAt: Date.now() + 1000 * 60 * 30 });
     return result;
-  } catch (e) {
-    return null;
-  }
+  } catch (e) { return null; }
 }
 
 function getConfig(query) {
@@ -311,6 +299,9 @@ function getConfig(query) {
   let rawBg = query.bg_style || 'mesh_organic';
   if(rawBg === 'glass') rawBg = 'liquid_glass'; if(rawBg === 'mesh') rawBg = 'carbon'; if(rawBg === 'grain_light') rawBg = 'paper';
 
+  const rawCities = [query.city1, query.city2, query.city3].filter(c => c && c.trim() !== '').map(c => c.split(',')[0].trim());
+  const legacyCity = query.city ? query.city.split(',')[0].trim() : '';
+
   return {
     model: query.model || 'iphone_15',
     width: query.model === 'custom' ? clamp(num(query.width, preset.width), 320, 4000) : preset.width,
@@ -324,7 +315,8 @@ function getConfig(query) {
     lang: query.lang === 'en' ? 'en' : 'ru',
     timezone: clamp(num(query.timezone, 3), -12, 14),
     footer: query.footer || 'year_summary', note: (query.note || '').slice(0, 120),
-    events: query.events || '', city: String(query.city || '').split(',')[0].trim(),
+    events: query.events || '', 
+    citiesToFetch: rawCities.length > 0 ? rawCities : (legacyCity ? [legacyCity] : []),
     eventColor: query.c_event || themeObj.accent,
     showWeekdays: String(query.show_weekdays || '1') === '1', accentToday: String(query.accent_today || '1') === '1',
     showProgressRing: String(query.show_progress_ring || '1') === '1', showWeekNumbers: String(query.show_week_numbers || '0') === '1',
@@ -364,36 +356,15 @@ function getSeasonLabel(lang, monthIndex) {
 }
 
 function weatherSummary(cfg, lang) {
-  if (!cfg.weatherData) return lang === 'ru' ? 'Погода не выбрана' : 'No city weather';
-  const city = String(cfg.weatherData.cityLabel || '').trim();
-  const hiLo = cfg.weatherData.dailyMax && cfg.weatherData.dailyMin ? ` · ${cfg.weatherData.dailyMax} / ${cfg.weatherData.dailyMin}` : '';
-  return `${cfg.weatherData.icon} ${cfg.weatherData.temp}°C${hiLo}${city ? ` · ${city}` : ''}`.trim();
-}
-
-function getSafeInsets(cfg, width, height) {
-  const baseSide = Math.round(width * 0.035);
-  if (!cfg.lockscreenSafe) return { top: baseSide, bottom: baseSide, side: baseSide };
-  return { top: Math.round(height * 0.24 + width * 0.04), bottom: Math.round(height * 0.105 + width * 0.03), side: baseSide };
+  const wd = (cfg.weatherDataList && cfg.weatherDataList[0]) ? cfg.weatherDataList[0] : null;
+  if (!wd) return lang === 'ru' ? 'Погода не выбрана' : 'No city weather';
+  const city = String(wd.cityLabel || '').trim();
+  const hiLo = wd.dailyMax && wd.dailyMin ? ` · ${wd.dailyMax} / ${wd.dailyMin}` : '';
+  return `${wd.icon} ${wd.temp}°C${hiLo}${city ? ` · ${city}` : ''}`.trim();
 }
 
 function renderStaticNoiseBackground(theme, width, height) {
-  return `<defs>
-    <filter id="noise_heavy" x="0" y="0" width="100%" height="100%">
-      <feTurbulence type="fractalNoise" baseFrequency="0.75" numOctaves="3" stitchTiles="stitch"/>
-      <feColorMatrix type="matrix" values="1 0 0 0 0, 0 1 0 0 0, 0 0 1 0 0, 0 0 0 0.06 0" />
-    </filter>
-    <linearGradient id="sn_base" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0%" stop-color="${theme.bg}"/>
-      <stop offset="100%" stop-color="${alpha(theme.panel, 0.95)}"/>
-    </linearGradient>
-    <radialGradient id="sn_glow" cx="50%" cy="0%" r="80%">
-      <stop offset="0%" stop-color="${alpha(theme.accent, 0.15)}"/>
-      <stop offset="100%" stop-color="${alpha(theme.bg, 0)}"/>
-    </radialGradient>
-  </defs>
-  <rect width="100%" height="100%" fill="url(#sn_base)"/>
-  <rect width="100%" height="100%" fill="url(#sn_glow)"/>
-  <rect width="100%" height="100%" filter="url(#noise_heavy)"/>`;
+  return `<defs><filter id="noise_heavy" x="0" y="0" width="100%" height="100%"><feTurbulence type="fractalNoise" baseFrequency="0.75" numOctaves="3" stitchTiles="stitch"/><feColorMatrix type="matrix" values="1 0 0 0 0, 0 1 0 0 0, 0 0 1 0 0, 0 0 0 0.06 0" /></filter><linearGradient id="sn_base" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="${theme.bg}"/><stop offset="100%" stop-color="${alpha(theme.panel, 0.95)}"/></linearGradient><radialGradient id="sn_glow" cx="50%" cy="0%" r="80%"><stop offset="0%" stop-color="${alpha(theme.accent, 0.15)}"/><stop offset="100%" stop-color="${alpha(theme.bg, 0)}"/></radialGradient></defs><rect width="100%" height="100%" fill="url(#sn_base)"/><rect width="100%" height="100%" fill="url(#sn_glow)"/><rect width="100%" height="100%" filter="url(#noise_heavy)"/>`;
 }
 
 function renderBackground(cfg, theme, width, height) {
@@ -420,12 +391,19 @@ function renderBackground(cfg, theme, width, height) {
   if (bgType === 'velvet') return `<defs>${proceduralFilters}<linearGradient id="v_grad" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="${theme.bg}"/><stop offset="40%" stop-color="${alpha(theme.panel, 0.9)}"/><stop offset="60%" stop-color="${theme.bg}"/><stop offset="85%" stop-color="${alpha(theme.panel, 0.9)}"/><stop offset="100%" stop-color="${theme.bg}"/></linearGradient></defs><rect width="100%" height="100%" fill="url(#v_grad)"/><rect width="100%" height="100%" filter="url(#tex_paper)" opacity="0.6"/>`;
   if (bgType === 'noir') return `<defs><radialGradient id="vignette" cx="50%" cy="40%" r="95%"><stop offset="15%" stop-color="${alpha(theme.accent, 0.1)}"/><stop offset="50%" stop-color="${theme.bg}"/><stop offset="100%" stop-color="#000000"/></radialGradient></defs><rect width="100%" height="100%" fill="url(#vignette)"/>`;
   if (bgType === 'static_noise') return renderStaticNoiseBackground(theme, width, height);
+  
+  // НОВЫЕ ФОНЫ
+  if (bgType === 'hexagons') return `<defs><pattern id="hex" width="40" height="69.28" patternUnits="userSpaceOnUse"><path d="M20 0 L40 11.55 L40 34.64 L20 46.19 L0 34.64 L0 11.55 Z" fill="none" stroke="${alpha(theme.accent, 0.12)}" stroke-width="1.5"/><path d="M20 69.28 L40 57.74 L40 34.64 L20 46.19 L0 34.64 L0 57.74 Z" fill="none" stroke="${alpha(theme.accent2, 0.08)}" stroke-width="1"/></pattern><radialGradient id="h_glow" cx="50%" cy="30%" r="80%"><stop offset="0%" stop-color="${alpha(theme.accent, 0.15)}"/><stop offset="100%" stop-color="${alpha(theme.bg, 0)}"/></radialGradient></defs><rect width="100%" height="100%" fill="${theme.bg}"/><rect width="100%" height="100%" fill="url(#hex)"/><rect width="100%" height="100%" fill="url(#h_glow)"/>`;
+  if (bgType === 'circuit_board') return `<defs><pattern id="circuit" width="80" height="80" patternUnits="userSpaceOnUse"><path d="M0,40 H30 L40,30 V0 M40,50 V80 M50,40 L60,30 H80 M15,15 A2,2 0 1,1 15,15.01 M65,65 A2,2 0 1,1 65,65.01" fill="none" stroke="${alpha(theme.accent2, 0.2)}" stroke-width="1.5"/></pattern><radialGradient id="cb_glow" cx="80%" cy="20%" r="70%"><stop offset="0%" stop-color="${alpha(theme.accent, 0.2)}"/><stop offset="100%" stop-color="${alpha(theme.bg, 0)}"/></radialGradient></defs><rect width="100%" height="100%" fill="${theme.bg}"/><rect width="100%" height="100%" fill="url(#circuit)"/><rect width="100%" height="100%" fill="url(#cb_glow)"/>`;
+  if (bgType === 'starlight') return `<defs><pattern id="stars" width="120" height="120" patternUnits="userSpaceOnUse"><circle cx="20" cy="20" r="1.5" fill="${theme.text}" opacity="0.8"/><circle cx="90" cy="80" r="1" fill="${theme.accent}" opacity="0.6"/><circle cx="60" cy="40" r="2" fill="${theme.accent2}" opacity="0.4"/><circle cx="30" cy="100" r="0.8" fill="${theme.text}" opacity="0.5"/><circle cx="100" cy="30" r="1.2" fill="${theme.text}" opacity="0.7"/></pattern><radialGradient id="star_nebula" cx="40%" cy="20%" r="80%"><stop offset="0%" stop-color="${alpha(theme.accent, 0.25)}"/><stop offset="100%" stop-color="${alpha(theme.bg, 0)}"/></radialGradient></defs><rect width="100%" height="100%" fill="${theme.bg}"/><rect width="100%" height="100%" fill="url(#star_nebula)"/><rect width="100%" height="100%" fill="url(#stars)"/>`;
+  if (bgType === 'watercolor') return `<defs><radialGradient id="wc1" cx="20%" cy="30%" r="60%"><stop offset="0%" stop-color="${theme.accent}" stop-opacity="0.35"/><stop offset="100%" stop-color="${theme.bg}" stop-opacity="0"/></radialGradient><radialGradient id="wc2" cx="80%" cy="70%" r="60%"><stop offset="0%" stop-color="${theme.accent2}" stop-opacity="0.3"/><stop offset="100%" stop-color="${theme.bg}" stop-opacity="0"/></radialGradient><radialGradient id="wc3" cx="50%" cy="100%" r="70%"><stop offset="0%" stop-color="${theme.panel}" stop-opacity="0.8"/><stop offset="100%" stop-color="${theme.bg}" stop-opacity="0"/></radialGradient></defs><rect width="100%" height="100%" fill="${theme.bg}"/><rect width="100%" height="100%" fill="url(#wc1)"/><rect width="100%" height="100%" fill="url(#wc2)"/><rect width="100%" height="100%" fill="url(#wc3)"/>`;
+  if (bgType === 'matrix') return `<defs><pattern id="mtrx" width="60" height="120" patternUnits="userSpaceOnUse"><rect x="15" y="0" width="3" height="50" fill="${alpha(theme.accent, 0.3)}"/><rect x="45" y="60" width="2" height="40" fill="${alpha(theme.accent2, 0.25)}"/></pattern><linearGradient id="m_fade" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="${theme.bg}"/><stop offset="50%" stop-color="${alpha(theme.bg, 0.4)}"/><stop offset="100%" stop-color="${theme.bg}"/></linearGradient></defs><rect width="100%" height="100%" fill="${theme.bg}"/><rect width="100%" height="100%" fill="url(#mtrx)"/><rect width="100%" height="100%" fill="url(#m_fade)"/>`;
 
   return `<defs><radialGradient id="au1" cx="20%" cy="-10%" r="85%"><stop offset="0%" stop-color="${alpha(theme.accent, 0.35)}"/><stop offset="100%" stop-color="${alpha(theme.bg, 0)}"/></radialGradient><radialGradient id="au2" cx="110%" cy="40%" r="75%"><stop offset="0%" stop-color="${alpha(theme.accent2, 0.25)}"/><stop offset="100%" stop-color="${alpha(theme.bg, 0)}"/></radialGradient><radialGradient id="au3" cx="-10%" cy="110%" r="80%"><stop offset="0%" stop-color="${alpha(theme.panel, 0.9)}"/><stop offset="100%" stop-color="${alpha(theme.bg, 0)}"/></radialGradient></defs><rect width="100%" height="100%" fill="${theme.bg}"/><rect width="100%" height="100%" fill="url(#au1)"/><rect width="100%" height="100%" fill="url(#au2)"/><rect width="100%" height="100%" fill="url(#au3)"/>`;
 }
 
-function isListLayout(layout) { return ['list_1x12','list_1x12_compact'].includes(layout); }
-function isCompactGridLayout(layout) { return ['grid_3x4_compact','grid_2x6','grid_6x2','single_month_focus'].includes(layout); }
+function isListLayout(layout) { return ['list_1x12','list_1x12_compact','list_2x6'].includes(layout); }
+function isCompactGridLayout(layout) { return ['grid_3x4_compact','grid_2x6','grid_6x2','single_month_focus','grid_4x3_compact'].includes(layout); }
 
 function getLayoutMetrics(cfg, width, height, contentH, sidePadding) {
   const presets = {
@@ -437,9 +415,15 @@ function getLayoutMetrics(cfg, width, height, contentH, sidePadding) {
     list_1x12: { cols: 1, rows: 12, gap: Math.round(width * 0.012), mode: 'list' },
     list_1x12_compact: { cols: 1, rows: 12, gap: Math.round(width * 0.010), mode: 'list_compact' },
     single_month_focus: { cols: 1, rows: 1, gap: Math.round(width * 0.016), mode: 'focus' },
+    // НОВЫЕ АРХИТЕКТУРЫ
+    current_month_only: { cols: 1, rows: 1, gap: 0, mode: 'focus_single' },
+    grid_4x3_compact: { cols: 4, rows: 3, gap: Math.round(width * 0.012), mode: 'grid_compact' },
+    list_2x6: { cols: 2, rows: 6, gap: Math.round(width * 0.016), mode: 'list' },
+    grid_3x4_spaced: { cols: 3, rows: 4, gap: Math.round(width * 0.04), mode: 'grid' },
+    current_plus_next_two: { cols: 1, rows: 3, gap: Math.round(width * 0.025), mode: 'current_three' }
   };
   const spec = presets[cfg.monthLayout] || presets.grid_3x4;
-  if (spec.mode === 'focus') return { ...spec };
+  if (spec.mode === 'focus' || spec.mode === 'focus_single') return { ...spec };
   const monthW = (width - sidePadding * 2 - spec.gap * (spec.cols - 1)) / spec.cols;
   const monthH = (contentH - spec.gap * (spec.rows - 1)) / spec.rows;
   return { ...spec, monthW, monthH, skinnyCols: spec.mode === 'grid_6x2' ? 6 : undefined };
@@ -454,7 +438,7 @@ function pickMonthLabel(labels, monthIndex, width, mode = 'grid') {
   const medium = (labels.monthsMedium || labels.months)[monthIndex];
   const short = (labels.monthsShort || labels.months)[monthIndex];
   if (mode === 'list') return width < 420 ? short : width < 560 ? medium : full;
-  if (mode === 'focus') return width < 520 ? medium : full;
+  if (mode === 'focus' || mode === 'focus_single') return width < 520 ? medium : full;
   if (mode === 'skinny') return short;
   if (width < 180) return short;
   if (width < 240) return medium;
@@ -464,10 +448,10 @@ function pickMonthLabel(labels, monthIndex, width, mode = 'grid') {
 function getMonthCardOptions(cfg, w, h) {
   const sixWide = cfg.monthLayout === 'grid_6x2';
   const tiny = sixWide || w < 180;
-  const compactGrid = cfg.monthLayout === 'grid_3x4_compact';
+  const compactGrid = cfg.monthLayout === 'grid_3x4_compact' || cfg.monthLayout === 'grid_4x3_compact';
   return {
     tiny, skinny: sixWide && w < 190, sixWide, compactGrid,
-    showWeekdays: cfg.showWeekdays && (!tiny || cfg.monthLayout === 'single_month_focus'),
+    showWeekdays: cfg.showWeekdays && (!tiny || cfg.monthLayout === 'single_month_focus' || cfg.monthLayout === 'current_month_only'),
     showBadge: cfg.monthBadges && !sixWide && w >= 185,
     padRatio: sixWide ? 0.028 : tiny ? 0.04 : compactGrid ? 0.045 : 0.055,
     radius: Math.max(14, Math.round(Math.min(w, h) * (sixWide ? 0.09 : 0.1))),
@@ -489,12 +473,27 @@ function renderHeader(cfg, theme, labels, now, stats, width, padding, topY, FONT
   const badgeSvg = cfg.showHeaderMeta === false ? '' : `<rect x="${padding}" y="${yearY - yearSize * 0.15}" width="${chipWidth}" height="${chipHeight}" rx="${chipHeight / 2}" fill="${alpha(theme.panel, 0.92)}" stroke="${alpha(theme.accent2, 0.22)}"/><text x="${padding + chipWidth / 2}" y="${yearY - yearSize * 0.15 + chipHeight * 0.66}" text-anchor="middle" fill="${theme.accent2}" font-size="${Math.round(width * 0.024)}" font-family="${FONT}" font-weight="700">${labels.week} ${now.week()}</text>`;
 
   let rightSvg = '';
-  if (cfg.weatherData) {
+  
+  // РЕНДЕР ПОГОДЫ ДЛЯ МНОЖЕСТВА ГОРОДОВ В ШАПКЕ
+  if (cfg.weatherDataList && cfg.weatherDataList.length > 0) {
     const weatherX = width - padding;
-    const weatherY = yearY - yearSize * 0.42;
-    const cityLabel = String(cfg.weatherData.cityLabel || '').split(',')[0].trim();
-    rightSvg += `<text x="${weatherX}" y="${weatherY}" text-anchor="end" fill="${theme.text}" font-size="${subtitleSize * 1.42}" font-family="${FONT}" font-weight="700">${cfg.weatherData.temp}°C ${cfg.weatherData.icon}</text>`;
-    if (cityLabel) rightSvg += `<text x="${weatherX}" y="${weatherY + subtitleSize * 1.15}" text-anchor="end" fill="${theme.muted}" font-size="${Math.round(subtitleSize * 0.9)}" font-family="${FONT}" font-weight="600">${escapeXml(cityLabel.length > 18 ? cityLabel.slice(0,17)+'…' : cityLabel)}</text>`;
+    const isMulti = cfg.weatherDataList.length > 1;
+    // Уменьшаем шрифт, если городов несколько, чтобы уместилось и не налезло на календарь
+    const wTitleSize = Math.round(subtitleSize * (isMulti ? 1.05 : 1.42));
+    const wSubSize = Math.round(subtitleSize * (isMulti ? 0.75 : 0.9));
+    const stepY = isMulti ? Math.round(wTitleSize * 1.8) : Math.round(subtitleSize * 2);
+    
+    let currentY = yearY - yearSize * 0.45;
+    if (isMulti) currentY -= wTitleSize * 0.3; // Смещаем чуть выше, если несколько строк
+
+    cfg.weatherDataList.slice(0, 3).forEach((wd) => {
+      const cityLabel = String(wd.cityLabel || '').split(',')[0].trim();
+      rightSvg += `<text x="${weatherX}" y="${currentY}" text-anchor="end" fill="${theme.text}" font-size="${wTitleSize}" font-family="${FONT}" font-weight="700">${wd.temp}°C ${wd.icon}</text>`;
+      if (cityLabel) {
+        rightSvg += `<text x="${weatherX}" y="${currentY + wTitleSize * 0.95}" text-anchor="end" fill="${theme.muted}" font-size="${wSubSize}" font-family="${FONT}" font-weight="600">${escapeXml(cityLabel.length > 18 ? cityLabel.slice(0,17)+'…' : cityLabel)}</text>`;
+      }
+      currentY += stepY;
+    });
   } else if (cfg.showProgressRing && stats) {
     const ringCx = width - padding - ringR;
     const ringCy = yearY - yearSize * 0.25;
@@ -521,14 +520,14 @@ function renderMonthGrid({ monthIndex, year, x, y, w, h, cfg, theme, labels, now
   const isCurrent = now.month() === monthIndex;
   const dense = isCompactGridLayout(cfg.monthLayout);
   const opts = getMonthCardOptions(cfg, w, h);
-  const focusHero = cfg.monthLayout === 'single_month_focus';
+  const focusHero = cfg.monthLayout === 'single_month_focus' || cfg.monthLayout === 'current_month_only';
   const emphasis = cfg.focusCurrentMonth && isCurrent ? (dense ? 1.03 : 1.06) : 1;
   const radius = opts.radius;
   const pad = Math.round(w * (focusHero ? 0.04 : opts.padRatio));
   const cellW = (w - pad * 2) / (7 + (cfg.showWeekNumbers && !opts.tiny && !focusHero ? 1 : 0));
   const titleLabel = pickMonthLabel(labels, monthIndex, w, focusHero ? 'focus' : (opts.skinny ? 'skinny' : 'grid'));
   const titleSize = Math.min(Math.round(h * (focusHero ? 0.11 : opts.sixWide ? 0.09 : dense ? 0.10 : 0.12)), Math.round(w * (focusHero ? 0.13 : opts.sixWide ? 0.11 : dense ? 0.14 : 0.16))) * emphasis;
-  const topBand = opts.showWeekdays ? h * (focusHero ? 0.40 : opts.sixWide ? 0.20 : dense ? 0.245 : 0.285) : h * (focusHero ? 0.18 : opts.sixWide ? 0.14 : dense ? 0.17 : 0.20);
+  const topBand = opts.showWeekdays ? h * (focusHero ? 0.35 : opts.sixWide ? 0.20 : dense ? 0.245 : 0.285) : h * (focusHero ? 0.18 : opts.sixWide ? 0.14 : dense ? 0.17 : 0.20);
   const cellHReal = Math.max(8, (h - topBand - h * (focusHero ? 0.06 : opts.sixWide ? 0.06 : dense ? 0.06 : 0.075)) / 6);
   const numSize = Math.min(Math.round(cellW * (focusHero ? 0.5 : opts.sixWide ? 0.34 : dense ? 0.52 : 0.6)), Math.round(cellHReal * (focusHero ? 0.56 : opts.sixWide ? 0.42 : dense ? 0.54 : 0.6))) * emphasis;
   const cardFill = isCurrent ? alpha(theme.panel, focusHero ? 0.98 : 0.98) : alpha(theme.panel, opts.sixWide ? 0.78 : 0.65);
@@ -573,12 +572,23 @@ function renderMonthGrid({ monthIndex, year, x, y, w, h, cfg, theme, labels, now
 
     if (isCustomEvent) out += `<rect x="${cx - cellW * 0.35}" y="${cy - cellHReal * 0.6}" width="${cellW * 0.7}" height="${cellHReal * 0.75}" rx="${Math.min(cellW, cellHReal) * 0.2}" fill="${alpha(cfg.eventColor, 0.18)}" stroke="${alpha(cfg.eventColor, 0.34)}"/>`;
 
-    if (isToday) {
-      const rect = `<rect x="${cx - cellW * 0.45}" y="${cy - cellHReal * 0.6}" width="${cellW * 0.9}" height="${cellHReal * 0.8}" rx="${Math.min(cellW, cellHReal) * 0.2}"`;
-      out += cfg.style === 'outline' ? `${rect} fill="none" stroke="${theme.accent}" stroke-width="${Math.max(1.2, w * 0.004)}"/>` : `${rect} fill="${alpha(theme.accent, cfg.style === 'numbers' ? 0.24 : 0.18)}" stroke="${alpha(theme.accent2, 0.34)}"/>`;
-    }
-
-    if (cfg.style === 'dots' || cfg.style === 'micro') {
+    // --- СТИЛИ ИНДИКАЦИИ ДНЕЙ ---
+    if (cfg.style === 'slash') {
+      if (isToday) out += `<line x1="${cx - cellW * 0.35}" y1="${cy + cellHReal * 0.15}" x2="${cx + cellW * 0.35}" y2="${cy - cellHReal * 0.5}" stroke="${alpha(theme.accent, 0.8)}" stroke-width="${Math.max(2, w * 0.005)}"/>`;
+      out += `<text x="${cx}" y="${cy}" text-anchor="middle" fill="${textColor}" font-size="${numSize}" font-family="${FONT}" font-weight="${isToday ? 800 : 600}">${day}</text>`;
+    } else if (cfg.style === 'underline') {
+      if (isToday) out += `<line x1="${cx - cellW * 0.3}" y1="${cy + cellHReal * 0.15}" x2="${cx + cellW * 0.3}" y2="${cy + cellHReal * 0.15}" stroke="${theme.accent}" stroke-width="${Math.max(2, w * 0.006)}" stroke-linecap="round"/>`;
+      out += `<text x="${cx}" y="${cy}" text-anchor="middle" fill="${textColor}" font-size="${numSize}" font-family="${FONT}" font-weight="${isToday ? 800 : 600}">${day}</text>`;
+    } else if (cfg.style === 'bracket') {
+      if (isToday) out += `<text x="${cx}" y="${cy}" text-anchor="middle" fill="${alpha(theme.accent, 0.6)}" font-size="${Math.round(numSize*1.1)}" font-family="${FONT}" font-weight="800">[   ]</text>`;
+      out += `<text x="${cx}" y="${cy}" text-anchor="middle" fill="${textColor}" font-size="${numSize}" font-family="${FONT}" font-weight="${isToday ? 800 : 600}">${day}</text>`;
+    } else if (cfg.style === 'block') {
+      if (isToday || isRestDay(date)) out += `<rect x="${cx - cellW * 0.4}" y="${cy - cellHReal * 0.55}" width="${cellW * 0.8}" height="${cellHReal * 0.7}" rx="${cellHReal * 0.15}" fill="${isToday ? theme.accent : alpha(theme.weekend, 0.15)}"/>`;
+      out += `<text x="${cx}" y="${cy}" text-anchor="middle" fill="${isToday ? theme.bg : textColor}" font-size="${numSize}" font-family="${FONT}" font-weight="${isToday ? 800 : 600}">${day}</text>`;
+    } else if (cfg.style === 'marker') {
+      if (isToday) out += `<rect x="${cx - cellW * 0.45}" y="${cy - cellHReal * 0.2}" width="${cellW * 0.9}" height="${cellHReal * 0.35}" fill="${alpha(theme.accent, 0.5)}"/>`;
+      out += `<text x="${cx}" y="${cy}" text-anchor="middle" fill="${textColor}" font-size="${numSize}" font-family="${FONT}" font-weight="${isToday ? 800 : 600}">${day}</text>`;
+    } else if (cfg.style === 'dots' || cfg.style === 'micro') {
       out += `<circle cx="${cx}" cy="${cy - cellHReal * (cfg.style === 'dots' ? 0.2 : 0.18)}" r="${Math.max(1.1, Math.min(cellW, cellHReal) * (cfg.style === 'dots' ? (isToday ? 0.18 : 0.12) : 0.08))}" fill="${isToday ? theme.accent : isRestDay(date) ? theme.weekend : alpha(theme.text, 0.24)}"/><text x="${cx}" y="${cy + cellHReal * (cfg.style === 'dots' ? 0.3 : 0.24)}" text-anchor="middle" fill="${textColor}" font-size="${Math.round(numSize * (cfg.style === 'dots' ? 0.82 : 0.72))}" font-family="${FONT}" font-weight="700">${day}</text>`;
     } else if (cfg.style === 'focus') {
       out += `<text x="${cx}" y="${cy}" text-anchor="middle" fill="${textColor}" font-size="${Math.round(numSize * (isToday ? 1.05 : 1))}" font-family="${FONT}" font-weight="${isToday || isCurrent ? 800 : 600}">${day}</text>`;
@@ -590,6 +600,11 @@ function renderMonthGrid({ monthIndex, year, x, y, w, h, cfg, theme, labels, now
       if (isToday) out += `<circle cx="${cx}" cy="${cy - cellHReal * 0.2}" r="${Math.min(cellW, cellHReal) * 0.28}" fill="none" stroke="${theme.accent}" stroke-width="${Math.max(1.2, w * 0.004)}"/>`;
       out += `<text x="${cx}" y="${cy}" text-anchor="middle" fill="${textColor}" font-size="${numSize}" font-family="${FONT}" font-weight="${isToday ? 800 : 600}">${day}</text>`;
     } else {
+      // numbers, outline, and default
+      if (isToday) {
+        const rect = `<rect x="${cx - cellW * 0.45}" y="${cy - cellHReal * 0.6}" width="${cellW * 0.9}" height="${cellHReal * 0.8}" rx="${Math.min(cellW, cellHReal) * 0.2}"`;
+        out += cfg.style === 'outline' ? `${rect} fill="none" stroke="${theme.accent}" stroke-width="${Math.max(1.2, w * 0.004)}"/>` : `${rect} fill="${alpha(theme.accent, cfg.style === 'numbers' ? 0.24 : 0.18)}" stroke="${alpha(theme.accent2, 0.34)}"/>`;
+      }
       out += `<text x="${cx}" y="${cy}" text-anchor="middle" fill="${textColor}" font-size="${numSize}" font-family="${FONT}" font-weight="${isToday ? 800 : 600}">${day}</text>`;
     }
   }
@@ -602,7 +617,7 @@ function renderMonthGrid({ monthIndex, year, x, y, w, h, cfg, theme, labels, now
 function renderMonthListRow({ monthIndex, year, x, y, w, h, cfg, theme, labels, now, FONT }) {
   const first = dayjs(`${year}-${String(monthIndex + 1).padStart(2, '0')}-01`);
   const isCurrent = now.month() === monthIndex;
-  const compact = cfg.monthLayout === 'list_1x12_compact';
+  const compact = cfg.monthLayout === 'list_1x12_compact' || cfg.monthLayout === 'list_2x6';
   const radius = Math.max(14, Math.round(h * (compact ? 0.24 : 0.28)));
   const padX = Math.round(w * (compact ? 0.024 : 0.03));
   const nameW = Math.round(w * (compact ? 0.16 : 0.18));
@@ -663,13 +678,29 @@ function renderFooter(cfg, theme, labels, now, stats, width, footerBox, FONT) {
     return base + `<text x="${x + pad}" y="${y + h * 0.32}" fill="${theme.accent2}" font-size="${subSize}" font-family="${FONT}" font-weight="700">${cfg.lang === 'ru' ? 'Ближайший ориентир' : 'Next marker'}</text><text x="${x + pad}" y="${y + h * 0.62}" fill="${theme.text}" font-size="${textSize}" font-family="${FONT}" font-weight="800">${escapeXml(n ? n.title : (cfg.lang === 'ru' ? 'Событий нет' : 'No events'))}</text><text x="${x + pad}" y="${y + h * 0.82}" fill="${theme.muted}" font-size="${subSize}" font-family="${FONT}" font-weight="600">${escapeXml(n ? (cfg.lang === 'ru' ? `Через ${n.diff} дн. · ${n.label}` : `In ${n.diff} days · ${n.label}`) : weatherSummary(cfg, cfg.lang))}</text>`;
   }
   if (cfg.footer === 'seasonal_focus') return base + `<text x="${x + pad}" y="${y + h * 0.26}" fill="${theme.accent2}" font-size="${subSize}" font-family="${FONT}" font-weight="700">${cfg.lang === 'ru' ? 'Сезонный режим' : 'Season mode'}</text><text x="${x + pad}" y="${y + h * 0.5}" fill="${theme.text}" font-size="${textSize}" font-family="${FONT}" font-weight="800">${escapeXml(cfg.lang === 'ru' ? `${getSeasonLabel('ru', now.month())} · ${stats.daysLeft} дн. до конца года` : `${getSeasonLabel('en', now.month())} · ${stats.daysLeft} days left`)}</text><text x="${x + pad}" y="${y + h * 0.72}" fill="${theme.muted}" font-size="${subSize}" font-family="${FONT}" font-weight="600">${escapeXml((cfg.note || (cfg.lang === 'ru' ? 'Спокойный темп, ясный фокус.' : 'Calm pace, clear focus.')).slice(0, 48))}</text>`;
-  if (cfg.footer === 'weather_strip') return base + `<text x="${x + pad}" y="${y + h * 0.34}" fill="${theme.accent2}" font-size="${subSize}" font-family="${FONT}" font-weight="700">${cfg.lang === 'ru' ? 'Сводка среды' : 'Ambient summary'}</text><text x="${x + pad}" y="${y + h * 0.62}" fill="${theme.text}" font-size="${textSize}" font-family="${FONT}" font-weight="800">${escapeXml(weatherSummary(cfg, cfg.lang))}</text><text x="${x + pad}" y="${y + h * 0.82}" fill="${theme.muted}" font-size="${subSize}" font-family="${FONT}" font-weight="600">UTC${cfg.timezone >= 0 ? '+'+cfg.timezone : cfg.timezone} · ${labels.months[now.month()]} ${now.date()}</text>`;
+  
+  if (cfg.footer === 'weather_strip') {
+    if (cfg.weatherDataList && cfg.weatherDataList.length > 1) {
+      // Много городов - распределяем горизонтально
+      const numCities = cfg.weatherDataList.length;
+      const slotW = (w - pad * 2) / numCities;
+      let out = base + `<text x="${x + pad}" y="${y + h * 0.28}" fill="${theme.accent2}" font-size="${subSize}" font-family="${FONT}" font-weight="700">${cfg.lang === 'ru' ? 'Сводка среды' : 'Ambient summary'}</text>`;
+      cfg.weatherDataList.forEach((wd, i) => {
+        const cx = x + pad + i * slotW;
+        out += `<text x="${cx}" y="${y + h * 0.65}" fill="${theme.text}" font-size="${textSize*0.8}" font-family="${FONT}" font-weight="800">${escapeXml(wd.temp + '°C ' + wd.icon)}</text>`;
+        out += `<text x="${cx}" y="${y + h * 0.88}" fill="${theme.muted}" font-size="${subSize*0.85}" font-family="${FONT}" font-weight="600">${escapeXml(wd.cityLabel.length > 12 ? wd.cityLabel.slice(0,11)+'…' : wd.cityLabel)}</text>`;
+      });
+      return out;
+    }
+    return base + `<text x="${x + pad}" y="${y + h * 0.34}" fill="${theme.accent2}" font-size="${subSize}" font-family="${FONT}" font-weight="700">${cfg.lang === 'ru' ? 'Сводка среды' : 'Ambient summary'}</text><text x="${x + pad}" y="${y + h * 0.62}" fill="${theme.text}" font-size="${textSize}" font-family="${FONT}" font-weight="800">${escapeXml(weatherSummary(cfg, cfg.lang))}</text><text x="${x + pad}" y="${y + h * 0.82}" fill="${theme.muted}" font-size="${subSize}" font-family="${FONT}" font-weight="600">UTC${cfg.timezone >= 0 ? '+'+cfg.timezone : cfg.timezone} · ${labels.months[now.month()]} ${now.date()}</text>`;
+  }
   
   if (cfg.footer === 'day_weather') {
-    const items = cfg.weatherData?.hourly || [];
+    const wd = (cfg.weatherDataList && cfg.weatherDataList[0]) ? cfg.weatherDataList[0] : null;
+    const items = wd?.hourly || [];
     if (!items.length) return base + `<text x="${x + pad}" y="${y + h * 0.34}" fill="${theme.accent2}" font-size="${subSize}" font-family="${FONT}" font-weight="700">${cfg.lang === 'ru' ? 'Прогноз на день' : 'Day forecast'}</text><text x="${x + pad}" y="${y + h * 0.66}" fill="${theme.text}" font-size="${textSize * 0.8}" font-family="${FONT}" font-weight="700">${cfg.lang === 'ru' ? 'Добавь город для погоды' : 'Add city for forecast'}</text>`;
     let chips = `<text x="${x + pad}" y="${y + h * 0.23}" fill="${theme.accent2}" font-size="${subSize}" font-family="${FONT}" font-weight="700">${cfg.lang === 'ru' ? 'Прогноз на день' : 'Day forecast'}</text>`;
-    if (cfg.weatherData.cityLabel) chips += `<text x="${x + pad}" y="${y + h * 0.40}" fill="${theme.muted}" font-size="${subSize * 0.88}" font-family="${FONT}" font-weight="600">${escapeXml(cfg.weatherData.cityLabel)}</text>`;
+    if (wd.cityLabel) chips += `<text x="${x + pad}" y="${y + h * 0.40}" fill="${theme.muted}" font-size="${subSize * 0.88}" font-family="${FONT}" font-weight="600">${escapeXml(wd.cityLabel)}</text>`;
     const chipW = (w - pad * 2 - Math.max(10, Math.round(w * 0.012)) * (items.length - 1)) / items.length;
     items.forEach((item, i) => {
       const cx = x + pad + i * (chipW + Math.max(10, Math.round(w * 0.012)));
@@ -721,6 +752,19 @@ function renderSvg(cfg) {
     Array.from({ length: 12 }, (_, i) => i).filter(i => i !== now.month()).forEach((monthIndex, i) => {
       monthsSvg += renderMonthGrid({ monthIndex, year: now.year(), x: sidePadding + (i % 4) * (miniW + heroGap), y: miniTop + Math.floor(i / 4) * (miniH + heroGap), w: miniW, h: miniH, cfg: { ...cfg, monthLayout: 'grid_3x4_compact', focusCurrentMonth: false, monthBadges: false, showWeekNumbers: false, showWeekdays: true }, theme, labels, now, FONT: FONT_FAMILY });
     });
+  } else if (layout.mode === 'focus_single') {
+    // НОВЫЙ РЕЖИМ: ТОЛЬКО ТЕКУЩИЙ МЕСЯЦ
+    const heroH = Math.round(contentH * 0.65); 
+    const heroY = contentTop + (contentH - heroH) / 2;
+    monthsSvg += renderMonthGrid({ monthIndex: now.month(), year: now.year(), x: sidePadding, y: heroY, w: width - sidePadding * 2, h: heroH, cfg: { ...cfg, monthLayout: 'current_month_only', monthBadges: true, showWeekNumbers: true }, theme, labels, now, FONT: FONT_FAMILY });
+  } else if (layout.mode === 'current_three') {
+    // НОВЫЙ РЕЖИМ: ТЕКУЩИЙ И СЛЕДУЮЩИЕ ДВА
+    for (let i = 0; i < 3; i++) {
+        const targetDate = now.add(i, 'month');
+        const h = layout.monthH;
+        const y = contentTop + i * (h + layout.gap);
+        monthsSvg += renderMonthGrid({ monthIndex: targetDate.month(), year: targetDate.year(), x: sidePadding, y, w: layout.monthW, h, cfg: { ...cfg, monthLayout: 'single_month_focus', monthBadges: true }, theme, labels, now, FONT: FONT_FAMILY });
+    }
   } else {
     for (let i = 0; i < 12; i++) {
       const x = sidePadding + (i % layout.cols) * (layout.monthW + layout.gap), y = contentTop + Math.floor(i / layout.cols) * (layout.monthH + layout.gap);
@@ -729,9 +773,10 @@ function renderSvg(cfg) {
   }
 
   let quarterLines = '';
-  if (cfg.quarterDividers && layout.mode !== 'focus') {
-    if (isListLayout(cfg.monthLayout)) { [3, 6, 9].forEach((idx) => quarterLines += `<line x1="${sidePadding}" y1="${contentTop + idx * layout.monthH + (idx - 0.5) * layout.gap}" x2="${width - sidePadding}" y2="${contentTop + idx * layout.monthH + (idx - 0.5) * layout.gap}" stroke="${alpha(theme.accent2, 0.12)}" stroke-dasharray="12 12" />`); } 
+  if (cfg.quarterDividers && layout.mode !== 'focus' && layout.mode !== 'focus_single' && layout.mode !== 'current_three') {
+    if (isListLayout(cfg.monthLayout) && layout.rows === 12) { [3, 6, 9].forEach((idx) => quarterLines += `<line x1="${sidePadding}" y1="${contentTop + idx * layout.monthH + (idx - 0.5) * layout.gap}" x2="${width - sidePadding}" y2="${contentTop + idx * layout.monthH + (idx - 0.5) * layout.gap}" stroke="${alpha(theme.accent2, 0.12)}" stroke-dasharray="12 12" />`); } 
     else if (layout.cols === 3 && layout.rows === 4) { for (let r = 1; r < layout.rows; r++) quarterLines += `<line x1="${sidePadding}" y1="${contentTop + r * layout.monthH + (r - 0.5) * layout.gap}" x2="${width - sidePadding}" y2="${contentTop + r * layout.monthH + (r - 0.5) * layout.gap}" stroke="${alpha(theme.accent2, 0.12)}" stroke-dasharray="10 12" />`; } 
+    else if (layout.cols === 4 && layout.rows === 3) { for (let r = 1; r < layout.rows; r++) quarterLines += `<line x1="${sidePadding}" y1="${contentTop + r * layout.monthH + (r - 0.5) * layout.gap}" x2="${width - sidePadding}" y2="${contentTop + r * layout.monthH + (r - 0.5) * layout.gap}" stroke="${alpha(theme.accent2, 0.12)}" stroke-dasharray="10 12" />`; }
     else if (layout.cols === 2 && layout.rows === 6) { [2, 4].forEach((r) => quarterLines += `<line x1="${sidePadding}" y1="${contentTop + r * layout.monthH + (r - 0.5) * layout.gap}" x2="${width - sidePadding}" y2="${contentTop + r * layout.monthH + (r - 0.5) * layout.gap}" stroke="${alpha(theme.accent2, 0.10)}" stroke-dasharray="10 12" />`); } 
     else if (layout.cols === 6 && layout.rows === 2) {
       quarterLines += `<line x1="${sidePadding}" y1="${contentTop + layout.monthH + layout.gap / 2}" x2="${width - sidePadding}" y2="${contentTop + layout.monthH + layout.gap / 2}" stroke="${alpha(theme.accent2, 0.10)}" stroke-dasharray="10 12" />`;
@@ -758,13 +803,17 @@ app.get('/api/weather', async (req, res) => {
 
 app.get('/wallpaper.svg', async (req, res) => {
   const cfg = getConfig(req.query);
-  cfg.weatherData = await fetchWeatherByCity(cfg.city, cfg.lang);
+  cfg.weatherDataList = [];
+  for (const city of cfg.citiesToFetch) {
+    const data = await fetchWeatherByCity(city, cfg.lang);
+    if (data) cfg.weatherDataList.push(data);
+  }
   res.type('image/svg+xml').send(renderSvg(cfg));
 });
 
 app.get('/wallpaper.png', async (req, res) => {
   try {
-    const cacheKey = `${RENDER_VERSION}:${req.originalUrl}:${dayjs().format('YYYY-MM-DD')}`;
+    const cacheKey = `${RENDER_VERSION}:${req.originalUrl}:${dayjs().format('YYYY-MM-DD-HH')}`;
     if (pngCache.has(cacheKey)) {
       res.setHeader('Content-Type', 'image/png');
       res.setHeader('X-Cache', 'HIT');
@@ -772,7 +821,11 @@ app.get('/wallpaper.png', async (req, res) => {
     }
 
     const cfg = getConfig(req.query);
-    cfg.weatherData = await fetchWeatherByCity(cfg.city, cfg.lang);
+    cfg.weatherDataList = [];
+    for (const city of cfg.citiesToFetch) {
+        const data = await fetchWeatherByCity(city, cfg.lang);
+        if (data) cfg.weatherDataList.push(data);
+    }
     const svg = renderSvg(cfg);
 
     let png;
