@@ -270,9 +270,17 @@ app.get('/wallpaper.png', async (req, res) => {
     
     // Запрашиваем погоду по городу (если указан)
     cfg.weatherData = await fetchWeatherByCity(cfg.city);
+    
+    // ИСПРАВЛЕНИЕ: Флаг, чтобы engine.js знал, что мы рендерим для сервера
+    cfg.isServer = true;
 
     const fontKey = req.query.font || 'inter';
-    const svg = Engine.renderSvg(cfg, dayjs, buildFontPayload(fontKey));
+    let svg = Engine.renderSvg(cfg, dayjs, buildFontPayload(fontKey));
+    
+    // ИСПРАВЛЕНИЕ: Убираем строгие веса шрифтов, чтобы Resvg не удалял текст, 
+    // если у загруженного .ttf файла нет нужного жирного начертания.
+    svg = svg.replace(/font-weight="\d+"/g, 'font-weight="normal"');
+
     const fontBuffers = buildResvgFontBuffers(fontKey);
     const defaultFontFamily = getResvgDefaultFontFamily(fontKey);
 
@@ -280,7 +288,7 @@ app.get('/wallpaper.png', async (req, res) => {
       fitTo: { mode: 'original' },
       font: {
         fontBuffers,
-        loadSystemFonts: false,
+        loadSystemFonts: true, // ИСПРАВЛЕНИЕ: Включаем загрузку системных шрифтов как подстраховку
         defaultFontFamily,
       }
     });
