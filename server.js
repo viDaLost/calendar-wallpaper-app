@@ -710,24 +710,27 @@ function renderFooter(cfg, theme, labels, now, stats, width, footerBox, FONT) {
 
     } else {
       // Режим 2: Мульти-города (Круглые циферблаты в стиле Apple Watch)
-      let out = base + `<text x="${x + pad}" y="${y + h * 0.20}" fill="${theme.accent2}" font-size="${subSize}" font-family="${FONT}" font-weight="700">${cfg.lang === 'ru' ? 'Прогноз на день' : 'Day forecast'}</text>`;
+      let out = base + `<text x="${x + pad}" y="${y + h * 0.18}" fill="${theme.accent2}" font-size="${subSize}" font-family="${FONT}" font-weight="700">${cfg.lang === 'ru' ? 'Прогноз на день' : 'Day forecast'}</text>`;
       const numCities = cfg.weatherDataList.length;
       const slotW = (w - pad * 2) / numCities;
 
       cfg.weatherDataList.forEach((wd, i) => {
           const cx = x + pad + i * slotW + slotW / 2;
-          const cy = y + h * 0.58;
-          const R = Math.min(slotW * 0.28, h * 0.30); // Радиус циферблата
+          const cy = y + h * 0.62;
+          const R = Math.min(slotW * 0.35, h * 0.28); // Строго контролируемый радиус
 
           // Название города
           const cityLabel = wd.cityLabel.split(',')[0].trim();
-          out += `<text x="${cx}" y="${y + h * 0.30}" text-anchor="middle" fill="${theme.muted}" font-size="${subSize * 0.8}" font-family="${FONT}" font-weight="700">${escapeXml(cityLabel.length > 15 ? cityLabel.slice(0, 14) + '…' : cityLabel)}</text>`;
+          out += `<text x="${cx}" y="${cy - R - h * 0.05}" text-anchor="middle" fill="${theme.muted}" font-size="${subSize * 0.8}" font-family="${FONT}" font-weight="700">${escapeXml(cityLabel.length > 13 ? cityLabel.slice(0, 12) + '…' : cityLabel)}</text>`;
 
           // Контур часов
-          out += `<circle cx="${cx}" cy="${cy}" r="${R}" fill="none" stroke="${alpha(theme.accent2, 0.25)}" stroke-dasharray="4 6" stroke-width="2"/>`;
+          out += `<circle cx="${cx}" cy="${cy}" r="${R}" fill="${alpha(theme.panel, 0.4)}" stroke="${alpha(theme.accent2, 0.2)}" stroke-width="1.5"/>`;
+          // Внутренняя зона
+          out += `<circle cx="${cx}" cy="${cy}" r="${R * 0.75}" fill="${alpha(theme.bg, 0.5)}" stroke="${alpha(theme.accent, 0.1)}" stroke-width="1"/>`;
 
-          // Текущая температура в центре
-          out += `<text x="${cx}" y="${cy + textSize * 0.25}" text-anchor="middle" fill="${theme.text}" font-size="${textSize * 0.85}" font-family="${FONT}" font-weight="800">${wd.temp}°</text>`;
+          // Текущая погода в центре: иконка сверху, температура крупно снизу
+          out += `<text x="${cx}" y="${cy - R * 0.12}" text-anchor="middle" fill="${theme.text}" font-size="${R * 0.45}" font-family="${FONT}">${wd.icon}</text>`;
+          out += `<text x="${cx}" y="${cy + R * 0.45}" text-anchor="middle" fill="${theme.text}" font-size="${R * 0.65}" font-family="${FONT}" font-weight="800">${wd.temp}°</text>`;
 
           const hourly = wd.hourly || [];
           const positions = [
@@ -742,17 +745,18 @@ function renderFooter(cfg, theme, labels, now, stats, width, footerBox, FONT) {
               const px = cx + pos.dx;
               const py = cy + pos.dy;
 
-              const pillW = Math.min(slotW * 0.32, w * 0.08);
-              const pillH = h * 0.28;
+              // Компактные скругленные плашки на орбите
+              const badgeS = R * 0.68;
 
-              // Плашка-подложка для четкости
-              out += `<rect x="${px - pillW/2}" y="${py - pillH/2}" width="${pillW}" height="${pillH}" rx="${pillH*0.25}" fill="${alpha(theme.panel, 0.95)}" stroke="${alpha(theme.accent, 0.15)}"/>`;
-              // Время
-              out += `<text x="${px}" y="${py - pillH*0.18}" text-anchor="middle" fill="${theme.muted}" font-size="${subSize * 0.55}" font-family="${FONT}" font-weight="600">${pos.pt.hour}</text>`;
-              // Иконка
-              out += `<text x="${px}" y="${py + pillH*0.15}" text-anchor="middle" fill="${theme.text}" font-size="${subSize * 0.85}" font-family="${FONT}" font-weight="700">${pos.pt.icon}</text>`;
-              // Температура
-              out += `<text x="${px}" y="${py + pillH*0.42}" text-anchor="middle" fill="${theme.text}" font-size="${textSize * 0.50}" font-family="${FONT}" font-weight="800">${pos.pt.temp}°</text>`;
+              out += `<rect x="${px - badgeS/2}" y="${py - badgeS/2}" width="${badgeS}" height="${badgeS}" rx="${badgeS * 0.35}" fill="${alpha(theme.panel, 0.95)}" stroke="${alpha(theme.accent, 0.3)}" stroke-width="1"/>`;
+
+              // Час (сокращаем "15:00" до "15", чтобы убрать визуальный шум)
+              const shortHour = pos.pt.hour.split(':')[0];
+              out += `<text x="${px}" y="${py - badgeS * 0.05}" text-anchor="middle" fill="${theme.muted}" font-size="${badgeS * 0.38}" font-family="${FONT}" font-weight="700">${shortHour}</text>`;
+
+              // Иконка и температура: ставим их в один ряд снизу с выравниванием от центра (отталкиваем друг от друга)
+              out += `<text x="${px - badgeS * 0.05}" y="${py + badgeS * 0.35}" text-anchor="end" fill="${theme.text}" font-size="${badgeS * 0.32}" font-family="${FONT}">${pos.pt.icon}</text>`;
+              out += `<text x="${px + badgeS * 0.05}" y="${py + badgeS * 0.35}" text-anchor="start" fill="${theme.text}" font-size="${badgeS * 0.30}" font-family="${FONT}" font-weight="800">${pos.pt.temp}°</text>`;
           });
       });
       return out;
