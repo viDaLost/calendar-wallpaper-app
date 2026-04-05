@@ -144,8 +144,8 @@ function parseEvents(eventsStr) {
 
 function getLabels(lang) {
   return lang === 'ru'
-    ? { months: ['Январь','Февраль','Март','Апрель','Май','Июнь','Июль','Август','Сентябрь','Октябрь','Ноябрь','Декабрь'], monthsShort: ['Янв','Фев','Мар','Апр','Май','Июн','Июл','Авг','Сен','Окт','Ноя','Дек'], monthsMedium: ['Январь','Февраль','Март','Апрель','Май','Июнь','Июль','Август','Сент.','Октябрь','Ноябрь','Декабрь'], weekdays: ['Пн','Вт','Ср','Чт','Пт','Сб','Вс'], weekdaysFull: ['понедельник','вторник','среда','четверг','пятница','суббота','воскресенье'], today: 'Сегодня', year: 'год', daysLeft: 'дн. осталось', passed: 'пройдено', week: 'Неделя' }
-    : { months: ['January','February','March','April','May','June','July','August','September','October','November','December'], monthsShort: ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'], monthsMedium: ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sept','Oct','Nov','Dec'], weekdays: ['Mo','Tu','We','Th','Fr','Sa','Su'], weekdaysFull: ['monday','tuesday','wednesday','thursday','friday','saturday','sunday'], today: 'Today', year: 'year', daysLeft: 'days left', passed: 'passed', week: 'Week' };
+    ? { months: ['Январь','Февраль','Март','Апрель','Май','Июнь','Июль','Август','Сентябрь','Октябрь','Ноябрь','Декабрь'], monthsGenitive: ['января','февраля','марта','апреля','мая','июня','июля','августа','сентября','октября','ноября','декабря'], monthsShort: ['Янв','Фев','Мар','Апр','Май','Июн','Июл','Авг','Сен','Окт','Ноя','Дек'], monthsMedium: ['Январь','Февраль','Март','Апрель','Май','Июнь','Июль','Август','Сент.','Октябрь','Ноябрь','Декабрь'], weekdays: ['Пн','Вт','Ср','Чт','Пт','Сб','Вс'], weekdaysFull: ['понедельник','вторник','среда','четверг','пятница','суббота','воскресенье'], today: 'Сегодня', year: 'год', daysLeft: 'дн. осталось', passed: 'пройдено', week: 'Неделя' }
+    : { months: ['January','February','March','April','May','June','July','August','September','October','November','December'], monthsGenitive: ['January','February','March','April','May','June','July','August','September','October','November','December'], monthsShort: ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'], monthsMedium: ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sept','Oct','Nov','Dec'], weekdays: ['Mo','Tu','We','Th','Fr','Sa','Su'], weekdaysFull: ['monday','tuesday','wednesday','thursday','friday','saturday','sunday'], today: 'Today', year: 'year', daysLeft: 'days left', passed: 'passed', week: 'Week' };
 }
 
 // === ЛОГИКА ПОГОДЫ ===
@@ -251,8 +251,8 @@ async function fetchWeatherByCity(city) {
 
     if (times.length && temps.length) {
       const nowIso = String(data.current.time || '');
-      let nowIndex = times.findIndex(t => t === nowIso);
-      if (nowIndex < 0) nowIndex = Math.max(0, times.findIndex(t => String(t) > nowIso));
+      // ИСПРАВЛЕНИЕ: Ищем время, которое больше или равно текущему (а не точное совпадение)
+      let nowIndex = times.findIndex(t => t >= nowIso);
       if (nowIndex < 0) nowIndex = 0;
 
       for (let idx = nowIndex; idx < times.length && hourly.length < 6; idx += 3) {
@@ -340,7 +340,7 @@ function findNearestEvent(cfg, now, labels) {
     let candidate = now.year(now.year()).month(m - 1).date(d).hour(12).minute(0).second(0);
     if (candidate.isBefore(now, 'day')) candidate = candidate.add(1, 'year');
     const diff = candidate.startOf('day').diff(now.startOf('day'), 'day');
-    if (!best || diff < best.diff) best = { title, diff, date: candidate, label: `${d} ${labels.months[m - 1].toLowerCase?.() || labels.months[m - 1]}` };
+    if (!best || diff < best.diff) best = { title, diff, date: candidate, label: `${d} ${labels.monthsGenitive[m - 1]}` };
   }
   return best;
 }
@@ -363,58 +363,30 @@ function weatherSummary(cfg, lang) {
 
 function getSafeInsets(cfg, width, height) {
   const baseSide = Math.round(width * 0.035);
+  // Здесь мы оставляем базу, но фактический рендер будет ниже (изменено в renderSvg)
   if (!cfg.lockscreenSafe) return { top: baseSide, bottom: baseSide, side: baseSide };
-  return { top: Math.round(height * 0.165 + width * 0.04), bottom: Math.round(height * 0.105 + width * 0.03), side: baseSide };
+  return { top: Math.round(height * 0.24 + width * 0.04), bottom: Math.round(height * 0.105 + width * 0.03), side: baseSide };
 }
 
 function renderStaticNoiseBackground(theme, width, height) {
-  const stripeW = Math.max(5, Math.round(width * 0.005));
-  const lineGap = Math.max(9, Math.round(width * 0.012));
-  const speck = Math.max(2, Math.round(width * 0.0018));
-  const cols = 18;
-  const rows = 26;
-  let speckles = '';
-  for (let y = 0; y < rows; y++) {
-    for (let x = 0; x < cols; x++) {
-      const px = ((x + 0.5) / cols) * width + (((y % 2) * 0.37 - 0.18) * speck * 3);
-      const py = ((y + 0.5) / rows) * height + (((x % 3) * 0.23 - 0.25) * speck * 3);
-      const opacity = 0.018 + ((x * 7 + y * 11) % 6) * 0.006;
-      speckles += `<circle cx="${px.toFixed(2)}" cy="${py.toFixed(2)}" r="${(speck * (0.45 + ((x + y) % 3) * 0.28)).toFixed(2)}" fill="#ffffff" opacity="${opacity.toFixed(3)}"/>`;
-    }
-  }
+  // ИСПРАВЛЕНИЕ: Используем фильтр feTurbulence, который 100% корректно рендерится в resvg
   return `<defs>
-    <linearGradient id="sn_base" x1="0" y1="0" x2="1" y2="1">
+    <filter id="noise_heavy" x="0" y="0" width="100%" height="100%">
+      <feTurbulence type="fractalNoise" baseFrequency="0.75" numOctaves="3" stitchTiles="stitch"/>
+      <feColorMatrix type="matrix" values="1 0 0 0 0, 0 1 0 0 0, 0 0 1 0 0, 0 0 0 0.06 0" />
+    </filter>
+    <linearGradient id="sn_base" x1="0" y1="0" x2="0" y2="1">
       <stop offset="0%" stop-color="${theme.bg}"/>
-      <stop offset="48%" stop-color="${alpha(theme.panel, 0.96)}"/>
-      <stop offset="100%" stop-color="${theme.bg}"/>
+      <stop offset="100%" stop-color="${alpha(theme.panel, 0.95)}"/>
     </linearGradient>
-    <radialGradient id="sn_glow1" cx="30%" cy="16%" r="72%">
-      <stop offset="0%" stop-color="${alpha(theme.accent2, 0.05)}"/>
-      <stop offset="100%" stop-color="${alpha(theme.accent2, 0)}"/>
+    <radialGradient id="sn_glow" cx="50%" cy="0%" r="80%">
+      <stop offset="0%" stop-color="${alpha(theme.accent, 0.15)}"/>
+      <stop offset="100%" stop-color="${alpha(theme.bg, 0)}"/>
     </radialGradient>
-    <radialGradient id="sn_glow2" cx="78%" cy="62%" r="70%">
-      <stop offset="0%" stop-color="${alpha('#ffffff', 0.035)}"/>
-      <stop offset="100%" stop-color="${alpha('#ffffff', 0)}"/>
-    </radialGradient>
-    <pattern id="sn_lines" width="${lineGap}" height="${lineGap}" patternUnits="userSpaceOnUse">
-      <rect width="${lineGap}" height="${lineGap}" fill="transparent"/>
-      <rect x="0" y="0" width="${stripeW}" height="${lineGap}" fill="#ffffff" opacity="0.028"/>
-      <rect x="${Math.max(1, Math.round(lineGap * 0.55))}" y="0" width="${Math.max(1, Math.round(stripeW * 0.45))}" height="${lineGap}" fill="#000000" opacity="0.018"/>
-    </pattern>
-    <linearGradient id="sn_diag" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0%" stop-color="${alpha('#ffffff', 0.02)}"/>
-      <stop offset="50%" stop-color="${alpha('#ffffff', 0)}"/>
-      <stop offset="100%" stop-color="${alpha('#000000', 0.10)}"/>
-    </linearGradient>
   </defs>
   <rect width="100%" height="100%" fill="url(#sn_base)"/>
-  <rect width="100%" height="100%" fill="url(#sn_glow1)"/>
-  <rect width="100%" height="100%" fill="url(#sn_glow2)"/>
-  <rect width="100%" height="100%" fill="url(#sn_lines)"/>
-  <polygon points="0,${height * 0.08} ${width * 0.72},0 ${width},${height * 0.6} ${width * 0.38},${height}" fill="${alpha('#ffffff', 0.035)}"/>
-  <polygon points="0,${height * 0.66} ${width * 0.36},${height} 0,${height}" fill="${alpha('#000000', 0.08)}"/>
-  <rect width="100%" height="100%" fill="url(#sn_diag)"/>
-  <g>${speckles}</g>`;
+  <rect width="100%" height="100%" fill="url(#sn_glow)"/>
+  <rect width="100%" height="100%" filter="url(#noise_heavy)"/>`;
 }
 
 function renderBackground(cfg, theme, width, height) {
@@ -502,7 +474,9 @@ function renderHeader(cfg, theme, labels, now, stats, width, padding, topY, FONT
   const ringR = Math.round(width * 0.035);
   const yearSize = Math.round(width * 0.075);
   const yearY = topY + yearSize;
-  const dateText = cfg.lang === 'ru' ? `${labels.today}: ${now.date()} ${labels.months[now.month()].toLowerCase()}` : `${labels.today}: ${labels.months[now.month()]} ${now.date()}`;
+  
+  // ИСПРАВЛЕНИЕ: Используем родительный падеж для дат (Например: "5 апреля" вместо "5 апрель")
+  const dateText = cfg.lang === 'ru' ? `${labels.today}: ${now.date()} ${labels.monthsGenitive[now.month()]}` : `${labels.today}: ${labels.months[now.month()]} ${now.date()}`;
   
   const yearSvg = `<text x="${width / 2}" y="${yearY}" text-anchor="middle" fill="${theme.text}" font-size="${yearSize}" font-family="${FONT}" font-weight="900" letter-spacing="-0.03em">${now.year()}</text>`;
   const todaySvg = cfg.showHeaderMeta === false ? '' : `<text x="${padding}" y="${yearY - yearSize * 0.45}" fill="${theme.muted}" font-size="${subtitleSize}" font-family="${FONT}">${escapeXml(dateText)}</text>`;
@@ -676,7 +650,7 @@ function renderFooter(cfg, theme, labels, now, stats, width, footerBox, FONT) {
     return base + (cfg.note || arr[now.year() % 2]).split('\n').map((line, i) => `<text x="${x + w / 2}" y="${y + h * 0.38 + i * subSize * 1.45}" text-anchor="middle" fill="${theme.text}" font-size="${subSize}" font-family="${FONT}" font-weight="700">${escapeXml(line)}</text>`).join('');
   }
   if (cfg.footer === 'progress_bar') return base + `<text x="${x + pad}" y="${y + h * 0.32}" fill="${theme.text}" font-size="${textSize}" font-family="${FONT}" font-weight="800">${stats.percentPassed}% ${labels.passed}</text><rect x="${x + pad}" y="${y + h * 0.55}" width="${w - pad * 2}" height="${h * 0.12}" rx="${h * 0.06}" fill="${alpha(theme.bg, 0.7)}" /><rect x="${x + pad}" y="${y + h * 0.55}" width="${(w - pad * 2) * stats.percentPassed / 100}" height="${h * 0.12}" rx="${h * 0.06}" fill="${theme.accent}" />`;
-  if (cfg.footer === 'today_card') return base + `<text x="${x + pad}" y="${y + h * 0.34}" fill="${theme.accent2}" font-size="${subSize}" font-family="${FONT}" font-weight="700">${labels.today}</text><text x="${x + pad}" y="${y + h * 0.68}" fill="${theme.text}" font-size="${textSize}" font-family="${FONT}" font-weight="800">${escapeXml(cfg.lang === 'ru' ? `${labels.weekdaysFull[(now.day() + 6) % 7]}, ${now.date()} ${labels.months[now.month()].toLowerCase()}` : `${labels.weekdaysFull[(now.day() + 6) % 7]}, ${labels.months[now.month()]} ${now.date()}`)}</text>`;
+  if (cfg.footer === 'today_card') return base + `<text x="${x + pad}" y="${y + h * 0.34}" fill="${theme.accent2}" font-size="${subSize}" font-family="${FONT}" font-weight="700">${labels.today}</text><text x="${x + pad}" y="${y + h * 0.68}" fill="${theme.text}" font-size="${textSize}" font-family="${FONT}" font-weight="800">${escapeXml(cfg.lang === 'ru' ? `${labels.weekdaysFull[(now.day() + 6) % 7]}, ${now.date()} ${labels.monthsGenitive[now.month()]}` : `${labels.weekdaysFull[(now.day() + 6) % 7]}, ${labels.months[now.month()]} ${now.date()}`)}</text>`;
   
   if (cfg.footer === 'next_event') {
     const n = findNearestEvent(cfg, now, labels);
@@ -712,14 +686,15 @@ function renderSvg(cfg) {
 
   const { width, height } = cfg;
   const sidePadding = Math.round(width * 0.035);
-  const innerTop = cfg.lockscreenSafe ? Math.round(height * 0.165 + width * 0.04) : sidePadding;
+  
+  // ИСПРАВЛЕНИЕ: Увеличен отступ (innerTop) до 0.24, чтобы календарь ушел ниже часов iOS
+  const innerTop = cfg.lockscreenSafe ? Math.round(height * 0.24 + width * 0.04) : sidePadding;
   const innerBottom = height - (cfg.lockscreenSafe ? Math.round(height * 0.105 + width * 0.03) : sidePadding);
 
   const selectedFontDef = FONTS[cfg.font] || FONTS.inter;
   const b64Font = fontCache[cfg.font];
   const FONT_FAMILY = getSafeFontStack(selectedFontDef.family, cfg.pngSafeFont);
   
-  // ВАЖНО: font-weight: 100 900; решает проблему исчезающих шрифтов в Resvg
   const fontDefs = b64Font ? `<style>@font-face { font-family: '${selectedFontDef.family}'; src: url(data:font/truetype;base64,${b64Font}) format('truetype'); font-weight: 100 900; font-style: normal; } text, tspan { font-family: ${FONT_FAMILY}; text-rendering: geometricPrecision; }</style>` : '';
 
   const listLike = isListLayout(cfg.monthLayout);
@@ -768,7 +743,6 @@ app.get('/api/options', (req, res) => {
   res.json({ presets: PHONE_PRESETS, themes: THEMES, bgStyles: BG_STYLES, fonts: Object.fromEntries(Object.entries(FONTS).map(([k, v]) => [k, v.name])) });
 });
 
-// Добавлено получение погоды для браузерного Live-превью!
 app.get('/api/weather', async (req, res) => {
   const city = String(req.query.city || '').trim();
   if (!city) return res.status(400).json({ ok: false, error: 'CITY_REQUIRED' });
@@ -798,7 +772,6 @@ app.get('/wallpaper.png', async (req, res) => {
 
     let png;
     try {
-      // Надежный рендер из v5
       const fontFiles = Object.values(FONTS)
         .map((f) => path.join(fontsDir, f.file))
         .filter((f) => fs.existsSync(f));
@@ -816,7 +789,6 @@ app.get('/wallpaper.png', async (req, res) => {
       });
       png = Buffer.from(resvg.render().asPng());
     } catch (renderErr) {
-      // Страховочный вариант из v5
       png = await sharp(Buffer.from(svg), { density: 300 }).png().toBuffer();
     }
 
