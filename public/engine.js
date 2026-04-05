@@ -55,7 +55,7 @@
       if(splitIdx > -1) {
         let date = part.slice(0, splitIdx).trim();
         const name = part.slice(splitIdx + 1).trim();
-        const dateParts = date.split('-'); // Приводим к формату ММ-ДД
+        const dateParts = date.split('-'); 
         if (dateParts.length === 2) {
            date = `${dateParts[0].padStart(2, '0')}-${dateParts[1].padStart(2, '0')}`;
         }
@@ -123,12 +123,6 @@
     return `${cfg.weatherData.icon} ${cfg.weatherData.temp}°C${hiLo}${city ? ` · ${city}` : ''}`.trim();
   }
 
-  function getHourlyWeatherLine(cfg) {
-    if (!cfg.weatherData || !Array.isArray(cfg.weatherData.hourly) || !cfg.weatherData.hourly.length) return '';
-    return cfg.weatherData.hourly.slice(0, 6).map(item => `${item.hour} ${item.temp}° ${item.icon}`).join('   ');
-  }
-
-
   function renderBackground(cfg, theme, width, height) {
     const bgType = cfg.bgStyle;
     const proceduralFilters = `
@@ -156,7 +150,6 @@
     if (bgType === 'noir') return `<defs><radialGradient id="vignette" cx="50%" cy="40%" r="95%"><stop offset="15%" stop-color="${alpha(theme.accent, 0.1)}"/><stop offset="50%" stop-color="${theme.bg}"/><stop offset="100%" stop-color="#000000"/></radialGradient></defs><rect width="100%" height="100%" fill="url(#vignette)"/>`;
     if (bgType === 'static_noise') return `<defs>${proceduralFilters}<radialGradient id="sn_vignette" cx="50%" cy="50%" r="85%"><stop offset="0%" stop-color="${theme.bg}"/><stop offset="100%" stop-color="${alpha(theme.panel, 0.95)}"/></radialGradient></defs><rect width="100%" height="100%" fill="url(#sn_vignette)"/><rect width="100%" height="100%" filter="url(#tex_static)" opacity="1.2"/>`;
 
-    // Default: Aurora
     return `<defs><radialGradient id="au1" cx="20%" cy="-10%" r="85%"><stop offset="0%" stop-color="${alpha(theme.accent, 0.35)}"/><stop offset="100%" stop-color="${alpha(theme.bg, 0)}"/></radialGradient><radialGradient id="au2" cx="110%" cy="40%" r="75%"><stop offset="0%" stop-color="${alpha(theme.accent2, 0.25)}"/><stop offset="100%" stop-color="${alpha(theme.bg, 0)}"/></radialGradient><radialGradient id="au3" cx="-10%" cy="110%" r="80%"><stop offset="0%" stop-color="${alpha(theme.panel, 0.9)}"/><stop offset="100%" stop-color="${alpha(theme.bg, 0)}"/></radialGradient></defs><rect width="100%" height="100%" fill="${theme.bg}"/><rect width="100%" height="100%" fill="url(#au1)"/><rect width="100%" height="100%" fill="url(#au2)"/><rect width="100%" height="100%" fill="url(#au3)"/>`;
   }
 
@@ -509,7 +502,7 @@
     const padTop = cfg.lockscreenSafe ? Math.round(height * 0.165 + width * 0.04) : padSide;
     const padBottom = height - (cfg.lockscreenSafe ? Math.round(height * 0.105 + width * 0.03) : padSide);
     
-    // Безопасный стек шрифтов для браузера и PNG-рендера
+    // Безопасный стек шрифтов 
     const fontMap = (fontPayload && typeof fontPayload === 'object' && !Array.isArray(fontPayload))
       ? fontPayload
       : (fontPayload ? { selected: fontPayload } : {});
@@ -518,23 +511,27 @@
     const ubuntuB64 = fontMap.ubuntu || '';
     const browserFamily = fontMap.browserFamily || cfg.fontFamily || 'Inter';
     
-    // ИСПРАВЛЕНИЕ: Проверяем, рендерим ли мы для сервера
-    const isServer = cfg.isServer === true;
+    // ИСПРАВЛЕНИЕ #1: ВСЕГДА отдаем Base64 шрифты (убрана проверка isServer). 
+    // Это гарантирует, что Resvg получит шрифт из памяти именно под именем AppPrimary, 
+    // обходя любые проблемы с путями на Vercel и несовпадения внутренних имен TTF.
     const extraFaces = [];
-    
-    // Вставляем Base64 шрифты ТОЛЬКО для превью в браузере.
-    if (!isServer) {
-      if (selectedB64) extraFaces.push(`@font-face { font-family: 'AppPrimary'; src: url(data:font/ttf;base64,${selectedB64}) format('truetype'); font-style: normal; font-weight: 400; }`);
-      if (interB64) extraFaces.push(`@font-face { font-family: 'AppInter'; src: url(data:font/ttf;base64,${interB64}) format('truetype'); font-style: normal; font-weight: 400; }`);
-      if (ubuntuB64) extraFaces.push(`@font-face { font-family: 'AppUbuntu'; src: url(data:font/ttf;base64,${ubuntuB64}) format('truetype'); font-style: normal; font-weight: 400; }`);
+    if (selectedB64) {
+      extraFaces.push(`@font-face { font-family: 'AppPrimary'; src: url(data:font/ttf;base64,${selectedB64}); }`);
+    }
+    if (interB64) {
+      extraFaces.push(`@font-face { font-family: 'AppInter'; src: url(data:font/ttf;base64,${interB64}); }`);
+    }
+    if (ubuntuB64) {
+      extraFaces.push(`@font-face { font-family: 'AppUbuntu'; src: url(data:font/ttf;base64,${ubuntuB64}); }`);
     }
 
-    // Для сервера используем реальные названия шрифтов, которые Resvg считает из TTF файлов
-    const FONT_FAMILY = isServer 
-      ? `${browserFamily}, Ubuntu, Inter, sans-serif` 
-      : `AppPrimary, ${browserFamily}, AppUbuntu, Ubuntu, AppInter, Inter, Helvetica, Arial, sans-serif`;
+    // ИСПРАВЛЕНИЕ #2: Строго обернутые в кавычки названия шрифтов
+    const FONT_FAMILY = `'AppPrimary', '${browserFamily}', 'AppUbuntu', 'Ubuntu', 'AppInter', 'Inter', sans-serif`;
     
-    const fontDefs = `<style>${extraFaces.join(' ')} text, tspan { font-family: ${FONT_FAMILY}; text-rendering: geometricPrecision; }</style>`;
+    const fontDefs = `<style>
+      ${extraFaces.join('\n')}
+      text, tspan { font-family: ${FONT_FAMILY}; }
+    </style>`;
 
     const listLike = isListLayout(cfg.monthLayout);
     const compactLike = isCompactGridLayout(cfg.monthLayout) || listLike;
@@ -576,7 +573,8 @@
       }
     }
 
-    return `<?xml version="1.0" encoding="UTF-8"?><svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}"><defs>${fontDefs}</defs>${renderBackground(cfg, theme, width, height)}${renderHeader(cfg, theme, labels, now, stats, width, padSide, padTop, FONT_FAMILY)}${quarterLines}${monthsSvg}${renderFooter(cfg, theme, labels, now, stats, width, { x: padSide, y: padBottom - footerHeight, w: width - padSide * 2, h: Math.round(footerHeight * 0.92) }, FONT_FAMILY)}</svg>`;
+    // ИСПРАВЛЕНИЕ #3: Добавляем font-family прямо на корень <svg> как fallback
+    return `<?xml version="1.0" encoding="UTF-8"?><svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" font-family="${escapeXml(FONT_FAMILY)}"><defs>${fontDefs}</defs>${renderBackground(cfg, theme, width, height)}${renderHeader(cfg, theme, labels, now, stats, width, padSide, padTop, FONT_FAMILY)}${quarterLines}${monthsSvg}${renderFooter(cfg, theme, labels, now, stats, width, { x: padSide, y: padBottom - footerHeight, w: width - padSide * 2, h: Math.round(footerHeight * 0.92) }, FONT_FAMILY)}</svg>`;
   };
 
   global.Engine = Engine;
