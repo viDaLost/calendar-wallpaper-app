@@ -151,12 +151,13 @@ function getLabels(lang) {
 // === ЛОГИКА ПОГОДЫ ===
 const weatherCache = new Map();
 
-function fetchJsonViaHttps(url, timeoutMs = 3500) {
+function fetchJsonViaHttps(url, timeoutMs = 6000, customHeaders = {}) {
   return new Promise((resolve, reject) => {
     const req = https.get(url, {
       headers: {
         'accept': 'application/json',
-        'user-agent': 'WallpaperCalendarPro/1.0 (+server)'
+        'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36',
+        ...customHeaders
       },
       timeout: timeoutMs,
     }, (res) => {
@@ -176,27 +177,26 @@ function fetchJsonViaHttps(url, timeoutMs = 3500) {
   });
 }
 
-async function fetchJsonWithTimeout(url, timeoutMs = 3500) {
+async function fetchJsonWithTimeout(url, timeoutMs = 6000) {
+  const headers = {
+    'accept': 'application/json',
+    'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36'
+  };
+  
   if (typeof fetch === 'function') {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
     try {
-      const resp = await fetch(url, {
-        signal: controller.signal,
-        headers: {
-          'accept': 'application/json',
-          'user-agent': 'WallpaperCalendarPro/1.0 (+server)'
-        }
-      });
+      const resp = await fetch(url, { signal: controller.signal, headers });
       if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
       return await resp.json();
     } catch (e) {
-      return await fetchJsonViaHttps(url, timeoutMs);
+      return await fetchJsonViaHttps(url, timeoutMs, headers);
     } finally {
       clearTimeout(timer);
     }
   }
-  return await fetchJsonViaHttps(url, timeoutMs);
+  return await fetchJsonViaHttps(url, timeoutMs, headers);
 }
 
 function weatherIconFromCode(code) {
@@ -209,15 +209,15 @@ function weatherIconFromCode(code) {
   return '☀️';
 }
 
-async function geocodeCity(normalizedCity) {
+async function geocodeCity(normalizedCity, lang = 'ru') {
   const queries = [
-    `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(normalizedCity)}&count=5&language=ru&format=json`,
+    `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(normalizedCity)}&count=5&language=${lang}&format=json`,
     `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(normalizedCity)}&count=5&language=en&format=json`
   ];
 
   for (const url of queries) {
     try {
-      const geoData = await fetchJsonWithTimeout(url, 3500);
+      const geoData = await fetchJsonWithTimeout(url, 4000);
       if (Array.isArray(geoData?.results) && geoData.results.length) {
         const exact = geoData.results.find((r) => String(r.name || '').toLowerCase() === normalizedCity.toLowerCase());
         return exact || geoData.results[0];
@@ -227,7 +227,7 @@ async function geocodeCity(normalizedCity) {
   return null;
 }
 
-async function fetchWeatherByCity(city) {
+async function fetchWeatherByCity(city, lang = 'ru') {
   const normalizedCity = String(city || '').split(',')[0].trim();
   if (!normalizedCity) return null;
 
@@ -236,12 +236,17 @@ async function fetchWeatherByCity(city) {
   if (cached && cached.expiresAt > Date.now()) return cached.data;
 
   try {
-    const place = await geocodeCity(normalizedCity);
+    const place = await geocodeCity(normalizedCity, lang);
     if (!place || typeof place.latitude !== 'number' || typeof place.longitude !== 'number') return null;
 
     const tz = place.timezone || 'auto';
-    const data = await fetchJsonWithTimeout(`https://api.open-meteo.com/v1/forecast?latitude=${place.latitude}&longitude=${place.longitude}&current=temperature_2m,weather_code,is_day,time&hourly=temperature_2m,weather_code&daily=temperature_2m_max,temperature_2m_min,weather_code&forecast_days=2&timezone=${encodeURIComponent(tz)}`, 4500);
-    if (!data?.current || typeof data.current.temperature_2m !== 'number') return null;
+    // ИСПРАВЛЕНИЕ: Убрал параметр time из current=..., который крашил запрос на сервере
+    const url = `https://api.open-meteo.com/v1/forecast?latitude=${place.latitude}&longitude=${place.longitude}&current=temperature_2m,weather_code,is_day&hourly=temperature_2m,weather_code&daily=temperature_2m_max,temperature_2m_min,weather_code&forecast_days=2&timezone=${encodeURIComponent(tz)}`;
+    
+    // ИСПРАВЛЕНИЕ: Увеличен таймаут для преодоления задержек Vercel Cold Start
+    const data = await fetchJsonWithTimeout(url, 6000);
+    
+    if (!data?.current || data.current.temperature_2m == null) return null;
 
     const code = Number(data.current.weather_code || 0);
     const hourly = [];
@@ -250,8 +255,12 @@ async function fetchWeatherByCity(city) {
     const codes = Array.isArray(data.hourly?.weather_code) ? data.hourly.weather_code : [];
 
     if (times.length && temps.length) {
-      const nowIso = String(data.current.time || '');
-      // ИСПРАВЛЕНИЕ: Ищем время, которое больше или равно текущему (а не точное совпадение)
+      let nowIso = String(data.current.time || '');
+      // ИСПРАВЛЕНИЕ: Обрезаем минуты, чтобы всегда точно попадать в час (формат "YYYY-MM-DDTHH:00")
+      if (nowIso.length >= 13) {
+         nowIso = nowIso.slice(0, 13) + ':00';
+      }
+      
       let nowIndex = times.findIndex(t => t >= nowIso);
       if (nowIndex < 0) nowIndex = 0;
 
@@ -363,13 +372,11 @@ function weatherSummary(cfg, lang) {
 
 function getSafeInsets(cfg, width, height) {
   const baseSide = Math.round(width * 0.035);
-  // Здесь мы оставляем базу, но фактический рендер будет ниже (изменено в renderSvg)
   if (!cfg.lockscreenSafe) return { top: baseSide, bottom: baseSide, side: baseSide };
   return { top: Math.round(height * 0.24 + width * 0.04), bottom: Math.round(height * 0.105 + width * 0.03), side: baseSide };
 }
 
 function renderStaticNoiseBackground(theme, width, height) {
-  // ИСПРАВЛЕНИЕ: Используем фильтр feTurbulence, который 100% корректно рендерится в resvg
   return `<defs>
     <filter id="noise_heavy" x="0" y="0" width="100%" height="100%">
       <feTurbulence type="fractalNoise" baseFrequency="0.75" numOctaves="3" stitchTiles="stitch"/>
@@ -475,7 +482,6 @@ function renderHeader(cfg, theme, labels, now, stats, width, padding, topY, FONT
   const yearSize = Math.round(width * 0.075);
   const yearY = topY + yearSize;
   
-  // ИСПРАВЛЕНИЕ: Используем родительный падеж для дат (Например: "5 апреля" вместо "5 апрель")
   const dateText = cfg.lang === 'ru' ? `${labels.today}: ${now.date()} ${labels.monthsGenitive[now.month()]}` : `${labels.today}: ${labels.months[now.month()]} ${now.date()}`;
   
   const yearSvg = `<text x="${width / 2}" y="${yearY}" text-anchor="middle" fill="${theme.text}" font-size="${yearSize}" font-family="${FONT}" font-weight="900" letter-spacing="-0.03em">${now.year()}</text>`;
@@ -686,8 +692,6 @@ function renderSvg(cfg) {
 
   const { width, height } = cfg;
   const sidePadding = Math.round(width * 0.035);
-  
-  // ИСПРАВЛЕНИЕ: Увеличен отступ (innerTop) до 0.24, чтобы календарь ушел ниже часов iOS
   const innerTop = cfg.lockscreenSafe ? Math.round(height * 0.24 + width * 0.04) : sidePadding;
   const innerBottom = height - (cfg.lockscreenSafe ? Math.round(height * 0.105 + width * 0.03) : sidePadding);
 
@@ -745,15 +749,16 @@ app.get('/api/options', (req, res) => {
 
 app.get('/api/weather', async (req, res) => {
   const city = String(req.query.city || '').trim();
+  const lang = String(req.query.lang || 'ru').trim();
   if (!city) return res.status(400).json({ ok: false, error: 'CITY_REQUIRED' });
-  const data = await fetchWeatherByCity(city);
+  const data = await fetchWeatherByCity(city, lang);
   if (!data) return res.status(404).json({ ok: false, error: 'WEATHER_NOT_FOUND', city });
   return res.json({ ok: true, city, data });
 });
 
 app.get('/wallpaper.svg', async (req, res) => {
   const cfg = getConfig(req.query);
-  cfg.weatherData = await fetchWeatherByCity(cfg.city);
+  cfg.weatherData = await fetchWeatherByCity(cfg.city, cfg.lang);
   res.type('image/svg+xml').send(renderSvg(cfg));
 });
 
@@ -767,7 +772,7 @@ app.get('/wallpaper.png', async (req, res) => {
     }
 
     const cfg = getConfig(req.query);
-    cfg.weatherData = await fetchWeatherByCity(cfg.city);
+    cfg.weatherData = await fetchWeatherByCity(cfg.city, cfg.lang);
     const svg = renderSvg(cfg);
 
     let png;
