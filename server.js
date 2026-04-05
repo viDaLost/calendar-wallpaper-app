@@ -149,7 +149,34 @@ function getLabels(lang) {
 }
 
 // === ЛОГИКА ПОГОДЫ ===
-async function fetchJsonWithTimeout(url, timeoutMs = 3000) {
+const weatherCache = new Map();
+
+function fetchJsonViaHttps(url, timeoutMs = 3500) {
+  return new Promise((resolve, reject) => {
+    const req = https.get(url, {
+      headers: {
+        'accept': 'application/json',
+        'user-agent': 'WallpaperCalendarPro/1.0 (+server)'
+      },
+      timeout: timeoutMs,
+    }, (res) => {
+      let data = '';
+      res.setEncoding('utf8');
+      res.on('data', chunk => data += chunk);
+      res.on('end', () => {
+        if (res.statusCode < 200 || res.statusCode >= 300) {
+          return reject(new Error(`HTTP ${res.statusCode}`));
+        }
+        try { resolve(JSON.parse(data)); }
+        catch (e) { reject(new Error(`INVALID_JSON: ${e.message}`)); }
+      });
+    });
+    req.on('timeout', () => req.destroy(new Error('TIMEOUT')));
+    req.on('error', reject);
+  });
+}
+
+async function fetchJsonWithTimeout(url, timeoutMs = 3500) {
   if (typeof fetch === 'function') {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
@@ -158,37 +185,18 @@ async function fetchJsonWithTimeout(url, timeoutMs = 3000) {
         signal: controller.signal,
         headers: {
           'accept': 'application/json',
-          'user-agent': 'WallpaperCalendarPro/1.0'
+          'user-agent': 'WallpaperCalendarPro/1.0 (+server)'
         }
       });
       if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
       return await resp.json();
+    } catch (e) {
+      return await fetchJsonViaHttps(url, timeoutMs);
     } finally {
       clearTimeout(timer);
     }
   }
-
-  return await new Promise((resolve, reject) => {
-    const req = https.get(url, {
-      headers: {
-        'accept': 'application/json',
-        'user-agent': 'WallpaperCalendarPro/1.0'
-      }
-    }, (resp) => {
-      let raw = '';
-      resp.setEncoding('utf8');
-      resp.on('data', chunk => raw += chunk);
-      resp.on('end', () => {
-        if (resp.statusCode < 200 || resp.statusCode >= 300) {
-          return reject(new Error(`HTTP ${resp.statusCode}`));
-        }
-        try { resolve(JSON.parse(raw)); }
-        catch (err) { reject(err); }
-      });
-    });
-    req.setTimeout(timeoutMs, () => req.destroy(new Error('timeout')));
-    req.on('error', reject);
-  });
+  return await fetchJsonViaHttps(url, timeoutMs);
 }
 
 function weatherIconFromCode(code) {
@@ -201,34 +209,38 @@ function weatherIconFromCode(code) {
   return '☀️';
 }
 
-async function geocodeCity(city, lang = 'ru') {
-  const url = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(city)}&count=5&language=${lang}&format=json`;
-  const geoData = await fetchJsonWithTimeout(url, 4500);
-  if (!Array.isArray(geoData?.results) || !geoData.results.length) return null;
-  return geoData.results[0];
+async function geocodeCity(normalizedCity) {
+  const queries = [
+    `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(normalizedCity)}&count=5&language=ru&format=json`,
+    `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(normalizedCity)}&count=5&language=en&format=json`
+  ];
+
+  for (const url of queries) {
+    try {
+      const geoData = await fetchJsonWithTimeout(url, 3500);
+      if (Array.isArray(geoData?.results) && geoData.results.length) {
+        const exact = geoData.results.find((r) => String(r.name || '').toLowerCase() === normalizedCity.toLowerCase());
+        return exact || geoData.results[0];
+      }
+    } catch (_) {}
+  }
+  return null;
 }
 
 async function fetchWeatherByCity(city) {
   const normalizedCity = String(city || '').split(',')[0].trim();
   if (!normalizedCity) return null;
 
-  const cacheKey = `weather:${normalizedCity.toLowerCase()}`;
-  const cached = pngCache.get(cacheKey);
-  if (cached && (Date.now() - cached.ts < 1000 * 60 * 30)) return cached.data;
+  const cacheKey = normalizedCity.toLowerCase();
+  const cached = weatherCache.get(cacheKey);
+  if (cached && cached.expiresAt > Date.now()) return cached.data;
 
   try {
-    let place = null;
-    for (const lang of ['ru', 'en']) {
-      try {
-        place = await geocodeCity(normalizedCity, lang);
-        if (place) break;
-      } catch (_) {}
-    }
+    const place = await geocodeCity(normalizedCity);
     if (!place || typeof place.latitude !== 'number' || typeof place.longitude !== 'number') return null;
 
     const tz = place.timezone || 'auto';
-    const forecastUrl = `https://api.open-meteo.com/v1/forecast?latitude=${place.latitude}&longitude=${place.longitude}&current=temperature_2m,weather_code,is_day,time&hourly=temperature_2m,weather_code&daily=temperature_2m_max,temperature_2m_min,weather_code&forecast_days=2&timezone=${encodeURIComponent(tz)}`;
-    const data = await fetchJsonWithTimeout(forecastUrl, 5000);
+    const data = await fetchJsonWithTimeout(`https://api.open-meteo.com/v1/forecast?latitude=${place.latitude}&longitude=${place.longitude}&current=temperature_2m,weather_code,is_day,time&hourly=temperature_2m,weather_code&daily=temperature_2m_max,temperature_2m_min,weather_code&forecast_days=2&timezone=${encodeURIComponent(tz)}`, 4500);
     if (!data?.current || typeof data.current.temperature_2m !== 'number') return null;
 
     const code = Number(data.current.weather_code || 0);
@@ -239,24 +251,12 @@ async function fetchWeatherByCity(city) {
 
     if (times.length && temps.length) {
       const nowIso = String(data.current.time || '');
-      let nowIndex = times.findIndex(t => String(t) === nowIso);
-      if (nowIndex < 0 && nowIso) {
-        const currentHour = String(nowIso).slice(0, 13);
-        nowIndex = times.findIndex(t => String(t).slice(0, 13) === currentHour);
-      }
-      nowIndex = Math.max(0, nowIndex);
+      let nowIndex = times.findIndex(t => t === nowIso);
+      if (nowIndex < 0) nowIndex = Math.max(0, times.findIndex(t => String(t) > nowIso));
+      if (nowIndex < 0) nowIndex = 0;
 
-      const preferredHours = new Set([6, 9, 12, 15, 18, 21]);
-      const preferredIndexes = [];
-      for (let i = 0; i < times.length && preferredIndexes.length < 10; i++) {
-        const hour = Number(String(times[i]).slice(11, 13));
-        if (preferredHours.has(hour)) preferredIndexes.push(i);
-      }
-      const futurePreferred = preferredIndexes.filter(i => i >= nowIndex);
-      const finalIndexes = (futurePreferred.length >= 4 ? futurePreferred : preferredIndexes).slice(0, 6);
-      for (const idx of finalIndexes) {
-        const t = Math.round(Number(temps[idx]));
-        if (!Number.isFinite(t)) continue;
+      for (let idx = nowIndex; idx < times.length && hourly.length < 6; idx += 3) {
+        const t = Math.round(Number(temps[idx] || 0));
         hourly.push({
           hour: `${String(times[idx]).slice(11, 13)}:00`,
           temp: t > 0 ? `+${t}` : `${t}`,
@@ -274,12 +274,12 @@ async function fetchWeatherByCity(city) {
       icon: weatherIconFromCode(code),
       cityLabel: String(place.name || normalizedCity).trim(),
       timezone: tz,
-      dailyMax: Number.isFinite(dailyMax) ? (dailyMax > 0 ? `+${dailyMax}` : `${dailyMax}`) : null,
-      dailyMin: Number.isFinite(dailyMin) ? (dailyMin > 0 ? `+${dailyMin}` : `${dailyMin}`) : null,
+      dailyMax: typeof dailyMax === 'number' && Number.isFinite(dailyMax) ? (dailyMax > 0 ? `+${dailyMax}` : `${dailyMax}`) : null,
+      dailyMin: typeof dailyMin === 'number' && Number.isFinite(dailyMin) ? (dailyMin > 0 ? `+${dailyMin}` : `${dailyMin}`) : null,
       hourly
     };
 
-    if (pngCache.size < 1000) pngCache.set(cacheKey, { ts: Date.now(), data: result });
+    weatherCache.set(cacheKey, { data: result, expiresAt: Date.now() + 1000 * 60 * 30 });
     return result;
   } catch (e) {
     return null;
@@ -367,36 +367,58 @@ function getSafeInsets(cfg, width, height) {
   return { top: Math.round(height * 0.165 + width * 0.04), bottom: Math.round(height * 0.105 + width * 0.03), side: baseSide };
 }
 
-function buildStaticNoisePattern(theme, width, height, opacity = 0.22) {
-  const stripeGap = Math.max(12, Math.round(width * 0.018));
-  const stripeWidth = Math.max(3, Math.round(stripeGap * 0.32));
-  const stripes = [];
-  for (let x = -stripeGap; x < width + stripeGap; x += stripeGap) {
-    stripes.push(`<rect x="${x}" y="0" width="${stripeWidth}" height="${height}" fill="${alpha('#ffffff', opacity * 0.16)}" opacity="0.9"/>`);
-  }
-  const dots = [];
-  const dotGap = Math.max(24, Math.round(width * 0.04));
-  const dotRadius = Math.max(0.8, Math.round(width * 0.0015) / 2);
-  for (let y = 0; y < height; y += dotGap) {
-    for (let x = (Math.floor(y / dotGap) % 2) * (dotGap / 2); x < width; x += dotGap) {
-      dots.push(`<circle cx="${x}" cy="${y}" r="${dotRadius}" fill="${alpha('#ffffff', opacity * 0.20)}"/>`);
+function renderStaticNoiseBackground(theme, width, height) {
+  const stripeW = Math.max(5, Math.round(width * 0.005));
+  const lineGap = Math.max(9, Math.round(width * 0.012));
+  const speck = Math.max(2, Math.round(width * 0.0018));
+  const cols = 18;
+  const rows = 26;
+  let speckles = '';
+  for (let y = 0; y < rows; y++) {
+    for (let x = 0; x < cols; x++) {
+      const px = ((x + 0.5) / cols) * width + (((y % 2) * 0.37 - 0.18) * speck * 3);
+      const py = ((y + 0.5) / rows) * height + (((x % 3) * 0.23 - 0.25) * speck * 3);
+      const opacity = 0.018 + ((x * 7 + y * 11) % 6) * 0.006;
+      speckles += `<circle cx="${px.toFixed(2)}" cy="${py.toFixed(2)}" r="${(speck * (0.45 + ((x + y) % 3) * 0.28)).toFixed(2)}" fill="#ffffff" opacity="${opacity.toFixed(3)}"/>`;
     }
   }
-  return `
-    <radialGradient id="sn_vignette_safe" cx="50%" cy="50%" r="85%">
+  return `<defs>
+    <linearGradient id="sn_base" x1="0" y1="0" x2="1" y2="1">
       <stop offset="0%" stop-color="${theme.bg}"/>
-      <stop offset="65%" stop-color="${alpha(theme.panel, 0.72)}"/>
-      <stop offset="100%" stop-color="${alpha(theme.panel, 0.96)}"/>
+      <stop offset="48%" stop-color="${alpha(theme.panel, 0.96)}"/>
+      <stop offset="100%" stop-color="${theme.bg}"/>
+    </linearGradient>
+    <radialGradient id="sn_glow1" cx="30%" cy="16%" r="72%">
+      <stop offset="0%" stop-color="${alpha(theme.accent2, 0.05)}"/>
+      <stop offset="100%" stop-color="${alpha(theme.accent2, 0)}"/>
     </radialGradient>
-    <pattern id="sn_lines_safe" width="${stripeGap}" height="${height}" patternUnits="userSpaceOnUse">${stripes.join('')}</pattern>
-    <pattern id="sn_dots_safe" width="${dotGap}" height="${dotGap}" patternUnits="userSpaceOnUse">
-      <circle cx="${dotGap/2}" cy="${dotGap/2}" r="${dotRadius}" fill="${alpha('#ffffff', opacity * 0.22)}"/>
-    </pattern>`;
+    <radialGradient id="sn_glow2" cx="78%" cy="62%" r="70%">
+      <stop offset="0%" stop-color="${alpha('#ffffff', 0.035)}"/>
+      <stop offset="100%" stop-color="${alpha('#ffffff', 0)}"/>
+    </radialGradient>
+    <pattern id="sn_lines" width="${lineGap}" height="${lineGap}" patternUnits="userSpaceOnUse">
+      <rect width="${lineGap}" height="${lineGap}" fill="transparent"/>
+      <rect x="0" y="0" width="${stripeW}" height="${lineGap}" fill="#ffffff" opacity="0.028"/>
+      <rect x="${Math.max(1, Math.round(lineGap * 0.55))}" y="0" width="${Math.max(1, Math.round(stripeW * 0.45))}" height="${lineGap}" fill="#000000" opacity="0.018"/>
+    </pattern>
+    <linearGradient id="sn_diag" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="${alpha('#ffffff', 0.02)}"/>
+      <stop offset="50%" stop-color="${alpha('#ffffff', 0)}"/>
+      <stop offset="100%" stop-color="${alpha('#000000', 0.10)}"/>
+    </linearGradient>
+  </defs>
+  <rect width="100%" height="100%" fill="url(#sn_base)"/>
+  <rect width="100%" height="100%" fill="url(#sn_glow1)"/>
+  <rect width="100%" height="100%" fill="url(#sn_glow2)"/>
+  <rect width="100%" height="100%" fill="url(#sn_lines)"/>
+  <polygon points="0,${height * 0.08} ${width * 0.72},0 ${width},${height * 0.6} ${width * 0.38},${height}" fill="${alpha('#ffffff', 0.035)}"/>
+  <polygon points="0,${height * 0.66} ${width * 0.36},${height} 0,${height}" fill="${alpha('#000000', 0.08)}"/>
+  <rect width="100%" height="100%" fill="url(#sn_diag)"/>
+  <g>${speckles}</g>`;
 }
 
 function renderBackground(cfg, theme, width, height) {
   const bgType = cfg.bgStyle;
-  const isPngSafe = cfg.renderTarget === 'png';
   const proceduralFilters = `
     <filter id="tex_paper" x="0" y="0" width="100%" height="100%"><feTurbulence type="fractalNoise" baseFrequency="0.008" numOctaves="5" result="noise"/><feColorMatrix type="matrix" values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  1 0 0 0 0" in="noise"/><feComponentTransfer><feFuncA type="linear" slope="0.12"/></feComponentTransfer></filter>
     <filter id="tex_stone" x="0" y="0" width="100%" height="100%"><feTurbulence type="fractalNoise" baseFrequency="0.02" numOctaves="6" result="noise"/><feColorMatrix type="matrix" values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  1 0 0 0 0" in="noise"/><feComponentTransfer><feFuncA type="linear" slope="0.25"/></feComponentTransfer></filter>
@@ -418,10 +440,7 @@ function renderBackground(cfg, theme, width, height) {
   if (bgType === 'orbit') return `<rect width="100%" height="100%" fill="${theme.bg}"/><circle cx="50%" cy="35%" r="${width*0.45}" fill="none" stroke="${alpha(theme.accent, 0.1)}" stroke-width="${Math.max(1, width*0.003)}" stroke-dasharray="8 12"/><circle cx="50%" cy="35%" r="${width*0.65}" fill="none" stroke="${alpha(theme.accent2, 0.06)}" stroke-width="${Math.max(1, width*0.002)}"/><circle cx="50%" cy="35%" r="${width*0.85}" fill="none" stroke="${alpha(theme.accent, 0.04)}" stroke-width="${Math.max(2, width*0.005)}"/>`;
   if (bgType === 'velvet') return `<defs>${proceduralFilters}<linearGradient id="v_grad" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="${theme.bg}"/><stop offset="40%" stop-color="${alpha(theme.panel, 0.9)}"/><stop offset="60%" stop-color="${theme.bg}"/><stop offset="85%" stop-color="${alpha(theme.panel, 0.9)}"/><stop offset="100%" stop-color="${theme.bg}"/></linearGradient></defs><rect width="100%" height="100%" fill="url(#v_grad)"/><rect width="100%" height="100%" filter="url(#tex_paper)" opacity="0.6"/>`;
   if (bgType === 'noir') return `<defs><radialGradient id="vignette" cx="50%" cy="40%" r="95%"><stop offset="15%" stop-color="${alpha(theme.accent, 0.1)}"/><stop offset="50%" stop-color="${theme.bg}"/><stop offset="100%" stop-color="#000000"/></radialGradient></defs><rect width="100%" height="100%" fill="url(#vignette)"/>`;
-  if (bgType === 'static_noise') {
-    if (isPngSafe) return `<defs>${buildStaticNoisePattern(theme, width, height, 0.34)}</defs><rect width="100%" height="100%" fill="url(#sn_vignette_safe)"/><rect width="100%" height="100%" fill="url(#sn_lines_safe)" opacity="0.65"/><rect width="100%" height="100%" fill="url(#sn_dots_safe)" opacity="0.7"/><path d="M0,0 L${width*0.72},0 L${width*0.18},${height} L0,${height} Z" fill="${alpha('#ffffff', 0.035)}"/><path d="M${width*0.58},0 L${width},0 L${width},${height} L${width*0.84},${height} Z" fill="${alpha('#000000', 0.09)}"/>`;
-    return `<defs>${proceduralFilters}<radialGradient id="sn_vignette" cx="50%" cy="50%" r="85%"><stop offset="0%" stop-color="${theme.bg}"/><stop offset="100%" stop-color="${alpha(theme.panel, 0.95)}"/></radialGradient></defs><rect width="100%" height="100%" fill="url(#sn_vignette)"/><rect width="100%" height="100%" filter="url(#tex_static)" opacity="1.2"/>`;
-  }
+  if (bgType === 'static_noise') return renderStaticNoiseBackground(theme, width, height);
 
   return `<defs><radialGradient id="au1" cx="20%" cy="-10%" r="85%"><stop offset="0%" stop-color="${alpha(theme.accent, 0.35)}"/><stop offset="100%" stop-color="${alpha(theme.bg, 0)}"/></radialGradient><radialGradient id="au2" cx="110%" cy="40%" r="75%"><stop offset="0%" stop-color="${alpha(theme.accent2, 0.25)}"/><stop offset="100%" stop-color="${alpha(theme.bg, 0)}"/></radialGradient><radialGradient id="au3" cx="-10%" cy="110%" r="80%"><stop offset="0%" stop-color="${alpha(theme.panel, 0.9)}"/><stop offset="100%" stop-color="${alpha(theme.bg, 0)}"/></radialGradient></defs><rect width="100%" height="100%" fill="${theme.bg}"/><rect width="100%" height="100%" fill="url(#au1)"/><rect width="100%" height="100%" fill="url(#au2)"/><rect width="100%" height="100%" fill="url(#au3)"/>`;
 }
@@ -749,19 +768,17 @@ app.get('/api/options', (req, res) => {
   res.json({ presets: PHONE_PRESETS, themes: THEMES, bgStyles: BG_STYLES, fonts: Object.fromEntries(Object.entries(FONTS).map(([k, v]) => [k, v.name])) });
 });
 
-
+// Добавлено получение погоды для браузерного Live-превью!
 app.get('/api/weather', async (req, res) => {
   const city = String(req.query.city || '').trim();
-  if (!city) return res.status(400).json({ error: 'city required' });
+  if (!city) return res.status(400).json({ ok: false, error: 'CITY_REQUIRED' });
   const data = await fetchWeatherByCity(city);
-  if (!data) return res.status(404).json({ error: 'weather_not_found', city });
-  res.json(data);
+  if (!data) return res.status(404).json({ ok: false, error: 'WEATHER_NOT_FOUND', city });
+  return res.json({ ok: true, city, data });
 });
 
-// Добавлено получение погоды для браузерного Live-превью!
 app.get('/wallpaper.svg', async (req, res) => {
   const cfg = getConfig(req.query);
-  cfg.renderTarget = 'svg';
   cfg.weatherData = await fetchWeatherByCity(cfg.city);
   res.type('image/svg+xml').send(renderSvg(cfg));
 });
@@ -776,7 +793,6 @@ app.get('/wallpaper.png', async (req, res) => {
     }
 
     const cfg = getConfig(req.query);
-    cfg.renderTarget = 'png';
     cfg.weatherData = await fetchWeatherByCity(cfg.city);
     const svg = renderSvg(cfg);
 
