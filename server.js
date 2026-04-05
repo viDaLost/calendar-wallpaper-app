@@ -709,54 +709,61 @@ function renderFooter(cfg, theme, labels, now, stats, width, footerBox, FONT) {
       return base + chips;
 
     } else {
-      // Режим 2: Мульти-города (Круглые циферблаты в стиле Apple Watch)
-      let out = base + `<text x="${x + pad}" y="${y + h * 0.18}" fill="${theme.accent2}" font-size="${subSize}" font-family="${FONT}" font-weight="700">${cfg.lang === 'ru' ? 'Прогноз на день' : 'Day forecast'}</text>`;
+      // Режим 2: Мульти-города — переработанный профессиональный циферблат без наложений
+      const titleText = cfg.lang === 'ru' ? 'Прогноз на день' : 'Day forecast';
+      const titleY = y + h * 0.14;
       const numCities = cfg.weatherDataList.length;
-      const slotW = (w - pad * 2) / numCities;
+      const gap = Math.max(12, Math.round(w * 0.018));
+      const slotW = (w - pad * 2 - gap * (numCities - 1)) / numCities;
+      const cardH = h * 0.72;
+      const cardY = y + h * 0.21;
+
+      let out = base + `<text x="${x + pad}" y="${titleY}" fill="${theme.accent2}" font-size="${subSize * 0.96}" font-family="${FONT}" font-weight="800" letter-spacing="0.02em">${titleText}</text>`;
 
       cfg.weatherDataList.forEach((wd, i) => {
-          const cx = x + pad + i * slotW + slotW / 2;
-          const cy = y + h * 0.62;
-          const R = Math.min(slotW * 0.35, h * 0.28); // Строго контролируемый радиус
-
-          // Название города
-          const cityLabel = wd.cityLabel.split(',')[0].trim();
-          out += `<text x="${cx}" y="${cy - R - h * 0.05}" text-anchor="middle" fill="${theme.muted}" font-size="${subSize * 0.8}" font-family="${FONT}" font-weight="700">${escapeXml(cityLabel.length > 13 ? cityLabel.slice(0, 12) + '…' : cityLabel)}</text>`;
-
-          // Контур часов
-          out += `<circle cx="${cx}" cy="${cy}" r="${R}" fill="${alpha(theme.panel, 0.4)}" stroke="${alpha(theme.accent2, 0.2)}" stroke-width="1.5"/>`;
-          // Внутренняя зона
-          out += `<circle cx="${cx}" cy="${cy}" r="${R * 0.75}" fill="${alpha(theme.bg, 0.5)}" stroke="${alpha(theme.accent, 0.1)}" stroke-width="1"/>`;
-
-          // Текущая погода в центре: иконка сверху, температура крупно снизу
-          out += `<text x="${cx}" y="${cy - R * 0.12}" text-anchor="middle" fill="${theme.text}" font-size="${R * 0.45}" font-family="${FONT}">${wd.icon}</text>`;
-          out += `<text x="${cx}" y="${cy + R * 0.45}" text-anchor="middle" fill="${theme.text}" font-size="${R * 0.65}" font-family="${FONT}" font-weight="800">${wd.temp}°</text>`;
-
-          const hourly = wd.hourly || [];
+          const slotX = x + pad + i * (slotW + gap);
+          const cardRadius = Math.max(18, Math.round(Math.min(slotW, cardH) * 0.16));
+          const cardInnerPad = Math.max(12, Math.round(slotW * 0.08));
+          const cityRaw = String((wd.cityLabel || '').split(',')[0] || '').trim();
+          const cityLabel = cityRaw.length > 14 ? cityRaw.slice(0, 13) + '…' : cityRaw;
+          const dialCx = slotX + slotW / 2;
+          const dialCy = cardY + cardH * 0.56;
+          const R = Math.min(slotW * 0.22, cardH * 0.24);
+          const coreR = R * 0.68;
+          const badgeW = Math.max(34, Math.round(slotW * 0.24));
+          const badgeH = Math.max(22, Math.round(cardH * 0.13));
+          const orbitOffset = R * 1.18;
           const positions = [
-              { pt: hourly[0], dx: 0, dy: -R },     // 12 (Топ)
-              { pt: hourly[1], dx: R, dy: 0 },      // 3 (Право)
-              { pt: hourly[2], dx: 0, dy: R },      // 6 (Низ)
-              { pt: hourly[3], dx: -R, dy: 0 }      // 9 (Лево)
+              { pt: (wd.hourly || [])[0], dx: 0, dy: -orbitOffset },
+              { pt: (wd.hourly || [])[1], dx: orbitOffset, dy: 0 },
+              { pt: (wd.hourly || [])[2], dx: 0, dy: orbitOffset },
+              { pt: (wd.hourly || [])[3], dx: -orbitOffset, dy: 0 }
           ];
 
-          positions.forEach(pos => {
+          out += `<rect x="${slotX}" y="${cardY}" width="${slotW}" height="${cardH}" rx="${cardRadius}" fill="${alpha(theme.bg, 0.22)}" stroke="${alpha(theme.accent2, 0.14)}" stroke-width="1.2"/>`;
+          out += `<rect x="${slotX + 1.5}" y="${cardY + 1.5}" width="${Math.max(0, slotW - 3)}" height="${Math.max(0, cardH - 3)}" rx="${Math.max(0, cardRadius - 1.5)}" fill="none" stroke="${alpha('#ffffff', 0.035)}" stroke-width="1"/>`;
+
+          out += `<text x="${slotX + cardInnerPad}" y="${cardY + cardH * 0.16}" fill="${theme.text}" font-size="${subSize * 0.86}" font-family="${FONT}" font-weight="800">${escapeXml(cityLabel)}</text>`;
+          out += `<text x="${slotX + slotW - cardInnerPad}" y="${cardY + cardH * 0.16}" text-anchor="end" fill="${theme.accent2}" font-size="${subSize * 0.78}" font-family="${FONT}" font-weight="700">${escapeXml((wd.dailyMax && wd.dailyMin) ? `${wd.dailyMax} / ${wd.dailyMin}` : '')}</text>`;
+
+          out += `<circle cx="${dialCx}" cy="${dialCy}" r="${R}" fill="${alpha(theme.panel, 0.52)}" stroke="${alpha(theme.accent2, 0.22)}" stroke-width="1.3"/>`;
+          out += `<circle cx="${dialCx}" cy="${dialCy}" r="${coreR}" fill="${alpha(theme.bg, 0.76)}" stroke="${alpha(theme.accent, 0.16)}" stroke-width="1"/>`;
+          out += `<circle cx="${dialCx}" cy="${dialCy}" r="${R * 0.88}" fill="none" stroke="${alpha(theme.accent2, 0.10)}" stroke-width="1" stroke-dasharray="2.5 7"/>`;
+
+          out += `<text x="${dialCx}" y="${dialCy - R * 0.12}" text-anchor="middle" fill="${theme.text}" font-size="${R * 0.34}" font-family="${FONT}">${wd.icon}</text>`;
+          out += `<text x="${dialCx}" y="${dialCy + R * 0.34}" text-anchor="middle" fill="${theme.text}" font-size="${R * 0.42}" font-family="${FONT}" font-weight="900">${escapeXml(wd.temp)}°</text>`;
+
+          positions.forEach((pos) => {
               if (!pos.pt) return;
-              const px = cx + pos.dx;
-              const py = cy + pos.dy;
+              const px = dialCx + pos.dx;
+              const py = dialCy + pos.dy;
+              const shortHour = String(pos.pt.hour || '').split(':')[0].padStart(2, '0');
+              const tempLabel = `${pos.pt.temp}°`;
 
-              // Компактные скругленные плашки на орбите
-              const badgeS = R * 0.68;
-
-              out += `<rect x="${px - badgeS/2}" y="${py - badgeS/2}" width="${badgeS}" height="${badgeS}" rx="${badgeS * 0.35}" fill="${alpha(theme.panel, 0.95)}" stroke="${alpha(theme.accent, 0.3)}" stroke-width="1"/>`;
-
-              // Час (сокращаем "15:00" до "15", чтобы убрать визуальный шум)
-              const shortHour = pos.pt.hour.split(':')[0];
-              out += `<text x="${px}" y="${py - badgeS * 0.05}" text-anchor="middle" fill="${theme.muted}" font-size="${badgeS * 0.38}" font-family="${FONT}" font-weight="700">${shortHour}</text>`;
-
-              // Иконка и температура: ставим их в один ряд снизу с выравниванием от центра (отталкиваем друг от друга)
-              out += `<text x="${px - badgeS * 0.05}" y="${py + badgeS * 0.35}" text-anchor="end" fill="${theme.text}" font-size="${badgeS * 0.32}" font-family="${FONT}">${pos.pt.icon}</text>`;
-              out += `<text x="${px + badgeS * 0.05}" y="${py + badgeS * 0.35}" text-anchor="start" fill="${theme.text}" font-size="${badgeS * 0.30}" font-family="${FONT}" font-weight="800">${pos.pt.temp}°</text>`;
+              out += `<rect x="${px - badgeW / 2}" y="${py - badgeH / 2}" width="${badgeW}" height="${badgeH}" rx="${badgeH * 0.45}" fill="${alpha(theme.panel, 0.96)}" stroke="${alpha(theme.accent, 0.18)}" stroke-width="1"/>`;
+              out += `<text x="${px}" y="${py - badgeH * 0.50}" text-anchor="middle" fill="${theme.muted}" font-size="${Math.max(9, badgeH * 0.42)}" font-family="${FONT}" font-weight="700">${shortHour}</text>`;
+              out += `<text x="${px - badgeW * 0.08}" y="${py + badgeH * 0.15}" text-anchor="end" fill="${theme.text}" font-size="${Math.max(9, badgeH * 0.46)}" font-family="${FONT}">${pos.pt.icon}</text>`;
+              out += `<text x="${px + badgeW * 0.08}" y="${py + badgeH * 0.15}" text-anchor="start" fill="${theme.text}" font-size="${Math.max(9, badgeH * 0.42)}" font-family="${FONT}" font-weight="800">${escapeXml(tempLabel)}</text>`;
           });
       });
       return out;
@@ -789,7 +796,8 @@ function renderSvg(cfg) {
   const listLike = isListLayout(cfg.monthLayout);
   const compactLike = isCompactGridLayout(cfg.monthLayout) || listLike;
   const headerHeight = Math.round(height * (listLike ? 0.088 : compactLike ? 0.09 : 0.095));
-  const footerHeight = Math.round(height * (listLike ? 0.072 : compactLike ? 0.076 : 0.08));
+  const weatherFooterBoost = cfg.footer === 'day_weather' ? (cfg.weatherDataList && cfg.weatherDataList.length > 1 ? 1.46 : 1.22) : 1;
+  const footerHeight = Math.round((height * (listLike ? 0.072 : compactLike ? 0.076 : 0.08)) * weatherFooterBoost);
   const contentTop = innerTop + headerHeight + Math.round(height * 0.012);
   const contentBottom = innerBottom - footerHeight - Math.round(height * 0.014);
   const contentH = contentBottom - contentTop;
