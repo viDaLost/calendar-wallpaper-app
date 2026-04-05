@@ -17,6 +17,13 @@ dayjs.extend(advancedFormat);
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+// Кеш для оптимизации нагрузки на Vercel (очищается каждый час)
+const pngCache = new Map();
+const cacheSweepTimer = setInterval(() => pngCache.clear(), 1000 * 60 * 60);
+if (cacheSweepTimer.unref) cacheSweepTimer.unref();
+
+const RENDER_VERSION = 'v6-stable-core';
+
 const FONTS = {
   inter: { name: 'Inter (Стандарт)', file: 'inter.ttf', family: 'Inter' },
   montserrat: { name: 'Montserrat (Геометрия)', file: 'montserrat.ttf', family: 'Montserrat' },
@@ -90,16 +97,17 @@ const THEMES = {
 };
 
 const BG_STYLES = {
-  aurora: 'Аврора (Aurora)',
+  mesh_organic: 'Органический Mesh (Новое)',
   liquid_glass: 'Жидкое стекло (Glass)',
   paper: 'Пергамент / Бумага (Paper)',
   stone: 'Камень / Бетон (Stone)',
   metal: 'Шлифованный металл (Metal)',
+  carbon: 'Карбон / Сетка (Carbon)',
+  topography: 'Топография (Topography)',
+  aurora: 'Аврора (Aurora)',
   spotlight: 'Прожектор (Spotlight)',
   waves: 'Мягкие волны (Waves)',
   noir: 'Нуар (Noir)',
-  carbon: 'Карбон / Сетка (Carbon)',
-  topography: 'Топография (Topography)',
   bloom: 'Сияние (Bloom)',
   diagonal: 'Динамика лучей (Diagonal)',
   orbit: 'Орбиты (Orbit)',
@@ -107,86 +115,124 @@ const BG_STYLES = {
   static_noise: 'Шум эфира (Noise)'
 };
 
-const QUOTES = {
-  ru: [
-    'Маленькие шаги собирают большой год.',
-    'Сегодня — часть твоего будущего.',
-    'Спокойный ритм сильнее хаоса.',
-    'Лучший день для движения — сегодняшний.'
-  ],
-  en: [
-    'Small steps shape a big year.',
-    'Today is part of your future.',
-    'Consistency beats intensity.',
-    'The best day to move is today.'
-  ]
-};
-
-function num(v, fallback) {
-  const n = Number(v);
-  return Number.isFinite(n) ? n : fallback;
-}
-function escapeXml(str) {
-  return String(str)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&apos;');
-}
+function num(v, fallback) { const n = Number(v); return Number.isFinite(n) ? n : fallback; }
+function escapeXml(str) { return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&apos;'); }
 function clamp(v, min, max) { return Math.max(min, Math.min(max, v)); }
 function alpha(hex, opacity) {
   const clean = hex.replace('#', '');
   if (clean.length !== 6) return hex;
   const bigint = parseInt(clean, 16);
-  const r = (bigint >> 16) & 255;
-  const g = (bigint >> 8) & 255;
-  const b = bigint & 255;
-  return `rgba(${r},${g},${b},${opacity})`;
+  return `rgba(${(bigint >> 16) & 255},${(bigint >> 8) & 255},${bigint & 255},${opacity})`;
 }
+
+function parseEvents(eventsStr) {
+  const map = {};
+  if (!eventsStr) return map;
+  eventsStr.split(',').forEach(part => {
+    const splitIdx = part.indexOf(':');
+    if(splitIdx > -1) {
+      let date = part.slice(0, splitIdx).trim();
+      const name = part.slice(splitIdx + 1).trim();
+      const dateParts = date.split('-');
+      if (dateParts.length === 2) date = `${dateParts[0].padStart(2, '0')}-${dateParts[1].padStart(2, '0')}`;
+      if (date && name) map[date] = name;
+    }
+  });
+  return map;
+}
+
 function getLabels(lang) {
   return lang === 'ru'
-    ? {
-        months: ['Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь', 'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь'],
-        monthsShort: ['Янв', 'Фев', 'Мар', 'Апр', 'Май', 'Июн', 'Июл', 'Авг', 'Сен', 'Окт', 'Ноя', 'Дек'],
-        monthsMedium: ['Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь', 'Июль', 'Август', 'Сент.', 'Октябрь', 'Ноябрь', 'Декабрь'],
-        weekdays: ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'],
-        weekdaysFull: ['понедельник', 'вторник', 'среда', 'четверг', 'пятница', 'суббота', 'воскресенье'],
-        today: 'Сегодня', year: 'год', daysLeft: 'дн. осталось', passed: 'пройдено', week: 'Неделя',
-      }
-    : {
-        months: ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'],
-        monthsShort: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'],
-        monthsMedium: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sept', 'Oct', 'Nov', 'Dec'],
-        weekdays: ['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su'],
-        weekdaysFull: ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'],
-        today: 'Today', year: 'year', daysLeft: 'days left', passed: 'passed', week: 'Week',
-      };
+    ? { months: ['Январь','Февраль','Март','Апрель','Май','Июнь','Июль','Август','Сентябрь','Октябрь','Ноябрь','Декабрь'], monthsShort: ['Янв','Фев','Мар','Апр','Май','Июн','Июл','Авг','Сен','Окт','Ноя','Дек'], monthsMedium: ['Январь','Февраль','Март','Апрель','Май','Июнь','Июль','Август','Сент.','Октябрь','Ноябрь','Декабрь'], weekdays: ['Пн','Вт','Ср','Чт','Пт','Сб','Вс'], weekdaysFull: ['понедельник','вторник','среда','четверг','пятница','суббота','воскресенье'], today: 'Сегодня', year: 'год', daysLeft: 'дн. осталось', passed: 'пройдено', week: 'Неделя' }
+    : { months: ['January','February','March','April','May','June','July','August','September','October','November','December'], monthsShort: ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'], monthsMedium: ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sept','Oct','Nov','Dec'], weekdays: ['Mo','Tu','We','Th','Fr','Sa','Su'], weekdaysFull: ['monday','tuesday','wednesday','thursday','friday','saturday','sunday'], today: 'Today', year: 'year', daysLeft: 'days left', passed: 'passed', week: 'Week' };
 }
+
+// === ЛОГИКА ПОГОДЫ (из v6) ===
+async function fetchJsonWithTimeout(url, timeoutMs = 2200) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const resp = await fetch(url, { signal: controller.signal, headers: { 'accept': 'application/json' } });
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    return await resp.json();
+  } finally { clearTimeout(timer); }
+}
+
+function weatherIconFromCode(code) {
+  if (code >= 1 && code <= 3) return '⛅';
+  if (code >= 45 && code <= 48) return '🌫️';
+  if (code >= 51 && code <= 67) return '🌧️';
+  if (code >= 71 && code <= 77) return '❄️';
+  if (code >= 80 && code <= 82) return '🌦️';
+  if (code >= 95) return '⛈️';
+  return '☀️';
+}
+
+async function fetchWeatherByCity(city) {
+  const normalizedCity = String(city || '').split(',')[0].trim();
+  if (!normalizedCity) return null;
+  try {
+    const geoData = await fetchJsonWithTimeout(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(normalizedCity)}&count=1&language=ru`, 2200);
+    if (!geoData.results || geoData.results.length === 0) return null;
+
+    const place = geoData.results[0];
+    const tz = place.timezone || 'auto';
+    const data = await fetchJsonWithTimeout(`https://api.open-meteo.com/v1/forecast?latitude=${place.latitude}&longitude=${place.longitude}&current=temperature_2m,weather_code,is_day,time&hourly=temperature_2m,weather_code&daily=temperature_2m_max,temperature_2m_min,weather_code&forecast_days=2&timezone=${encodeURIComponent(tz)}`, 3000);
+    if (!data.current || typeof data.current.temperature_2m !== 'number') return null;
+
+    const code = data.current.weather_code;
+    const hourly = [];
+    const times = data.hourly?.time || [];
+    const temps = data.hourly?.temperature_2m || [];
+    const codes = data.hourly?.weather_code || [];
+    
+    if (times.length && temps.length) {
+      const nowIso = String(data.current.time || '');
+      const nowIndex = Math.max(0, times.findIndex(t => t === nowIso));
+      const preferredHours = new Set([6, 9, 12, 15, 18, 21]);
+      const preferredIndexes = [];
+      for (let i = 0; i < times.length && preferredIndexes.length < 8; i++) {
+        if (preferredHours.has(Number(String(times[i]).slice(11, 13)))) preferredIndexes.push(i);
+      }
+      const futurePreferred = preferredIndexes.filter(i => i >= nowIndex);
+      const finalIndexes = (futurePreferred.length >= 4 ? futurePreferred : preferredIndexes).slice(0, 6);
+      for (const idx of finalIndexes) {
+        const t = Math.round(temps[idx]);
+        hourly.push({ hour: `${String(times[idx]).slice(11, 13)}:00`, temp: t > 0 ? `+${t}` : `${t}`, icon: weatherIconFromCode(codes[idx] ?? code) });
+      }
+    }
+
+    const temp = Math.round(data.current.temperature_2m);
+    const dailyMax = Array.isArray(data.daily?.temperature_2m_max) ? Math.round(data.daily.temperature_2m_max[0]) : null;
+    const dailyMin = Array.isArray(data.daily?.temperature_2m_min) ? Math.round(data.daily.temperature_2m_min[0]) : null;
+
+    return {
+      temp: temp > 0 ? `+${temp}` : `${temp}`,
+      icon: weatherIconFromCode(code),
+      cityLabel: String(place.name || normalizedCity).trim(),
+      timezone: tz,
+      dailyMax: typeof dailyMax === 'number' ? (dailyMax > 0 ? `+${dailyMax}` : `${dailyMax}`) : null,
+      dailyMin: typeof dailyMin === 'number' ? (dailyMin > 0 ? `+${dailyMin}` : `${dailyMin}`) : null,
+      hourly
+    };
+  } catch (e) { return null; }
+}
+
 function getConfig(query) {
   const preset = PHONE_PRESETS[query.model] || PHONE_PRESETS.iphone_15;
-  
   let themeObj;
   if (query.theme === 'custom_palette') {
     themeObj = {
       name: 'Custom',
-      bg: query.c_bg || '#0a0d12',
-      panel: query.c_panel || '#131823',
-      text: query.c_text || '#edf2ff',
-      muted: query.c_muted || '#8994a7',
-      accent: query.c_accent || '#ff8f2d',
-      accent2: query.c_accent2 || '#ffbc6f',
-      weekend: query.c_weekend || '#ff8f7b'
+      bg: query.c_bg || '#0a0d12', panel: query.c_panel || '#131823',
+      text: query.c_text || '#edf2ff', muted: query.c_muted || '#8994a7',
+      accent: query.c_accent || '#ff8f2d', accent2: query.c_accent2 || '#ffbc6f', weekend: query.c_weekend || '#ff8f7b'
     };
   } else {
     themeObj = THEMES[query.theme] || THEMES.graphite_orange;
   }
-
-  // Fallbacks для старых названий
-  let rawBg = query.bg_style || 'aurora';
-  if(rawBg === 'glass') rawBg = 'liquid_glass';
-  if(rawBg === 'mesh') rawBg = 'carbon';
-  if(rawBg === 'grain_light') rawBg = 'paper';
+  let rawBg = query.bg_style || 'mesh_organic';
+  if(rawBg === 'glass') rawBg = 'liquid_glass'; if(rawBg === 'mesh') rawBg = 'carbon'; if(rawBg === 'grain_light') rawBg = 'paper';
 
   return {
     model: query.model || 'iphone_15',
@@ -194,378 +240,96 @@ function getConfig(query) {
     height: query.model === 'custom' ? clamp(num(query.height, preset.height), 568, 5000) : preset.height,
     font: FONTS[query.font] ? query.font : 'inter',
     style: query.style || 'numbers',
-    calendarSize: query.calendar_size || 'balanced',
     monthLayout: query.month_layout || 'grid_3x4',
     weekendMode: query.weekend_mode || 'weekends_only',
-    opacity: clamp(num(query.opacity, 8), 0, 60),
     themeObj: themeObj,
-    bgStyle: BG_STYLES[rawBg] ? rawBg : 'aurora',
+    bgStyle: BG_STYLES[rawBg] ? rawBg : 'mesh_organic',
     lang: query.lang === 'en' ? 'en' : 'ru',
     timezone: clamp(num(query.timezone, 3), -12, 14),
-    footer: query.footer || 'year_summary',
-    note: (query.note || '').slice(0, 80),
-    showWeekdays: String(query.show_weekdays || '1') === '1',
-    accentToday: String(query.accent_today || '1') === '1',
-    showProgressRing: String(query.show_progress_ring || '1') === '1',
-    showWeekNumbers: String(query.show_week_numbers || '0') === '1',
-    quarterDividers: String(query.quarter_dividers || '1') === '1',
-    monthBadges: String(query.month_badges || '1') === '1',
-    focusCurrentMonth: String(query.focus_current_month || '1') === '1',
-    lockscreenSafe: String(query.lockscreen_safe || '1') === '1',
-    pngSafeFont: query.__target === 'png'
+    footer: query.footer || 'year_summary', note: (query.note || '').slice(0, 120),
+    events: query.events || '', city: String(query.city || '').split(',')[0].trim(),
+    eventColor: query.c_event || themeObj.accent,
+    showWeekdays: String(query.show_weekdays || '1') === '1', accentToday: String(query.accent_today || '1') === '1',
+    showProgressRing: String(query.show_progress_ring || '1') === '1', showWeekNumbers: String(query.show_week_numbers || '0') === '1',
+    quarterDividers: String(query.quarter_dividers || '1') === '1', monthBadges: String(query.month_badges || '1') === '1',
+    focusCurrentMonth: String(query.focus_current_month || '1') === '1', lockscreenSafe: String(query.lockscreen_safe || '1') === '1',
+    showHeaderMeta: String(query.show_header_meta || '1') === '1', strongWeekendTint: String(query.strong_weekend_tint || '1') === '1',
+    glassPanels: String(query.glass_panels || '1') === '1', pngSafeFont: query.__target === 'png'
   };
 }
-function zonedNow(offsetHours) { return dayjs.utc().add(offsetHours, 'hour'); }
+
 function yearStats(now) {
   const daysInYear = now.isLeapYear() ? 366 : 365;
   const dayOfYear = now.diff(dayjs(`${now.year()}-01-01`), 'day') + 1;
-  const daysLeft = daysInYear - dayOfYear;
-  return { dayOfYear, daysInYear, daysLeft, percentPassed: Math.round((dayOfYear / daysInYear) * 100) };
+  return { dayOfYear, daysInYear, daysLeft: daysInYear - dayOfYear, percentPassed: Math.round((dayOfYear / daysInYear) * 100) };
+}
+
+function findNearestEvent(cfg, now, labels) {
+  if (!cfg.eventsMap) return null;
+  let best = null;
+  for (const [mmdd, title] of Object.entries(cfg.eventsMap)) {
+    const [m, d] = mmdd.split('-').map(Number);
+    let candidate = now.year(now.year()).month(m - 1).date(d).hour(12).minute(0).second(0);
+    if (candidate.isBefore(now, 'day')) candidate = candidate.add(1, 'year');
+    const diff = candidate.startOf('day').diff(now.startOf('day'), 'day');
+    if (!best || diff < best.diff) best = { title, diff, date: candidate, label: `${d} ${labels.months[m - 1].toLowerCase?.() || labels.months[m - 1]}` };
+  }
+  return best;
+}
+
+function getSeasonLabel(lang, monthIndex) {
+  if (lang === 'ru') {
+    if ([11,0,1].includes(monthIndex)) return 'Зима'; if ([2,3,4].includes(monthIndex)) return 'Весна';
+    if ([5,6,7].includes(monthIndex)) return 'Лето'; return 'Осень';
+  }
+  if ([11,0,1].includes(monthIndex)) return 'Winter'; if ([2,3,4].includes(monthIndex)) return 'Spring';
+  if ([5,6,7].includes(monthIndex)) return 'Summer'; return 'Autumn';
+}
+
+function weatherSummary(cfg, lang) {
+  if (!cfg.weatherData) return lang === 'ru' ? 'Погода не выбрана' : 'No city weather';
+  const city = String(cfg.weatherData.cityLabel || '').trim();
+  const hiLo = cfg.weatherData.dailyMax && cfg.weatherData.dailyMin ? ` · ${cfg.weatherData.dailyMax} / ${cfg.weatherData.dailyMin}` : '';
+  return `${cfg.weatherData.icon} ${cfg.weatherData.temp}°C${hiLo}${city ? ` · ${city}` : ''}`.trim();
 }
 
 function getSafeInsets(cfg, width, height) {
   const baseSide = Math.round(width * 0.035);
-  if (!cfg.lockscreenSafe) {
-    return { top: baseSide, bottom: baseSide, side: baseSide };
-  }
-  const top = Math.round(height * 0.165 + width * 0.04);
-  const bottom = Math.round(height * 0.105 + width * 0.03);
-  return { top, bottom, side: baseSide };
+  if (!cfg.lockscreenSafe) return { top: baseSide, bottom: baseSide, side: baseSide };
+  return { top: Math.round(height * 0.165 + width * 0.04), bottom: Math.round(height * 0.105 + width * 0.03), side: baseSide };
 }
 
-function randomQuote(lang, year) { const arr = QUOTES[lang] || QUOTES.ru; return arr[year % arr.length]; }
-function wrap(text, maxLen) {
-  const words = String(text).split(/\s+/);
-  const lines = [];
-  let line = '';
-  for (const word of words) {
-    if ((line + ' ' + word).trim().length <= maxLen) line = (line + ' ' + word).trim();
-    else { if (line) lines.push(line); line = word; }
-  }
-  if (line) lines.push(line);
-  return lines;
-}
-function formatDateLine(now, labels, lang) {
-  return lang === 'ru'
-    ? `${labels.today}: ${now.date()} ${labels.months[now.month()].toLowerCase()}`
-    : `${labels.today}: ${labels.months[now.month()]} ${now.date()}`;
-}
-function formatLongToday(now, labels, lang) {
-  const wd = labels.weekdaysFull[(now.day() + 6) % 7];
-  return lang === 'ru'
-    ? `${wd}, ${now.date()} ${labels.months[now.month()].toLowerCase()}`
-    : `${wd}, ${labels.months[now.month()]} ${now.date()}`;
-}
-
-// --------------------------------------------------------
-// ДВИЖОК РЕАЛИСТИЧНЫХ ТЕКСТУР (ПРОЦЕДУРНЫЙ SVG)
-// --------------------------------------------------------
 function renderBackground(cfg, theme, width, height) {
   const bgType = cfg.bgStyle;
-
-  // Базовые фильтры процедурного шума (совместимы с Resvg)
-  // Мы используем feColorMatrix для конвертации фрактального шума в точные карты прозрачности.
   const proceduralFilters = `
-    <filter id="tex_paper" x="0" y="0" width="100%" height="100%">
-      <feTurbulence type="fractalNoise" baseFrequency="0.008" numOctaves="5" result="noise"/>
-      <feColorMatrix type="matrix" values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  1 0 0 0 0" in="noise"/>
-      <feComponentTransfer><feFuncA type="linear" slope="0.12"/></feComponentTransfer>
-    </filter>
-
-    <filter id="tex_stone" x="0" y="0" width="100%" height="100%">
-      <feTurbulence type="fractalNoise" baseFrequency="0.02" numOctaves="6" result="noise"/>
-      <feColorMatrix type="matrix" values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  1 0 0 0 0" in="noise"/>
-      <feComponentTransfer><feFuncA type="linear" slope="0.25"/></feComponentTransfer>
-    </filter>
-
-    <filter id="tex_metal" x="0" y="0" width="100%" height="100%">
-      <feTurbulence type="fractalNoise" baseFrequency="0.001 0.4" numOctaves="3" result="noise"/>
-      <feColorMatrix type="matrix" values="0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  1 0 0 0 0" in="noise"/>
-      <feComponentTransfer><feFuncA type="linear" slope="0.15"/></feComponentTransfer>
-    </filter>
-    
-    <filter id="tex_static" x="0" y="0" width="100%" height="100%">
-      <feTurbulence type="fractalNoise" baseFrequency="0.8" numOctaves="2" result="noise"/>
-      <feColorMatrix type="matrix" values="0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  1 0 0 0 0" in="noise"/>
-      <feComponentTransfer><feFuncA type="linear" slope="0.06"/></feComponentTransfer>
-    </filter>
+    <filter id="tex_paper" x="0" y="0" width="100%" height="100%"><feTurbulence type="fractalNoise" baseFrequency="0.008" numOctaves="5" result="noise"/><feColorMatrix type="matrix" values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  1 0 0 0 0" in="noise"/><feComponentTransfer><feFuncA type="linear" slope="0.12"/></feComponentTransfer></filter>
+    <filter id="tex_stone" x="0" y="0" width="100%" height="100%"><feTurbulence type="fractalNoise" baseFrequency="0.02" numOctaves="6" result="noise"/><feColorMatrix type="matrix" values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  1 0 0 0 0" in="noise"/><feComponentTransfer><feFuncA type="linear" slope="0.25"/></feComponentTransfer></filter>
+    <filter id="tex_metal" x="0" y="0" width="100%" height="100%"><feTurbulence type="fractalNoise" baseFrequency="0.001 0.4" numOctaves="3" result="noise"/><feColorMatrix type="matrix" values="0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  1 0 0 0 0" in="noise"/><feComponentTransfer><feFuncA type="linear" slope="0.15"/></feComponentTransfer></filter>
+    <filter id="tex_static" x="0" y="0" width="100%" height="100%"><feTurbulence type="fractalNoise" baseFrequency="0.8" numOctaves="2" result="noise"/><feColorMatrix type="matrix" values="0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  1 0 0 0 0" in="noise"/><feComponentTransfer><feFuncA type="linear" slope="0.06"/></feComponentTransfer></filter>
   `;
 
-  if (bgType === 'paper') {
-    return `
-      <defs>
-        ${proceduralFilters}
-        <linearGradient id="p_grad" x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0%" stop-color="${theme.bg}"/>
-          <stop offset="100%" stop-color="${alpha(theme.panel, 0.8)}"/>
-        </linearGradient>
-        <radialGradient id="p_vignette" cx="50%" cy="50%" r="75%">
-          <stop offset="60%" stop-color="#000000" stop-opacity="0"/>
-          <stop offset="100%" stop-color="#000000" stop-opacity="0.25"/>
-        </radialGradient>
-      </defs>
-      <rect width="100%" height="100%" fill="url(#p_grad)"/>
-      <rect width="100%" height="100%" filter="url(#tex_paper)"/>
-      <rect width="100%" height="100%" fill="url(#p_vignette)"/>`;
-  }
+  if (bgType === 'mesh_organic') return `<defs><radialGradient id="mo1" cx="20%" cy="10%" r="65%"><stop offset="0%" stop-color="${alpha(theme.accent, 0.45)}"/><stop offset="100%" stop-color="${alpha(theme.bg, 0)}"/></radialGradient><radialGradient id="mo2" cx="80%" cy="75%" r="75%"><stop offset="0%" stop-color="${alpha(theme.accent2, 0.4)}"/><stop offset="100%" stop-color="${alpha(theme.bg, 0)}"/></radialGradient><radialGradient id="mo3" cx="65%" cy="25%" r="60%"><stop offset="0%" stop-color="${alpha(theme.panel, 0.95)}"/><stop offset="100%" stop-color="${alpha(theme.bg, 0)}"/></radialGradient><radialGradient id="mo4" cx="15%" cy="85%" r="70%"><stop offset="0%" stop-color="${alpha(theme.accent, 0.25)}"/><stop offset="100%" stop-color="${alpha(theme.bg, 0)}"/></radialGradient></defs><rect width="100%" height="100%" fill="${theme.bg}"/><rect width="100%" height="100%" fill="url(#mo1)"/><rect width="100%" height="100%" fill="url(#mo2)"/><rect width="100%" height="100%" fill="url(#mo3)"/><rect width="100%" height="100%" fill="url(#mo4)"/><rect width="100%" height="100%" fill="${alpha(theme.bg, 0.1)}" opacity="0.5"/>`;
+  if (bgType === 'paper') return `<defs>${proceduralFilters}<linearGradient id="p_grad" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="${theme.bg}"/><stop offset="100%" stop-color="${alpha(theme.panel, 0.8)}"/></linearGradient><radialGradient id="p_vignette" cx="50%" cy="50%" r="75%"><stop offset="60%" stop-color="#000000" stop-opacity="0"/><stop offset="100%" stop-color="#000000" stop-opacity="0.25"/></radialGradient></defs><rect width="100%" height="100%" fill="url(#p_grad)"/><rect width="100%" height="100%" filter="url(#tex_paper)"/><rect width="100%" height="100%" fill="url(#p_vignette)"/>`;
+  if (bgType === 'stone') return `<defs>${proceduralFilters}<radialGradient id="s_vignette" cx="50%" cy="50%" r="80%"><stop offset="40%" stop-color="#000000" stop-opacity="0"/><stop offset="100%" stop-color="#000000" stop-opacity="0.4"/></radialGradient><radialGradient id="s_spot1" cx="20%" cy="10%" r="50%"><stop offset="0%" stop-color="${alpha(theme.panel, 0.6)}"/><stop offset="100%" stop-color="${alpha(theme.panel, 0)}"/></radialGradient><radialGradient id="s_spot2" cx="80%" cy="80%" r="60%"><stop offset="0%" stop-color="${alpha(theme.accent, 0.1)}"/><stop offset="100%" stop-color="${alpha(theme.accent, 0)}"/></radialGradient></defs><rect width="100%" height="100%" fill="${theme.bg}"/><rect width="100%" height="100%" fill="url(#s_spot1)"/><rect width="100%" height="100%" fill="url(#s_spot2)"/><rect width="100%" height="100%" filter="url(#tex_stone)"/><rect width="100%" height="100%" fill="url(#s_vignette)"/>`;
+  if (bgType === 'metal') return `<defs>${proceduralFilters}<linearGradient id="m_base" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="${theme.panel}"/><stop offset="30%" stop-color="${theme.bg}"/><stop offset="50%" stop-color="${theme.panel}"/><stop offset="70%" stop-color="${theme.bg}"/><stop offset="100%" stop-color="${theme.panel}"/></linearGradient><linearGradient id="m_shade" x1="0%" y1="0%" x2="100%" y2="0%"><stop offset="0%" stop-color="#000000" stop-opacity="0.3"/><stop offset="20%" stop-color="#000000" stop-opacity="0"/><stop offset="80%" stop-color="#000000" stop-opacity="0"/><stop offset="100%" stop-color="#000000" stop-opacity="0.3"/></linearGradient></defs><rect width="100%" height="100%" fill="url(#m_base)"/><rect width="100%" height="100%" filter="url(#tex_metal)"/><polygon points="0,${height*0.1} ${width},${height*0.55} ${width},${height*0.7} 0,${height*0.25}" fill="${alpha('#ffffff', 0.05)}"/><rect width="100%" height="100%" fill="url(#m_shade)"/>`;
+  if (bgType === 'carbon') { const cs = Math.max(16, Math.round(width * 0.015)); return `<defs><pattern id="carbon_mesh" width="${cs}" height="${cs}" patternUnits="userSpaceOnUse"><rect x="0" y="0" width="${cs/2}" height="${cs/2}" fill="${alpha(theme.panel, 0.7)}"/><rect x="${cs/2}" y="${cs/2}" width="${cs/2}" height="${cs/2}" fill="${alpha(theme.panel, 0.4)}"/><rect x="0" y="${cs/2}" width="${cs/2}" height="${cs/2}" fill="${alpha('#000000', 0.3)}"/><rect x="${cs/2}" y="0" width="${cs/2}" height="${cs/2}" fill="${alpha('#000000', 0.5)}"/></pattern><radialGradient id="c_glow" cx="50%" cy="10%" r="80%"><stop offset="0%" stop-color="${alpha(theme.accent, 0.15)}"/><stop offset="100%" stop-color="${alpha(theme.bg, 0)}"/></radialGradient><radialGradient id="c_shade" cx="50%" cy="50%" r="80%"><stop offset="40%" stop-color="#000000" stop-opacity="0"/><stop offset="100%" stop-color="#000000" stop-opacity="0.5"/></radialGradient></defs><rect width="100%" height="100%" fill="${theme.bg}"/><rect width="100%" height="100%" fill="url(#carbon_mesh)"/><rect width="100%" height="100%" fill="url(#c_glow)"/><rect width="100%" height="100%" fill="url(#c_shade)"/>`; }
+  if (bgType === 'liquid_glass') return `<defs>${proceduralFilters}<radialGradient id="g_blob1" cx="15%" cy="15%" r="60%"><stop offset="0%" stop-color="${alpha(theme.accent, 0.35)}"/><stop offset="100%" stop-color="${alpha(theme.accent, 0)}"/></radialGradient><radialGradient id="g_blob2" cx="85%" cy="85%" r="70%"><stop offset="0%" stop-color="${alpha(theme.accent2, 0.25)}"/><stop offset="100%" stop-color="${alpha(theme.accent2, 0)}"/></radialGradient><radialGradient id="g_blob3" cx="60%" cy="30%" r="45%"><stop offset="0%" stop-color="${alpha(theme.panel, 0.9)}"/><stop offset="100%" stop-color="${alpha(theme.panel, 0)}"/></radialGradient><linearGradient id="g_sheen" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="${alpha('#ffffff', 0.1)}"/><stop offset="35%" stop-color="${alpha('#ffffff', 0)}"/><stop offset="65%" stop-color="${alpha('#ffffff', 0)}"/><stop offset="100%" stop-color="${alpha('#000000', 0.25)}"/></linearGradient></defs><rect width="100%" height="100%" fill="${theme.bg}"/><rect width="100%" height="100%" fill="url(#g_blob1)"/><rect width="100%" height="100%" fill="url(#g_blob2)"/><rect width="100%" height="100%" fill="url(#g_blob3)"/><rect width="100%" height="100%" fill="url(#g_sheen)"/><rect width="100%" height="100%" filter="url(#tex_static)" opacity="0.6"/>`;
+  if (bgType === 'spotlight') return `<defs><radialGradient id="spot1" cx="50%" cy="0%" r="90%"><stop offset="0%" stop-color="${alpha(theme.accent2, 0.22)}"/><stop offset="25%" stop-color="${alpha(theme.accent, 0.15)}"/><stop offset="60%" stop-color="${theme.bg}"/></radialGradient></defs><rect width="100%" height="100%" fill="${theme.bg}"/><rect width="100%" height="100%" fill="url(#spot1)"/>`;
+  if (bgType === 'waves') return `<defs>${proceduralFilters}</defs><rect width="100%" height="100%" fill="${theme.bg}"/><path d="M0,${height*0.25} C${width*0.4},${height*0.05} ${width*0.6},${height*0.45} ${width},${height*0.2} L${width},0 L0,0 Z" fill="${alpha(theme.panel, 0.8)}"/><path d="M0,${height*0.27} C${width*0.4},${height*0.07} ${width*0.6},${height*0.47} ${width},${height*0.22}" fill="none" stroke="${theme.accent}" stroke-width="2" opacity="0.6"/><path d="M0,${height*0.75} C${width*0.3},${height*0.95} ${width*0.7},${height*0.6} ${width},${height*0.8} L${width},${height} L0,${height} Z" fill="${alpha(theme.panel, 0.6)}"/><path d="M0,${height*0.73} C${width*0.3},${height*0.93} ${width*0.7},${height*0.58} ${width},${height*0.78}" fill="none" stroke="${theme.accent2}" stroke-width="1.5" opacity="0.5"/><rect width="100%" height="100%" filter="url(#tex_static)" opacity="0.3"/>`;
+  if (bgType === 'topography') return `<defs>${proceduralFilters}</defs><rect width="100%" height="100%" fill="${theme.bg}"/><g stroke="${alpha(theme.accent, 0.18)}" fill="none" stroke-width="1.5"><path d="M -${width*0.2} ${height*0.1} Q ${width*0.4} ${height*0.3}, ${width*1.2} -${height*0.1}"/><path d="M -${width*0.2} ${height*0.14} Q ${width*0.4} ${height*0.34}, ${width*1.2} -${height*0.06}"/><path d="M -${width*0.2} ${height*0.18} Q ${width*0.4} ${height*0.38}, ${width*1.2} -${height*0.02}"/></g><g stroke="${alpha(theme.accent2, 0.12)}" fill="none" stroke-width="1"><path d="M -${width*0.2} ${height*0.8} Q ${width*0.6} ${height*0.6}, ${width*1.2} ${height*1.1}"/><path d="M -${width*0.2} ${height*0.84} Q ${width*0.6} ${height*0.64}, ${width*1.2} ${height*1.14}"/><path d="M -${width*0.2} ${height*0.88} Q ${width*0.6} ${height*0.68}, ${width*1.2} ${height*1.18}"/></g><circle cx="${width*0.85}" cy="${height*0.15}" r="${width*0.25}" fill="none" stroke="${alpha(theme.panel, 0.6)}" stroke-width="15"/><circle cx="${width*0.85}" cy="${height*0.15}" r="${width*0.32}" fill="none" stroke="${alpha(theme.panel, 0.3)}" stroke-width="1"/><rect width="100%" height="100%" filter="url(#tex_static)" opacity="0.4"/>`;
+  if (bgType === 'bloom') return `<defs><radialGradient id="b1" cx="10%" cy="40%" r="70%"><stop offset="0%" stop-color="${alpha(theme.accent2, 0.22)}"/><stop offset="100%" stop-color="${alpha(theme.bg, 0)}"/></radialGradient><radialGradient id="b2" cx="90%" cy="90%" r="80%"><stop offset="0%" stop-color="${alpha(theme.accent, 0.18)}"/><stop offset="100%" stop-color="${alpha(theme.bg, 0)}"/></radialGradient></defs><rect width="100%" height="100%" fill="${theme.bg}"/><rect width="100%" height="100%" fill="url(#b1)"/><rect width="100%" height="100%" fill="url(#b2)"/>`;
+  if (bgType === 'diagonal') return `<rect width="100%" height="100%" fill="${theme.bg}"/><path d="M0,0 L${width*0.7},0 L0,${height*0.4} Z" fill="${alpha(theme.accent, 0.08)}"/><path d="M${width},${height} L${width*0.3},${height} L${width},${height*0.6} Z" fill="${alpha(theme.accent2, 0.06)}"/><line x1="0" y1="${height*0.3}" x2="${width}" y2="${height*0.8}" stroke="${alpha(theme.accent, 0.12)}" stroke-width="2"/><line x1="0" y1="${height*0.32}" x2="${width}" y2="${height*0.82}" stroke="${alpha(theme.accent, 0.05)}" stroke-width="1"/>`;
+  if (bgType === 'orbit') return `<rect width="100%" height="100%" fill="${theme.bg}"/><circle cx="50%" cy="35%" r="${width*0.45}" fill="none" stroke="${alpha(theme.accent, 0.1)}" stroke-width="${Math.max(1, width*0.003)}" stroke-dasharray="8 12"/><circle cx="50%" cy="35%" r="${width*0.65}" fill="none" stroke="${alpha(theme.accent2, 0.06)}" stroke-width="${Math.max(1, width*0.002)}"/><circle cx="50%" cy="35%" r="${width*0.85}" fill="none" stroke="${alpha(theme.accent, 0.04)}" stroke-width="${Math.max(2, width*0.005)}"/>`;
+  if (bgType === 'velvet') return `<defs>${proceduralFilters}<linearGradient id="v_grad" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="${theme.bg}"/><stop offset="40%" stop-color="${alpha(theme.panel, 0.9)}"/><stop offset="60%" stop-color="${theme.bg}"/><stop offset="85%" stop-color="${alpha(theme.panel, 0.9)}"/><stop offset="100%" stop-color="${theme.bg}"/></linearGradient></defs><rect width="100%" height="100%" fill="url(#v_grad)"/><rect width="100%" height="100%" filter="url(#tex_paper)" opacity="0.6"/>`;
+  if (bgType === 'noir') return `<defs><radialGradient id="vignette" cx="50%" cy="40%" r="95%"><stop offset="15%" stop-color="${alpha(theme.accent, 0.1)}"/><stop offset="50%" stop-color="${theme.bg}"/><stop offset="100%" stop-color="#000000"/></radialGradient></defs><rect width="100%" height="100%" fill="url(#vignette)"/>`;
+  if (bgType === 'static_noise') return `<defs>${proceduralFilters}<radialGradient id="sn_vignette" cx="50%" cy="50%" r="85%"><stop offset="0%" stop-color="${theme.bg}"/><stop offset="100%" stop-color="${alpha(theme.panel, 0.95)}"/></radialGradient></defs><rect width="100%" height="100%" fill="url(#sn_vignette)"/><rect width="100%" height="100%" filter="url(#tex_static)" opacity="1.2"/>`;
 
-  if (bgType === 'stone') {
-    return `
-      <defs>
-        ${proceduralFilters}
-        <radialGradient id="s_vignette" cx="50%" cy="50%" r="80%">
-          <stop offset="40%" stop-color="#000000" stop-opacity="0"/>
-          <stop offset="100%" stop-color="#000000" stop-opacity="0.4"/>
-        </radialGradient>
-        <radialGradient id="s_spot1" cx="20%" cy="10%" r="50%">
-          <stop offset="0%" stop-color="${alpha(theme.panel, 0.6)}"/>
-          <stop offset="100%" stop-color="${alpha(theme.panel, 0)}"/>
-        </radialGradient>
-        <radialGradient id="s_spot2" cx="80%" cy="80%" r="60%">
-          <stop offset="0%" stop-color="${alpha(theme.accent, 0.1)}"/>
-          <stop offset="100%" stop-color="${alpha(theme.accent, 0)}"/>
-        </radialGradient>
-      </defs>
-      <rect width="100%" height="100%" fill="${theme.bg}"/>
-      <rect width="100%" height="100%" fill="url(#s_spot1)"/>
-      <rect width="100%" height="100%" fill="url(#s_spot2)"/>
-      <rect width="100%" height="100%" filter="url(#tex_stone)"/>
-      <rect width="100%" height="100%" fill="url(#s_vignette)"/>`;
-  }
-
-  if (bgType === 'metal') {
-    return `
-      <defs>
-        ${proceduralFilters}
-        <linearGradient id="m_base" x1="0%" y1="0%" x2="100%" y2="100%">
-          <stop offset="0%" stop-color="${theme.panel}"/>
-          <stop offset="30%" stop-color="${theme.bg}"/>
-          <stop offset="50%" stop-color="${theme.panel}"/>
-          <stop offset="70%" stop-color="${theme.bg}"/>
-          <stop offset="100%" stop-color="${theme.panel}"/>
-        </linearGradient>
-      </defs>
-      <rect width="100%" height="100%" fill="url(#m_base)"/>
-      <rect width="100%" height="100%" filter="url(#tex_metal)"/>
-      <polygon points="0,${height*0.1} ${width},${height*0.55} ${width},${height*0.7} 0,${height*0.25}" fill="${alpha('#ffffff', 0.05)}"/>
-      <linearGradient id="m_shade" x1="0%" y1="0%" x2="100%" y2="0%">
-        <stop offset="0%" stop-color="#000000" stop-opacity="0.3"/>
-        <stop offset="20%" stop-color="#000000" stop-opacity="0"/>
-        <stop offset="80%" stop-color="#000000" stop-opacity="0"/>
-        <stop offset="100%" stop-color="#000000" stop-opacity="0.3"/>
-      </linearGradient>
-      <rect width="100%" height="100%" fill="url(#m_shade)"/>`;
-  }
-
-  if (bgType === 'carbon') {
-    const cs = Math.max(16, Math.round(width * 0.015));
-    return `
-      <defs>
-        <pattern id="carbon_mesh" width="${cs}" height="${cs}" patternUnits="userSpaceOnUse">
-          <rect x="0" y="0" width="${cs/2}" height="${cs/2}" fill="${alpha(theme.panel, 0.7)}"/>
-          <rect x="${cs/2}" y="${cs/2}" width="${cs/2}" height="${cs/2}" fill="${alpha(theme.panel, 0.4)}"/>
-          <rect x="0" y="${cs/2}" width="${cs/2}" height="${cs/2}" fill="${alpha('#000000', 0.3)}"/>
-          <rect x="${cs/2}" y="0" width="${cs/2}" height="${cs/2}" fill="${alpha('#000000', 0.5)}"/>
-        </pattern>
-        <radialGradient id="c_glow" cx="50%" cy="10%" r="80%">
-          <stop offset="0%" stop-color="${alpha(theme.accent, 0.15)}"/>
-          <stop offset="100%" stop-color="${alpha(theme.bg, 0)}"/>
-        </radialGradient>
-        <radialGradient id="c_shade" cx="50%" cy="50%" r="80%">
-          <stop offset="40%" stop-color="#000000" stop-opacity="0"/>
-          <stop offset="100%" stop-color="#000000" stop-opacity="0.5"/>
-        </radialGradient>
-      </defs>
-      <rect width="100%" height="100%" fill="${theme.bg}"/>
-      <rect width="100%" height="100%" fill="url(#carbon_mesh)"/>
-      <rect width="100%" height="100%" fill="url(#c_glow)"/>
-      <rect width="100%" height="100%" fill="url(#c_shade)"/>`;
-  }
-
-  if (bgType === 'liquid_glass') {
-    return `
-      <defs>
-        ${proceduralFilters}
-        <radialGradient id="g_blob1" cx="15%" cy="15%" r="60%">
-          <stop offset="0%" stop-color="${alpha(theme.accent, 0.35)}"/>
-          <stop offset="100%" stop-color="${alpha(theme.accent, 0)}"/>
-        </radialGradient>
-        <radialGradient id="g_blob2" cx="85%" cy="85%" r="70%">
-          <stop offset="0%" stop-color="${alpha(theme.accent2, 0.25)}"/>
-          <stop offset="100%" stop-color="${alpha(theme.accent2, 0)}"/>
-        </radialGradient>
-        <radialGradient id="g_blob3" cx="60%" cy="30%" r="45%">
-          <stop offset="0%" stop-color="${alpha(theme.panel, 0.9)}"/>
-          <stop offset="100%" stop-color="${alpha(theme.panel, 0)}"/>
-        </radialGradient>
-        <linearGradient id="g_sheen" x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0%" stop-color="${alpha('#ffffff', 0.1)}"/>
-          <stop offset="35%" stop-color="${alpha('#ffffff', 0)}"/>
-          <stop offset="65%" stop-color="${alpha('#ffffff', 0)}"/>
-          <stop offset="100%" stop-color="${alpha('#000000', 0.25)}"/>
-        </linearGradient>
-      </defs>
-      <rect width="100%" height="100%" fill="${theme.bg}"/>
-      <rect width="100%" height="100%" fill="url(#g_blob1)"/>
-      <rect width="100%" height="100%" fill="url(#g_blob2)"/>
-      <rect width="100%" height="100%" fill="url(#g_blob3)"/>
-      <rect width="100%" height="100%" fill="url(#g_sheen)"/>
-      <rect width="100%" height="100%" filter="url(#tex_static)" opacity="0.6"/>`;
-  }
-
-  if (bgType === 'spotlight') {
-    return `
-      <defs>
-        <radialGradient id="spot1" cx="50%" cy="0%" r="90%">
-          <stop offset="0%" stop-color="${alpha(theme.accent2, 0.22)}"/>
-          <stop offset="25%" stop-color="${alpha(theme.accent, 0.15)}"/>
-          <stop offset="60%" stop-color="${theme.bg}"/>
-        </radialGradient>
-      </defs>
-      <rect width="100%" height="100%" fill="${theme.bg}"/>
-      <rect width="100%" height="100%" fill="url(#spot1)"/>`;
-  }
-
-  if (bgType === 'waves') {
-    return `
-      <defs>
-        ${proceduralFilters}
-      </defs>
-      <rect width="100%" height="100%" fill="${theme.bg}"/>
-      <path d="M0,${height*0.25} C${width*0.4},${height*0.05} ${width*0.6},${height*0.45} ${width},${height*0.2} L${width},0 L0,0 Z" fill="${alpha(theme.panel, 0.8)}"/>
-      <path d="M0,${height*0.27} C${width*0.4},${height*0.07} ${width*0.6},${height*0.47} ${width},${height*0.22}" fill="none" stroke="${theme.accent}" stroke-width="2" opacity="0.6"/>
-      <path d="M0,${height*0.75} C${width*0.3},${height*0.95} ${width*0.7},${height*0.6} ${width},${height*0.8} L${width},${height} L0,${height} Z" fill="${alpha(theme.panel, 0.6)}"/>
-      <path d="M0,${height*0.73} C${width*0.3},${height*0.93} ${width*0.7},${height*0.58} ${width},${height*0.78}" fill="none" stroke="${theme.accent2}" stroke-width="1.5" opacity="0.5"/>
-      <rect width="100%" height="100%" filter="url(#tex_static)" opacity="0.3"/>`;
-  }
-
-  if (bgType === 'topography') {
-    return `
-      <defs>
-        ${proceduralFilters}
-      </defs>
-      <rect width="100%" height="100%" fill="${theme.bg}"/>
-      <g stroke="${alpha(theme.accent, 0.18)}" fill="none" stroke-width="1.5">
-        <path d="M -${width*0.2} ${height*0.1} Q ${width*0.4} ${height*0.3}, ${width*1.2} -${height*0.1}"/>
-        <path d="M -${width*0.2} ${height*0.14} Q ${width*0.4} ${height*0.34}, ${width*1.2} -${height*0.06}"/>
-        <path d="M -${width*0.2} ${height*0.18} Q ${width*0.4} ${height*0.38}, ${width*1.2} -${height*0.02}"/>
-      </g>
-      <g stroke="${alpha(theme.accent2, 0.12)}" fill="none" stroke-width="1">
-        <path d="M -${width*0.2} ${height*0.8} Q ${width*0.6} ${height*0.6}, ${width*1.2} ${height*1.1}"/>
-        <path d="M -${width*0.2} ${height*0.84} Q ${width*0.6} ${height*0.64}, ${width*1.2} ${height*1.14}"/>
-        <path d="M -${width*0.2} ${height*0.88} Q ${width*0.6} ${height*0.68}, ${width*1.2} ${height*1.18}"/>
-      </g>
-      <circle cx="${width*0.85}" cy="${height*0.15}" r="${width*0.25}" fill="none" stroke="${alpha(theme.panel, 0.6)}" stroke-width="15"/>
-      <circle cx="${width*0.85}" cy="${height*0.15}" r="${width*0.32}" fill="none" stroke="${alpha(theme.panel, 0.3)}" stroke-width="1"/>
-      <rect width="100%" height="100%" filter="url(#tex_static)" opacity="0.4"/>`;
-  }
-
-  if (bgType === 'bloom') {
-    return `
-      <defs>
-        <radialGradient id="b1" cx="10%" cy="40%" r="70%">
-          <stop offset="0%" stop-color="${alpha(theme.accent2, 0.22)}"/>
-          <stop offset="100%" stop-color="${alpha(theme.bg, 0)}"/>
-        </radialGradient>
-        <radialGradient id="b2" cx="90%" cy="90%" r="80%">
-          <stop offset="0%" stop-color="${alpha(theme.accent, 0.18)}"/>
-          <stop offset="100%" stop-color="${alpha(theme.bg, 0)}"/>
-        </radialGradient>
-      </defs>
-      <rect width="100%" height="100%" fill="${theme.bg}"/>
-      <rect width="100%" height="100%" fill="url(#b1)"/>
-      <rect width="100%" height="100%" fill="url(#b2)"/>`;
-  }
-
-  if (bgType === 'diagonal') {
-    return `
-      <rect width="100%" height="100%" fill="${theme.bg}"/>
-      <path d="M0,0 L${width*0.7},0 L0,${height*0.4} Z" fill="${alpha(theme.accent, 0.08)}"/>
-      <path d="M${width},${height} L${width*0.3},${height} L${width},${height*0.6} Z" fill="${alpha(theme.accent2, 0.06)}"/>
-      <line x1="0" y1="${height*0.3}" x2="${width}" y2="${height*0.8}" stroke="${alpha(theme.accent, 0.12)}" stroke-width="2"/>
-      <line x1="0" y1="${height*0.32}" x2="${width}" y2="${height*0.82}" stroke="${alpha(theme.accent, 0.05)}" stroke-width="1"/>
-    `;
-  }
-
-  if (bgType === 'orbit') {
-    return `
-      <rect width="100%" height="100%" fill="${theme.bg}"/>
-      <circle cx="50%" cy="35%" r="${width*0.45}" fill="none" stroke="${alpha(theme.accent, 0.1)}" stroke-width="${Math.max(1, width*0.003)}" stroke-dasharray="8 12"/>
-      <circle cx="50%" cy="35%" r="${width*0.65}" fill="none" stroke="${alpha(theme.accent2, 0.06)}" stroke-width="${Math.max(1, width*0.002)}"/>
-      <circle cx="50%" cy="35%" r="${width*0.85}" fill="none" stroke="${alpha(theme.accent, 0.04)}" stroke-width="${Math.max(2, width*0.005)}"/>
-    `;
-  }
-
-  if (bgType === 'velvet') {
-    return `
-      <defs>
-        ${proceduralFilters}
-        <linearGradient id="v_grad" x1="0%" y1="0%" x2="100%" y2="100%">
-          <stop offset="0%" stop-color="${theme.bg}"/>
-          <stop offset="40%" stop-color="${alpha(theme.panel, 0.9)}"/>
-          <stop offset="60%" stop-color="${theme.bg}"/>
-          <stop offset="85%" stop-color="${alpha(theme.panel, 0.9)}"/>
-          <stop offset="100%" stop-color="${theme.bg}"/>
-        </linearGradient>
-      </defs>
-      <rect width="100%" height="100%" fill="url(#v_grad)"/>
-      <rect width="100%" height="100%" filter="url(#tex_paper)" opacity="0.6"/>`;
-  }
-
-  if (bgType === 'noir') {
-    return `
-      <defs>
-        <radialGradient id="vignette" cx="50%" cy="40%" r="95%">
-          <stop offset="15%" stop-color="${alpha(theme.accent, 0.1)}"/>
-          <stop offset="50%" stop-color="${theme.bg}"/>
-          <stop offset="100%" stop-color="#000000"/>
-        </radialGradient>
-      </defs>
-      <rect width="100%" height="100%" fill="url(#vignette)"/>`;
-  }
-
-  if (bgType === 'static_noise') {
-    return `
-      <defs>
-        ${proceduralFilters}
-        <radialGradient id="sn_vignette" cx="50%" cy="50%" r="85%">
-          <stop offset="0%" stop-color="${theme.bg}"/>
-          <stop offset="100%" stop-color="${alpha(theme.panel, 0.95)}"/>
-        </radialGradient>
-      </defs>
-      <rect width="100%" height="100%" fill="url(#sn_vignette)"/>
-      <rect width="100%" height="100%" filter="url(#tex_static)" opacity="1.2"/>`;
-  }
-
-  // Default: Aurora (чистые, глубокие градиенты без жестких форм)
-  return `
-    <defs>
-      <radialGradient id="au1" cx="20%" cy="-10%" r="85%">
-        <stop offset="0%" stop-color="${alpha(theme.accent, 0.35)}"/>
-        <stop offset="100%" stop-color="${alpha(theme.bg, 0)}"/>
-      </radialGradient>
-      <radialGradient id="au2" cx="110%" cy="40%" r="75%">
-        <stop offset="0%" stop-color="${alpha(theme.accent2, 0.25)}"/>
-        <stop offset="100%" stop-color="${alpha(theme.bg, 0)}"/>
-      </radialGradient>
-      <radialGradient id="au3" cx="-10%" cy="110%" r="80%">
-        <stop offset="0%" stop-color="${alpha(theme.panel, 0.9)}"/>
-        <stop offset="100%" stop-color="${alpha(theme.bg, 0)}"/>
-      </radialGradient>
-    </defs>
-    <rect width="100%" height="100%" fill="${theme.bg}"/>
-    <rect width="100%" height="100%" fill="url(#au1)"/>
-    <rect width="100%" height="100%" fill="url(#au2)"/>
-    <rect width="100%" height="100%" fill="url(#au3)"/>`;
+  return `<defs><radialGradient id="au1" cx="20%" cy="-10%" r="85%"><stop offset="0%" stop-color="${alpha(theme.accent, 0.35)}"/><stop offset="100%" stop-color="${alpha(theme.bg, 0)}"/></radialGradient><radialGradient id="au2" cx="110%" cy="40%" r="75%"><stop offset="0%" stop-color="${alpha(theme.accent2, 0.25)}"/><stop offset="100%" stop-color="${alpha(theme.bg, 0)}"/></radialGradient><radialGradient id="au3" cx="-10%" cy="110%" r="80%"><stop offset="0%" stop-color="${alpha(theme.panel, 0.9)}"/><stop offset="100%" stop-color="${alpha(theme.bg, 0)}"/></radialGradient></defs><rect width="100%" height="100%" fill="${theme.bg}"/><rect width="100%" height="100%" fill="url(#au1)"/><rect width="100%" height="100%" fill="url(#au2)"/><rect width="100%" height="100%" fill="url(#au3)"/>`;
 }
 
+function isListLayout(layout) { return ['list_1x12','list_1x12_compact'].includes(layout); }
+function isCompactGridLayout(layout) { return ['grid_3x4_compact','grid_2x6','grid_6x2','single_month_focus'].includes(layout); }
 
-function isListLayout(layout) {
-  return ['list_1x12','list_1x12_compact'].includes(layout);
-}
-function isCompactGridLayout(layout) {
-  return ['grid_3x4_compact','grid_2x6','grid_6x2','single_month_focus'].includes(layout);
-}
 function getLayoutMetrics(cfg, width, height, contentH, sidePadding) {
   const presets = {
     grid_3x4: { cols: 3, rows: 4, gap: Math.round(width * 0.02), mode: 'grid' },
@@ -579,21 +343,9 @@ function getLayoutMetrics(cfg, width, height, contentH, sidePadding) {
   };
   const spec = presets[cfg.monthLayout] || presets.grid_3x4;
   if (spec.mode === 'focus') return { ...spec };
-  if (spec.mode === 'grid_6x2') {
-    const monthW = (width - sidePadding * 2 - spec.gap * (spec.cols - 1)) / spec.cols;
-    const monthH = (contentH - spec.gap * (spec.rows - 1)) / spec.rows;
-    return {
-      ...spec,
-      monthW,
-      monthH,
-      skinnyCols: 6,
-    };
-  }
-  return {
-    ...spec,
-    monthW: (width - sidePadding * 2 - spec.gap * (spec.cols - 1)) / spec.cols,
-    monthH: (contentH - spec.gap * (spec.rows - 1)) / spec.rows,
-  };
+  const monthW = (width - sidePadding * 2 - spec.gap * (spec.cols - 1)) / spec.cols;
+  const monthH = (contentH - spec.gap * (spec.rows - 1)) / spec.rows;
+  return { ...spec, monthW, monthH, skinnyCols: spec.mode === 'grid_6x2' ? 6 : undefined };
 }
 
 function getSafeFontStack(selectedFontFamily, pngSafeFont) {
@@ -614,16 +366,10 @@ function pickMonthLabel(labels, monthIndex, width, mode = 'grid') {
 
 function getMonthCardOptions(cfg, w, h) {
   const sixWide = cfg.monthLayout === 'grid_6x2';
-  const twoWide = cfg.monthLayout === 'grid_2x6';
-  const compactGrid = cfg.monthLayout === 'grid_3x4_compact';
-  const skinny = sixWide && w < 190;
   const tiny = sixWide || w < 180;
+  const compactGrid = cfg.monthLayout === 'grid_3x4_compact';
   return {
-    tiny,
-    skinny,
-    sixWide,
-    twoWide,
-    compactGrid,
+    tiny, skinny: sixWide && w < 190, sixWide, compactGrid,
     showWeekdays: cfg.showWeekdays && (!tiny || cfg.monthLayout === 'single_month_focus'),
     showBadge: cfg.monthBadges && !sixWide && w >= 185,
     padRatio: sixWide ? 0.028 : tiny ? 0.04 : compactGrid ? 0.045 : 0.055,
@@ -632,38 +378,40 @@ function getMonthCardOptions(cfg, w, h) {
 }
 
 function renderHeader(cfg, theme, labels, now, stats, width, padding, topY, FONT) {
-  const compact = isListLayout(cfg.monthLayout) || isCompactGridLayout(cfg.monthLayout) || cfg.monthLayout === 'single_month_focus';
-  const titleSize = Math.round(width * (compact ? 0.053 : 0.065));
-  const subtitleSize = Math.round(width * (compact ? 0.028 : 0.033));
-  const chipWidth = Math.round(width * (compact ? 0.2 : 0.24));
-  const chipHeight = Math.round(width * (compact ? 0.07 : 0.076));
-  const ringR = Math.round(width * (compact ? 0.03 : 0.04));
-  const ringCx = width - padding - ringR * 1.2;
-  const ringCy = topY + titleSize * 1.2;
-  const circumference = Math.PI * 2 * ringR;
-  const dash = circumference * (stats.percentPassed / 100);
-  const dateText = formatDateLine(now, labels, cfg.lang);
-  return `
-    <text x="${padding}" y="${topY + titleSize}" fill="${theme.text}" font-size="${titleSize}" font-family="${FONT}" font-weight="900" letter-spacing="-0.03em">${now.year()}</text>
-    <text x="${padding}" y="${topY + titleSize + subtitleSize * 1.8}" fill="${theme.muted}" font-size="${subtitleSize}" font-family="${FONT}">${escapeXml(dateText)}</text>
-    <rect x="${padding}" y="${topY + titleSize + subtitleSize * 2.55}" width="${chipWidth}" height="${chipHeight}" rx="${chipHeight / 2}" fill="${alpha(theme.panel, 0.92)}" stroke="${alpha(theme.accent2, 0.22)}"/>
-    <text x="${padding + chipWidth / 2}" y="${topY + titleSize + subtitleSize * 2.55 + chipHeight * 0.66}" text-anchor="middle" fill="${theme.accent2}" font-size="${Math.round(width * (compact ? 0.024 : 0.026))}" font-family="${FONT}" font-weight="700">${labels.week} ${now.week()}</text>
-    ${cfg.showProgressRing ? `
-      <circle cx="${ringCx}" cy="${ringCy}" r="${ringR}" fill="none" stroke="${alpha(theme.panel, 0.92)}" stroke-width="${ringR * 0.28}" />
-      <circle cx="${ringCx}" cy="${ringCy}" r="${ringR}" fill="none" stroke="${theme.accent}" stroke-width="${ringR * 0.28}" stroke-linecap="round" stroke-dasharray="${dash} ${circumference}" transform="rotate(-90 ${ringCx} ${ringCy})" />
-      <text x="${ringCx}" y="${ringCy + width * 0.01}" text-anchor="middle" fill="${theme.text}" font-size="${Math.round(width * 0.022)}" font-family="${FONT}" font-weight="800">${stats.percentPassed}%</text>` : ''}
-  `;
+  const subtitleSize = Math.round(width * 0.033);
+  const chipWidth = Math.round(width * 0.23);
+  const chipHeight = Math.round(width * 0.07);
+  const ringR = Math.round(width * 0.035);
+  const yearSize = Math.round(width * 0.075);
+  const yearY = topY + yearSize;
+  const dateText = cfg.lang === 'ru' ? `${labels.today}: ${now.date()} ${labels.months[now.month()].toLowerCase()}` : `${labels.today}: ${labels.months[now.month()]} ${now.date()}`;
+  
+  const yearSvg = `<text x="${width / 2}" y="${yearY}" text-anchor="middle" fill="${theme.text}" font-size="${yearSize}" font-family="${FONT}" font-weight="900" letter-spacing="-0.03em">${now.year()}</text>`;
+  const todaySvg = cfg.showHeaderMeta === false ? '' : `<text x="${padding}" y="${yearY - yearSize * 0.45}" fill="${theme.muted}" font-size="${subtitleSize}" font-family="${FONT}">${escapeXml(dateText)}</text>`;
+  const badgeSvg = cfg.showHeaderMeta === false ? '' : `<rect x="${padding}" y="${yearY - yearSize * 0.15}" width="${chipWidth}" height="${chipHeight}" rx="${chipHeight / 2}" fill="${alpha(theme.panel, 0.92)}" stroke="${alpha(theme.accent2, 0.22)}"/><text x="${padding + chipWidth / 2}" y="${yearY - yearSize * 0.15 + chipHeight * 0.66}" text-anchor="middle" fill="${theme.accent2}" font-size="${Math.round(width * 0.024)}" font-family="${FONT}" font-weight="700">${labels.week} ${now.week()}</text>`;
+
+  let rightSvg = '';
+  if (cfg.weatherData) {
+    const weatherX = width - padding;
+    const weatherY = yearY - yearSize * 0.42;
+    const cityLabel = String(cfg.weatherData.cityLabel || '').split(',')[0].trim();
+    rightSvg += `<text x="${weatherX}" y="${weatherY}" text-anchor="end" fill="${theme.text}" font-size="${subtitleSize * 1.42}" font-family="${FONT}" font-weight="700">${cfg.weatherData.temp}°C ${cfg.weatherData.icon}</text>`;
+    if (cityLabel) rightSvg += `<text x="${weatherX}" y="${weatherY + subtitleSize * 1.15}" text-anchor="end" fill="${theme.muted}" font-size="${Math.round(subtitleSize * 0.9)}" font-family="${FONT}" font-weight="600">${escapeXml(cityLabel.length > 18 ? cityLabel.slice(0,17)+'…' : cityLabel)}</text>`;
+  } else if (cfg.showProgressRing && stats) {
+    const ringCx = width - padding - ringR;
+    const ringCy = yearY - yearSize * 0.25;
+    const dash = (Math.PI * 2 * ringR) * (stats.percentPassed / 100);
+    rightSvg += `<circle cx="${ringCx}" cy="${ringCy}" r="${ringR}" fill="none" stroke="${alpha(theme.panel, 0.92)}" stroke-width="${ringR * 0.28}" /><circle cx="${ringCx}" cy="${ringCy}" r="${ringR}" fill="none" stroke="${theme.accent}" stroke-width="${ringR * 0.28}" stroke-linecap="round" stroke-dasharray="${dash} ${Math.PI * 2 * ringR}" transform="rotate(-90 ${ringCx} ${ringCy})" /><text x="${ringCx}" y="${ringCy + width * 0.008}" text-anchor="middle" fill="${theme.text}" font-size="${Math.round(width * 0.02)}" font-family="${FONT}" font-weight="800">${stats.percentPassed}%</text>`;
+  }
+  return yearSvg + todaySvg + badgeSvg + rightSvg;
 }
 
 function isRestDayFactory(cfg, year) {
-  const productionHolidays = new Set([
-    `${year}-01-01`, `${year}-01-02`, `${year}-01-03`, `${year}-01-04`, `${year}-01-05`, `${year}-01-06`, `${year}-01-07`, `${year}-01-08`,
-    `${year}-02-23`, `${year}-03-08`, `${year}-05-01`, `${year}-05-09`, `${year}-06-12`, `${year}-11-04`
-  ]);
+  const holidays = new Set([`${year}-01-01`,`${year}-01-02`,`${year}-01-03`,`${year}-01-04`,`${year}-01-05`,`${year}-01-06`,`${year}-01-07`,`${year}-01-08`,`${year}-02-23`,`${year}-03-08`,`${year}-05-01`,`${year}-05-09`,`${year}-06-12`,`${year}-11-04`]);
   return (date) => {
     if (cfg.weekendMode === 'none') return false;
     const weekend = date.day() === 0 || date.day() === 6;
-    if (cfg.weekendMode === 'production') return weekend || productionHolidays.has(date.format('YYYY-MM-DD'));
+    if (cfg.weekendMode === 'production') return weekend || holidays.has(date.format('YYYY-MM-DD'));
     return weekend;
   };
 }
@@ -679,198 +427,182 @@ function renderMonthGrid({ monthIndex, year, x, y, w, h, cfg, theme, labels, now
   const emphasis = cfg.focusCurrentMonth && isCurrent ? (dense ? 1.03 : 1.06) : 1;
   const radius = opts.radius;
   const pad = Math.round(w * (focusHero ? 0.04 : opts.padRatio));
-  const cols = 7;
-  const weekNumberCol = cfg.showWeekNumbers && !opts.tiny && !focusHero ? 1 : 0;
-  const innerW = w - pad * 2;
-  const cellW = innerW / (cols + weekNumberCol);
-  const rows = 6;
-  const weekdayVisible = opts.showWeekdays;
+  const cellW = (w - pad * 2) / (7 + (cfg.showWeekNumbers && !opts.tiny && !focusHero ? 1 : 0));
   const titleLabel = pickMonthLabel(labels, monthIndex, w, focusHero ? 'focus' : (opts.skinny ? 'skinny' : 'grid'));
-  const showInlineTitle = focusHero;
   const titleSize = Math.min(Math.round(h * (focusHero ? 0.11 : opts.sixWide ? 0.09 : dense ? 0.10 : 0.12)), Math.round(w * (focusHero ? 0.13 : opts.sixWide ? 0.11 : dense ? 0.14 : 0.16))) * emphasis;
-  const titleY = showInlineTitle ? (y + pad + titleSize * 0.80) : (y + pad + titleSize * 0.75);
-  const weekdaySize = Math.min(Math.round(cellW * (focusHero ? 0.34 : opts.sixWide ? 0.30 : dense ? 0.4 : 0.5)), Math.round(h * (focusHero ? 0.044 : opts.sixWide ? 0.032 : dense ? 0.048 : 0.058)));
-  const topBand = weekdayVisible
-    ? h * (focusHero ? 0.40 : opts.sixWide ? 0.20 : dense ? 0.245 : 0.285)
-    : h * (focusHero ? 0.18 : opts.sixWide ? 0.14 : dense ? 0.17 : 0.20);
-  const bottomPad = h * (focusHero ? 0.06 : opts.sixWide ? 0.06 : dense ? 0.06 : 0.075);
-  const cellHReal = Math.max(8, (h - topBand - bottomPad) / rows);
+  const topBand = opts.showWeekdays ? h * (focusHero ? 0.40 : opts.sixWide ? 0.20 : dense ? 0.245 : 0.285) : h * (focusHero ? 0.18 : opts.sixWide ? 0.14 : dense ? 0.17 : 0.20);
+  const cellHReal = Math.max(8, (h - topBand - h * (focusHero ? 0.06 : opts.sixWide ? 0.06 : dense ? 0.06 : 0.075)) / 6);
   const numSize = Math.min(Math.round(cellW * (focusHero ? 0.5 : opts.sixWide ? 0.34 : dense ? 0.52 : 0.6)), Math.round(cellHReal * (focusHero ? 0.56 : opts.sixWide ? 0.42 : dense ? 0.54 : 0.6))) * emphasis;
-  const badgeW = Math.round(w * (opts.sixWide ? 0.14 : focusHero ? 0.12 : 0.19));
-  const badgeH = Math.round(h * (opts.sixWide ? 0.10 : focusHero ? 0.10 : 0.11));
   const cardFill = isCurrent ? alpha(theme.panel, focusHero ? 0.98 : 0.98) : alpha(theme.panel, opts.sixWide ? 0.78 : 0.65);
-  let out = `
-    <rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${radius}" fill="${cardFill}" stroke="${isCurrent ? alpha(theme.accent2, 0.36) : alpha('#ffffff', 0.06)}" />`;
-  if (showInlineTitle) {
-    out += `<text x="${x + pad}" y="${titleY}" fill="${theme.text}" font-size="${titleSize}" font-family="${FONT}" font-weight="800">${titleLabel}</text>`;
-  } else {
-    out += `<text x="${x + pad}" y="${y + pad + titleSize * 0.75}" fill="${theme.text}" font-size="${titleSize}" font-family="${FONT}" font-weight="800">${titleLabel}</text>`;
-  }
+  
+  let out = `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${radius}" fill="${cardFill}" stroke="${isCurrent ? alpha(theme.accent2, cfg.glassPanels===false?0.26:0.42) : alpha('#ffffff', cfg.glassPanels===false?0.05:0.09)}" />`;
+  if (cfg.glassPanels !== false) out += `<rect x="${x + 1.5}" y="${y + 1.5}" width="${Math.max(0, w - 3)}" height="${Math.max(0, h - 3)}" rx="${Math.max(0, radius - 1.5)}" fill="none" stroke="${alpha(theme.accent2, isCurrent ? 0.10 : 0.04)}" />`;
+  out += `<text x="${x + pad}" y="${focusHero ? (y + pad + titleSize * 0.80) : (y + pad + titleSize * 0.75)}" fill="${theme.text}" font-size="${titleSize}" font-family="${FONT}" font-weight="800">${titleLabel}</text>`;
+  
   if (opts.showBadge || focusHero) {
-    out += `
-      <rect x="${x + w - pad - badgeW}" y="${y + pad * (focusHero ? 0.9 : 0.55)}" width="${badgeW}" height="${badgeH}" rx="${badgeH / 2}" fill="${isCurrent ? alpha(theme.accent, 0.18) : alpha('#ffffff', 0.05)}" />
-      <text x="${x + w - pad - badgeW / 2}" y="${y + pad * (focusHero ? 0.9 : 0.55) + badgeH * 0.65}" text-anchor="middle" fill="${isCurrent ? theme.accent2 : theme.muted}" font-size="${Math.round(badgeH * (focusHero ? 0.50 : 0.56))}" font-family="${FONT}" font-weight="700">${daysInMonth}${cfg.lang === 'ru' ? 'д' : 'd'}</text>`;
+    const badgeW = Math.round(w * (opts.sixWide ? 0.14 : focusHero ? 0.12 : 0.19));
+    const badgeH = Math.round(h * (opts.sixWide ? 0.10 : focusHero ? 0.10 : 0.11));
+    out += `<rect x="${x + w - pad - badgeW}" y="${y + pad * (focusHero ? 0.9 : 0.55)}" width="${badgeW}" height="${badgeH}" rx="${badgeH / 2}" fill="${isCurrent ? alpha(theme.accent, 0.18) : alpha('#ffffff', 0.05)}" /><text x="${x + w - pad - badgeW / 2}" y="${y + pad * (focusHero ? 0.9 : 0.55) + badgeH * 0.65}" text-anchor="middle" fill="${isCurrent ? theme.accent2 : theme.muted}" font-size="${Math.round(badgeH * (focusHero ? 0.50 : 0.56))}" font-family="${FONT}" font-weight="700">${daysInMonth}${cfg.lang === 'ru' ? 'д' : 'd'}</text>`;
   }
-  const weekdayY = focusHero ? (y + pad + titleSize + h * 0.065) : (y + (opts.sixWide ? h * 0.18 : h * 0.23));
-  const gridTop = y + topBand;
-  const startX = x + pad + (weekNumberCol ? cellW : 0);
-  if (weekdayVisible) {
-    if (weekNumberCol) out += `<text x="${x + pad + cellW / 2}" y="${weekdayY}" text-anchor="middle" fill="${theme.muted}" font-size="${weekdaySize}" font-family="${FONT}">#</text>`;
-    labels.weekdays.forEach((wd, i) => {
-      const weekend = i >= 5;
-      out += `<text x="${startX + i * cellW + cellW / 2}" y="${weekdayY}" text-anchor="middle" fill="${weekend ? alpha(theme.weekend, 0.95) : theme.muted}" font-size="${weekdaySize}" font-family="${FONT}" font-weight="700">${wd}</text>`;
+
+  const startX = x + pad + (cfg.showWeekNumbers && !opts.tiny && !focusHero ? cellW : 0);
+  if (cfg.strongWeekendTint) {
+    [5, 6].forEach((weekendCol, idx) => {
+      out += `<rect x="${startX + weekendCol * cellW + cellW * 0.08}" y="${y + topBand - cellHReal * 0.16}" width="${cellW * 0.84}" height="${cellHReal * 5.2}" rx="${cellW * 0.22}" fill="${alpha(theme.weekend, idx === 0 ? 0.07 : 0.10)}" />`;
     });
   }
+
+  if (opts.showWeekdays) {
+    const weekdayY = focusHero ? (y + pad + titleSize + h * 0.065) : (y + (opts.sixWide ? h * 0.18 : h * 0.23));
+    const weekdaySize = Math.min(Math.round(cellW * (focusHero ? 0.34 : opts.sixWide ? 0.30 : dense ? 0.4 : 0.5)), Math.round(h * (focusHero ? 0.044 : opts.sixWide ? 0.032 : dense ? 0.048 : 0.058)));
+    if (cfg.showWeekNumbers && !opts.tiny && !focusHero) out += `<text x="${x + pad + cellW / 2}" y="${weekdayY}" text-anchor="middle" fill="${theme.muted}" font-size="${weekdaySize}" font-family="${FONT}">#</text>`;
+    labels.weekdays.forEach((wd, i) => out += `<text x="${startX + i * cellW + cellW / 2}" y="${weekdayY}" text-anchor="middle" fill="${i >= 5 ? alpha(theme.weekend, 0.95) : theme.muted}" font-size="${weekdaySize}" font-family="${FONT}" font-weight="700">${wd}</text>`);
+  }
+
   const isRestDay = isRestDayFactory(cfg, year);
   const usedWeekRows = new Set();
   for (let day = 1; day <= daysInMonth; day++) {
-    const index = firstWeekday + day - 1;
-    const col = index % 7;
-    const row = Math.floor(index / 7);
+    const row = Math.floor((firstWeekday + day - 1) / 7);
     usedWeekRows.add(row);
     const date = dayjs(`${year}-${String(monthIndex + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`);
-    const cx = startX + col * cellW + cellW / 2;
-    const cy = gridTop + row * cellHReal + cellHReal * 0.68;
+    const cx = startX + ((firstWeekday + day - 1) % 7) * cellW + cellW / 2;
+    const cy = y + topBand + row * cellHReal + cellHReal * 0.68;
     const isToday = cfg.accentToday && date.isSame(now, 'day');
-    const isWeekend = isRestDay(date);
-    const isPast = date.isBefore(now, 'day') && now.month() === monthIndex;
-    const textColor = isToday ? theme.text : isWeekend ? theme.weekend : isPast ? alpha(theme.text, 0.6) : theme.text;
     
+    const isCustomEvent = cfg.eventsMap && cfg.eventsMap[`${String(monthIndex + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`];
+    let textColor = isToday ? theme.text : isRestDay(date) ? theme.weekend : (date.isBefore(now, 'day') && now.month() === monthIndex) ? alpha(theme.text, 0.6) : theme.text;
+    if (isCustomEvent && !isToday) textColor = cfg.eventColor;
+
+    if (isCustomEvent) out += `<rect x="${cx - cellW * 0.35}" y="${cy - cellHReal * 0.6}" width="${cellW * 0.7}" height="${cellHReal * 0.75}" rx="${Math.min(cellW, cellHReal) * 0.2}" fill="${alpha(cfg.eventColor, 0.18)}" stroke="${alpha(cfg.eventColor, 0.34)}"/>`;
+
     if (isToday) {
       const rect = `<rect x="${cx - cellW * 0.45}" y="${cy - cellHReal * 0.6}" width="${cellW * 0.9}" height="${cellHReal * 0.8}" rx="${Math.min(cellW, cellHReal) * 0.2}"`;
-      out += cfg.style === 'outline'
-        ? `${rect} fill="none" stroke="${theme.accent}" stroke-width="${Math.max(1.2, w * 0.004)}"/>`
-        : `${rect} fill="${alpha(theme.accent, cfg.style === 'numbers' ? 0.24 : 0.18)}" stroke="${alpha(theme.accent2, 0.34)}"/>`;
+      out += cfg.style === 'outline' ? `${rect} fill="none" stroke="${theme.accent}" stroke-width="${Math.max(1.2, w * 0.004)}"/>` : `${rect} fill="${alpha(theme.accent, cfg.style === 'numbers' ? 0.24 : 0.18)}" stroke="${alpha(theme.accent2, 0.34)}"/>`;
     }
 
-    if (cfg.style === 'dots') {
-      const r = Math.min(cellW, cellHReal) * (isToday ? 0.18 : 0.12);
-      out += `<circle cx="${cx}" cy="${cy - cellHReal * 0.2}" r="${r}" fill="${isToday ? theme.accent : isPast ? theme.accent2 : isWeekend ? alpha(theme.weekend, 0.9) : alpha(theme.text, 0.26)}"/>`;
-      out += `<text x="${cx}" y="${cy + cellHReal * 0.3}" text-anchor="middle" fill="${textColor}" font-size="${Math.round(numSize * 0.82)}" font-family="${FONT}" font-weight="700">${day}</text>`;
+    if (cfg.style === 'dots' || cfg.style === 'micro') {
+      out += `<circle cx="${cx}" cy="${cy - cellHReal * (cfg.style === 'dots' ? 0.2 : 0.18)}" r="${Math.max(1.1, Math.min(cellW, cellHReal) * (cfg.style === 'dots' ? (isToday ? 0.18 : 0.12) : 0.08))}" fill="${isToday ? theme.accent : isRestDay(date) ? theme.weekend : alpha(theme.text, 0.24)}"/><text x="${cx}" y="${cy + cellHReal * (cfg.style === 'dots' ? 0.3 : 0.24)}" text-anchor="middle" fill="${textColor}" font-size="${Math.round(numSize * (cfg.style === 'dots' ? 0.82 : 0.72))}" font-family="${FONT}" font-weight="700">${day}</text>`;
     } else if (cfg.style === 'focus') {
       out += `<text x="${cx}" y="${cy}" text-anchor="middle" fill="${textColor}" font-size="${Math.round(numSize * (isToday ? 1.05 : 1))}" font-family="${FONT}" font-weight="${isToday || isCurrent ? 800 : 600}">${day}</text>`;
       if (isCurrent && !isToday && !opts.tiny) out += `<line x1="${cx - cellW * 0.15}" y1="${cy + cellHReal * 0.15}" x2="${cx + cellW * 0.15}" y2="${cy + cellHReal * 0.15}" stroke="${alpha(theme.accent2, 0.35)}" stroke-linecap="round" stroke-width="2"/>`;
     } else if (cfg.style === 'capsule') {
-      if (isToday || isWeekend) out += `<rect x="${cx - cellW * 0.38}" y="${cy - cellHReal * 0.48}" width="${cellW * 0.76}" height="${cellHReal * 0.56}" rx="${cellHReal * 0.28}" fill="${isToday ? alpha(theme.accent, 0.25) : alpha(theme.weekend, 0.12)}"/>`;
+      if (isToday || isRestDay(date)) out += `<rect x="${cx - cellW * 0.38}" y="${cy - cellHReal * 0.48}" width="${cellW * 0.76}" height="${cellHReal * 0.56}" rx="${cellHReal * 0.28}" fill="${isToday ? alpha(theme.accent, 0.25) : alpha(theme.weekend, 0.12)}"/>`;
       out += `<text x="${cx}" y="${cy}" text-anchor="middle" fill="${textColor}" font-size="${numSize}" font-family="${FONT}" font-weight="${isToday ? 800 : 600}">${day}</text>`;
     } else if (cfg.style === 'ring') {
       if (isToday) out += `<circle cx="${cx}" cy="${cy - cellHReal * 0.2}" r="${Math.min(cellW, cellHReal) * 0.28}" fill="none" stroke="${theme.accent}" stroke-width="${Math.max(1.2, w * 0.004)}"/>`;
       out += `<text x="${cx}" y="${cy}" text-anchor="middle" fill="${textColor}" font-size="${numSize}" font-family="${FONT}" font-weight="${isToday ? 800 : 600}">${day}</text>`;
-    } else if (cfg.style === 'micro') {
-      out += `<circle cx="${cx}" cy="${cy - cellHReal * 0.18}" r="${Math.max(1.1, Math.min(cellW, cellHReal) * 0.08)}" fill="${isToday ? theme.accent : isWeekend ? theme.weekend : alpha(theme.text, 0.24)}"/>`;
-      out += `<text x="${cx}" y="${cy + cellHReal * 0.24}" text-anchor="middle" fill="${textColor}" font-size="${Math.round(numSize * 0.72)}" font-family="${FONT}" font-weight="700">${day}</text>`;
     } else {
       out += `<text x="${cx}" y="${cy}" text-anchor="middle" fill="${textColor}" font-size="${numSize}" font-family="${FONT}" font-weight="${isToday ? 800 : 600}">${day}</text>`;
     }
   }
-  if (weekNumberCol) {
-    [...usedWeekRows].forEach((row) => {
-      const date = first.add(row * 7 - firstWeekday, 'day');
-      const wx = x + pad + cellW / 2;
-      const wy = gridTop + row * cellHReal + cellHReal * 0.68;
-      out += `<text x="${wx}" y="${wy}" text-anchor="middle" fill="${alpha(theme.muted, 0.7)}" font-size="${Math.round(numSize * 0.68)}" font-family="${FONT}">${dayjs(date).week()}</text>`;
-    });
+  if (cfg.showWeekNumbers && !opts.tiny && !focusHero) {
+    [...usedWeekRows].forEach((row) => out += `<text x="${x + pad + cellW / 2}" y="${y + topBand + row * cellHReal + cellHReal * 0.68}" text-anchor="middle" fill="${alpha(theme.muted, 0.7)}" font-size="${Math.round(numSize * 0.68)}" font-family="${FONT}">${first.add(row * 7 - firstWeekday, 'day').week()}</text>`);
   }
   return out;
 }
 
 function renderMonthListRow({ monthIndex, year, x, y, w, h, cfg, theme, labels, now, FONT }) {
   const first = dayjs(`${year}-${String(monthIndex + 1).padStart(2, '0')}-01`);
-  const daysInMonth = first.daysInMonth();
-  const firstWeekday = (first.day() + 6) % 7;
   const isCurrent = now.month() === monthIndex;
-  const isRestDay = isRestDayFactory(cfg, year);
   const compact = cfg.monthLayout === 'list_1x12_compact';
-  const premiumCompact = true;
   const radius = Math.max(14, Math.round(h * (compact ? 0.24 : 0.28)));
   const padX = Math.round(w * (compact ? 0.024 : 0.03));
   const nameW = Math.round(w * (compact ? 0.16 : 0.18));
-  const badgeW = cfg.monthBadges ? Math.round(w * (compact ? 0.08 : 0.08)) : 0;
-  const weekdayVisible = cfg.showWeekdays;
+  const badgeW = cfg.monthBadges ? Math.round(w * 0.08) : 0;
   const innerX = x + padX + nameW;
   const innerW = Math.max(80, w - padX * 2 - nameW - badgeW);
-  const cols = 7;
-  const rows = 6;
-  const topPad = weekdayVisible ? h * (compact ? 0.22 : 0.24) : h * (compact ? 0.14 : 0.16);
-  const cellW = innerW / cols;
-  const cellH = Math.max(8, (h - topPad - h * (compact ? 0.08 : 0.10)) / rows);
-  const monthTitleSize = Math.max(12, Math.round(Math.min(h * (compact ? 0.16 : 0.19), nameW * 0.22)));
-  const weekdaySize = Math.max(8, Math.round(Math.min(h * (compact ? 0.078 : 0.088), cellW * 0.24)));
-  const numberSize = Math.max(8, Math.round(Math.min(cellW, cellH) * (compact ? 0.40 : 0.44)));
-  const gridTop = y + topPad + (weekdayVisible ? h * (compact ? 0.04 : 0.05) : 0);
-  const monthLabel = pickMonthLabel(labels, monthIndex, nameW, 'list');
-  let out = `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${radius}" fill="${isCurrent ? alpha(theme.panel, 0.95) : alpha(theme.panel, premiumCompact ? 0.76 : 0.72)}" stroke="${isCurrent ? alpha(theme.accent2, 0.34) : alpha('#ffffff', 0.05)}"/>`;
-  out += `<text x="${x + padX}" y="${y + h * 0.28}" fill="${theme.text}" font-size="${monthTitleSize}" font-family="${FONT}" font-weight="800">${monthLabel}</text>`;
-  if (cfg.monthBadges) {
-    out += `<rect x="${x + w - padX - badgeW}" y="${y + h * 0.17}" width="${badgeW}" height="${h * 0.20}" rx="${h * 0.10}" fill="${isCurrent ? alpha(theme.accent, 0.18) : alpha('#ffffff', 0.05)}"/>`;
-    out += `<text x="${x + w - padX - badgeW / 2}" y="${y + h * 0.30}" text-anchor="middle" fill="${isCurrent ? theme.accent2 : theme.muted}" font-size="${Math.round(h * 0.10)}" font-family="${FONT}" font-weight="700">${daysInMonth}${cfg.lang === 'ru' ? 'д' : 'd'}</text>`;
-  }
-  if (weekdayVisible) {
-    labels.weekdays.forEach((wd, i) => {
-      const tx = innerX + i * cellW + cellW / 2;
-      out += `<text x="${tx}" y="${y + h * 0.24}" text-anchor="middle" fill="${i >= 5 ? alpha(theme.weekend, 0.95) : theme.muted}" font-size="${weekdaySize}" font-family="${FONT}" font-weight="700">${wd}</text>`;
-    });
-  }
-  for (let day = 1; day <= daysInMonth; day++) {
-    const index = firstWeekday + day - 1;
-    const col = index % 7;
-    const row = Math.floor(index / 7);
+  const cellW = innerW / 7;
+  const cellH = Math.max(8, (h - (cfg.showWeekdays ? h * (compact ? 0.22 : 0.24) : h * (compact ? 0.14 : 0.16)) - h * (compact ? 0.08 : 0.10)) / 6);
+  
+  let out = `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${radius}" fill="${isCurrent ? alpha(theme.panel, 0.95) : alpha(theme.panel, 0.72)}" stroke="${isCurrent ? alpha(theme.accent2, cfg.glassPanels===false?0.24:0.38) : alpha('#ffffff', cfg.glassPanels===false?0.05:0.08)}"/>`;
+  if (cfg.glassPanels !== false) out += `<rect x="${x + 1.5}" y="${y + 1.5}" width="${Math.max(0, w - 3)}" height="${Math.max(0, h - 3)}" rx="${Math.max(0, radius - 1.5)}" fill="none" stroke="${alpha(theme.accent2, isCurrent ? 0.09 : 0.04)}"/>`;
+  out += `<text x="${x + padX}" y="${y + h * 0.28}" fill="${theme.text}" font-size="${Math.max(12, Math.round(Math.min(h * (compact ? 0.16 : 0.19), nameW * 0.22)))}" font-family="${FONT}" font-weight="800">${pickMonthLabel(labels, monthIndex, nameW, 'list')}</text>`;
+  
+  if (cfg.monthBadges) out += `<rect x="${x + w - padX - badgeW}" y="${y + h * 0.17}" width="${badgeW}" height="${h * 0.20}" rx="${h * 0.10}" fill="${isCurrent ? alpha(theme.accent, 0.18) : alpha('#ffffff', 0.05)}"/><text x="${x + w - padX - badgeW / 2}" y="${y + h * 0.30}" text-anchor="middle" fill="${isCurrent ? theme.accent2 : theme.muted}" font-size="${Math.round(h * 0.10)}" font-family="${FONT}" font-weight="700">${first.daysInMonth()}${cfg.lang === 'ru' ? 'д' : 'd'}</text>`;
+
+  const gridTop = y + (cfg.showWeekdays ? h * (compact ? 0.22 : 0.24) : h * (compact ? 0.14 : 0.16)) + (cfg.showWeekdays ? h * (compact ? 0.04 : 0.05) : 0);
+  if (cfg.showWeekdays) labels.weekdays.forEach((wd, i) => out += `<text x="${innerX + i * cellW + cellW / 2}" y="${y + h * 0.24}" text-anchor="middle" fill="${i >= 5 ? alpha(theme.weekend, 0.95) : theme.muted}" font-size="${Math.max(8, Math.round(Math.min(h * (compact ? 0.078 : 0.088), cellW * 0.24)))}" font-family="${FONT}" font-weight="700">${wd}</text>`);
+  
+  if (cfg.strongWeekendTint) [5, 6].forEach((wCol, idx) => out += `<rect x="${innerX + wCol * cellW + cellW * 0.08}" y="${gridTop - cellH * 0.18}" width="${cellW * 0.84}" height="${cellH * 5.2}" rx="${cellW * 0.22}" fill="${alpha(theme.weekend, idx === 0 ? 0.06 : 0.09)}"/>`);
+
+  const isRestDay = isRestDayFactory(cfg, year);
+  const firstWeekday = (first.day() + 6) % 7;
+  for (let day = 1; day <= first.daysInMonth(); day++) {
+    const cx = innerX + ((firstWeekday + day - 1) % 7) * cellW + cellW / 2;
+    const cy = gridTop + Math.floor((firstWeekday + day - 1) / 7) * cellH + cellH * 0.72;
     const date = dayjs(`${year}-${String(monthIndex + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`);
-    const cx = innerX + col * cellW + cellW / 2;
-    const cy = gridTop + row * cellH + cellH * 0.72;
     const isToday = cfg.accentToday && date.isSame(now, 'day');
-    const isWeekend = isRestDay(date);
-    const isPast = date.isBefore(now, 'day') && now.month() === monthIndex;
-    const textColor = isToday ? theme.text : isWeekend ? theme.weekend : isPast ? alpha(theme.text, 0.64) : theme.text;
+    const isCustomEvent = cfg.eventsMap && cfg.eventsMap[`${String(monthIndex + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`];
+    let textColor = isToday ? theme.text : isRestDay(date) ? theme.weekend : (date.isBefore(now, 'day') && now.month() === monthIndex) ? alpha(theme.text, 0.64) : theme.text;
+    if (isCustomEvent && !isToday) textColor = cfg.eventColor;
+
+    if (isCustomEvent) out += `<rect x="${cx - cellW * 0.35}" y="${cy - cellH * 0.65}" width="${cellW * 0.7}" height="${cellH * 0.75}" rx="${Math.min(cellW, cellH) * 0.2}" fill="${alpha(cfg.eventColor, 0.18)}" stroke="${alpha(cfg.eventColor, 0.34)}"/>`;
     if (isToday) out += `<rect x="${cx - cellW * 0.34}" y="${cy - cellH * 0.58}" width="${cellW * 0.68}" height="${cellH * 0.72}" rx="${Math.min(cellW, cellH) * 0.22}" fill="${alpha(theme.accent, 0.24)}" stroke="${alpha(theme.accent2, 0.28)}"/>`;
-    if (cfg.style === 'dots' || cfg.style === 'micro') out += `<circle cx="${cx}" cy="${cy - cellH * 0.24}" r="${Math.max(1.1, Math.min(cellW, cellH) * 0.08)}" fill="${isToday ? theme.accent : isWeekend ? theme.weekend : alpha(theme.text, 0.22)}"/>`;
-    out += `<text x="${cx}" y="${cy + (cfg.style === 'dots' || cfg.style === 'micro' ? cellH * 0.18 : 0)}" text-anchor="middle" fill="${textColor}" font-size="${numberSize}" font-family="${FONT}" font-weight="${isToday ? 800 : 600}">${day}</text>`;
+    if (cfg.style === 'dots' || cfg.style === 'micro') out += `<circle cx="${cx}" cy="${cy - cellH * 0.24}" r="${Math.max(1.1, Math.min(cellW, cellH) * 0.08)}" fill="${isToday ? theme.accent : isRestDay(date) ? theme.weekend : alpha(theme.text, 0.22)}"/>`;
+    out += `<text x="${cx}" y="${cy + (cfg.style === 'dots' || cfg.style === 'micro' ? cellH * 0.18 : 0)}" text-anchor="middle" fill="${textColor}" font-size="${Math.max(8, Math.round(Math.min(cellW, cellH) * (compact ? 0.40 : 0.44)))}" font-family="${FONT}" font-weight="${isToday ? 800 : 600}">${day}</text>`;
   }
   return out;
 }
 
 function renderFooter(cfg, theme, labels, now, stats, width, footerBox, FONT) {
   const { x, y, w, h } = footerBox;
+  let base = `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${Math.round(w * 0.05)}" fill="${alpha(theme.panel, 0.82)}" stroke="${alpha('#ffffff', cfg.glassPanels===false?0.06:0.08)}"/>`;
+  if (cfg.glassPanels !== false) base += `<rect x="${x + 1.5}" y="${y + 1.5}" width="${Math.max(0, w - 3)}" height="${Math.max(0, h - 3)}" rx="${Math.max(0, Math.round(w * 0.05) - 1.5)}" fill="none" stroke="${alpha(theme.accent2, 0.05)}"/>`; 
+  
   const pad = Math.round(w * 0.04);
-  const base = `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${Math.round(w * 0.05)}" fill="${alpha(theme.panel, 0.82)}" stroke="${alpha('#ffffff', 0.06)}"/>`;
   const textSize = Math.round(h * 0.22);
   const subSize = Math.round(h * 0.15);
+  
   if (cfg.footer === 'quote') {
-    const lines = wrap(cfg.note || randomQuote(cfg.lang, now.year()), 34);
-    return base + lines.map((line, i) => `<text x="${x + w / 2}" y="${y + h * 0.38 + i * subSize * 1.45}" text-anchor="middle" fill="${theme.text}" font-size="${subSize}" font-family="${FONT}" font-weight="700">${escapeXml(line)}</text>`).join('');
+    const arr = cfg.lang === 'ru' ? ['Маленькие шаги собирают большой год.', 'Спокойный ритм сильнее хаоса.'] : ['Small steps shape a big year.', 'Consistency beats intensity.'];
+    return base + (cfg.note || arr[now.year() % 2]).split('\n').map((line, i) => `<text x="${x + w / 2}" y="${y + h * 0.38 + i * subSize * 1.45}" text-anchor="middle" fill="${theme.text}" font-size="${subSize}" font-family="${FONT}" font-weight="700">${escapeXml(line)}</text>`).join('');
   }
-  if (cfg.footer === 'progress_bar') {
-    const barX = x + pad; const barY = y + h * 0.55; const barW = w - pad * 2; const barH = h * 0.12;
-    return base + `
-      <text x="${x + pad}" y="${y + h * 0.32}" fill="${theme.text}" font-size="${textSize}" font-family="${FONT}" font-weight="800">${stats.percentPassed}% ${labels.passed}</text>
-      <rect x="${barX}" y="${barY}" width="${barW}" height="${barH}" rx="${barH / 2}" fill="${alpha(theme.bg, 0.7)}" />
-      <rect x="${barX}" y="${barY}" width="${barW * stats.percentPassed / 100}" height="${barH}" rx="${barH / 2}" fill="${theme.accent}" />`;
+  if (cfg.footer === 'progress_bar') return base + `<text x="${x + pad}" y="${y + h * 0.32}" fill="${theme.text}" font-size="${textSize}" font-family="${FONT}" font-weight="800">${stats.percentPassed}% ${labels.passed}</text><rect x="${x + pad}" y="${y + h * 0.55}" width="${w - pad * 2}" height="${h * 0.12}" rx="${h * 0.06}" fill="${alpha(theme.bg, 0.7)}" /><rect x="${x + pad}" y="${y + h * 0.55}" width="${(w - pad * 2) * stats.percentPassed / 100}" height="${h * 0.12}" rx="${h * 0.06}" fill="${theme.accent}" />`;
+  if (cfg.footer === 'today_card') return base + `<text x="${x + pad}" y="${y + h * 0.34}" fill="${theme.accent2}" font-size="${subSize}" font-family="${FONT}" font-weight="700">${labels.today}</text><text x="${x + pad}" y="${y + h * 0.68}" fill="${theme.text}" font-size="${textSize}" font-family="${FONT}" font-weight="800">${escapeXml(cfg.lang === 'ru' ? `${labels.weekdaysFull[(now.day() + 6) % 7]}, ${now.date()} ${labels.months[now.month()].toLowerCase()}` : `${labels.weekdaysFull[(now.day() + 6) % 7]}, ${labels.months[now.month()]} ${now.date()}`)}</text>`;
+  
+  if (cfg.footer === 'next_event') {
+    const n = findNearestEvent(cfg, now, labels);
+    return base + `<text x="${x + pad}" y="${y + h * 0.32}" fill="${theme.accent2}" font-size="${subSize}" font-family="${FONT}" font-weight="700">${cfg.lang === 'ru' ? 'Ближайший ориентир' : 'Next marker'}</text><text x="${x + pad}" y="${y + h * 0.62}" fill="${theme.text}" font-size="${textSize}" font-family="${FONT}" font-weight="800">${escapeXml(n ? n.title : (cfg.lang === 'ru' ? 'Событий нет' : 'No events'))}</text><text x="${x + pad}" y="${y + h * 0.82}" fill="${theme.muted}" font-size="${subSize}" font-family="${FONT}" font-weight="600">${escapeXml(n ? (cfg.lang === 'ru' ? `Через ${n.diff} дн. · ${n.label}` : `In ${n.diff} days · ${n.label}`) : weatherSummary(cfg, cfg.lang))}</text>`;
   }
-  if (cfg.footer === 'today_card') {
-    const dateLabel = formatLongToday(now, labels, cfg.lang);
-    return base + `
-      <text x="${x + pad}" y="${y + h * 0.34}" fill="${theme.accent2}" font-size="${subSize}" font-family="${FONT}" font-weight="700">${labels.today}</text>
-      <text x="${x + pad}" y="${y + h * 0.68}" fill="${theme.text}" font-size="${textSize}" font-family="${FONT}" font-weight="800">${escapeXml(dateLabel)}</text>`;
+  if (cfg.footer === 'seasonal_focus') return base + `<text x="${x + pad}" y="${y + h * 0.26}" fill="${theme.accent2}" font-size="${subSize}" font-family="${FONT}" font-weight="700">${cfg.lang === 'ru' ? 'Сезонный режим' : 'Season mode'}</text><text x="${x + pad}" y="${y + h * 0.5}" fill="${theme.text}" font-size="${textSize}" font-family="${FONT}" font-weight="800">${escapeXml(cfg.lang === 'ru' ? `${getSeasonLabel('ru', now.month())} · ${stats.daysLeft} дн. до конца года` : `${getSeasonLabel('en', now.month())} · ${stats.daysLeft} days left`)}</text><text x="${x + pad}" y="${y + h * 0.72}" fill="${theme.muted}" font-size="${subSize}" font-family="${FONT}" font-weight="600">${escapeXml((cfg.note || (cfg.lang === 'ru' ? 'Спокойный темп, ясный фокус.' : 'Calm pace, clear focus.')).slice(0, 48))}</text>`;
+  if (cfg.footer === 'weather_strip') return base + `<text x="${x + pad}" y="${y + h * 0.34}" fill="${theme.accent2}" font-size="${subSize}" font-family="${FONT}" font-weight="700">${cfg.lang === 'ru' ? 'Сводка среды' : 'Ambient summary'}</text><text x="${x + pad}" y="${y + h * 0.62}" fill="${theme.text}" font-size="${textSize}" font-family="${FONT}" font-weight="800">${escapeXml(weatherSummary(cfg, cfg.lang))}</text><text x="${x + pad}" y="${y + h * 0.82}" fill="${theme.muted}" font-size="${subSize}" font-family="${FONT}" font-weight="600">UTC${cfg.timezone >= 0 ? '+'+cfg.timezone : cfg.timezone} · ${labels.months[now.month()]} ${now.date()}</text>`;
+  
+  if (cfg.footer === 'day_weather') {
+    const items = cfg.weatherData?.hourly || [];
+    if (!items.length) return base + `<text x="${x + pad}" y="${y + h * 0.34}" fill="${theme.accent2}" font-size="${subSize}" font-family="${FONT}" font-weight="700">${cfg.lang === 'ru' ? 'Прогноз на день' : 'Day forecast'}</text><text x="${x + pad}" y="${y + h * 0.66}" fill="${theme.text}" font-size="${textSize * 0.8}" font-family="${FONT}" font-weight="700">${cfg.lang === 'ru' ? 'Добавь город для погоды' : 'Add city for forecast'}</text>`;
+    let chips = `<text x="${x + pad}" y="${y + h * 0.23}" fill="${theme.accent2}" font-size="${subSize}" font-family="${FONT}" font-weight="700">${cfg.lang === 'ru' ? 'Прогноз на день' : 'Day forecast'}</text>`;
+    if (cfg.weatherData.cityLabel) chips += `<text x="${x + pad}" y="${y + h * 0.40}" fill="${theme.muted}" font-size="${subSize * 0.88}" font-family="${FONT}" font-weight="600">${escapeXml(cfg.weatherData.cityLabel)}</text>`;
+    const chipW = (w - pad * 2 - Math.max(10, Math.round(w * 0.012)) * (items.length - 1)) / items.length;
+    items.forEach((item, i) => {
+      const cx = x + pad + i * (chipW + Math.max(10, Math.round(w * 0.012)));
+      chips += `<rect x="${cx}" y="${y + h * 0.50}" width="${chipW}" height="${h * 0.30}" rx="${h * 0.30 * 0.24}" fill="${alpha(theme.bg, 0.18)}" stroke="${alpha(theme.accent2, 0.10)}"/><text x="${cx + chipW / 2}" y="${y + h * 0.50 + h * 0.30 * 0.28}" text-anchor="middle" fill="${theme.muted}" font-size="${subSize * 0.72}" font-family="${FONT}" font-weight="700">${escapeXml(item.hour)}</text><text x="${cx + chipW / 2}" y="${y + h * 0.50 + h * 0.30 * 0.56}" text-anchor="middle" fill="${theme.text}" font-size="${subSize * 0.95}" font-family="${FONT}" font-weight="700">${item.icon}</text><text x="${cx + chipW / 2}" y="${y + h * 0.50 + h * 0.30 * 0.82}" text-anchor="middle" fill="${theme.text}" font-size="${textSize * 0.64}" font-family="${FONT}" font-weight="800">${escapeXml(item.temp)}°</text>`;
+    });
+    return base + chips;
   }
-  if (cfg.footer === 'custom_note' && cfg.note) {
-    const lines = wrap(cfg.note, 36).slice(0, 2);
-    return base + lines.map((line, i) => `<text x="${x + pad}" y="${y + h * 0.38 + i * subSize * 1.6}" fill="${theme.text}" font-size="${subSize}" font-family="${FONT}" font-weight="700">${escapeXml(line)}</text>`).join('');
-  }
-  return base + `
-    <text x="${x + pad}" y="${y + h * 0.36}" fill="${theme.text}" font-size="${textSize}" font-family="${FONT}" font-weight="800">${stats.daysLeft} ${labels.daysLeft}</text>
-    <text x="${x + pad}" y="${y + h * 0.66}" fill="${theme.muted}" font-size="${subSize}" font-family="${FONT}">${stats.percentPassed}% ${labels.passed}</text>`;
+  
+  if (cfg.footer === 'custom_note' && cfg.note) return base + (cfg.note).split('\n').map((line, i) => `<text x="${x + pad}" y="${y + h * 0.38 + i * subSize * 1.6}" fill="${theme.text}" font-size="${subSize}" font-family="${FONT}" font-weight="700">${escapeXml(line)}</text>`).join('');
+  
+  return base + `<text x="${x + pad}" y="${y + h * 0.36}" fill="${theme.text}" font-size="${textSize}" font-family="${FONT}" font-weight="800">${stats.daysLeft} ${labels.daysLeft}</text><text x="${x + pad}" y="${y + h * 0.66}" fill="${theme.muted}" font-size="${subSize}" font-family="${FONT}">${stats.percentPassed}% ${labels.passed}</text>`;
 }
 
 function renderSvg(cfg) {
   const theme = cfg.themeObj;
   const labels = getLabels(cfg.lang);
-  const now = zonedNow(cfg.timezone);
+  const now = dayjs.utc().add(cfg.timezone, 'hour');
   const stats = yearStats(now);
+  cfg.eventsMap = parseEvents(cfg.events);
+
   const { width, height } = cfg;
-  const safe = getSafeInsets(cfg, width, height);
-  const sidePadding = safe.side;
-  const innerTop = safe.top;
-  const innerBottom = height - safe.bottom;
+  const sidePadding = Math.round(width * 0.035);
+  const innerTop = cfg.lockscreenSafe ? Math.round(height * 0.165 + width * 0.04) : sidePadding;
+  const innerBottom = height - (cfg.lockscreenSafe ? Math.round(height * 0.105 + width * 0.03) : sidePadding);
+
+  const selectedFontDef = FONTS[cfg.font] || FONTS.inter;
+  const b64Font = fontCache[cfg.font];
+  const FONT_FAMILY = getSafeFontStack(selectedFontDef.family, cfg.pngSafeFont);
+  
+  // ВАЖНО: font-weight: 100 900; решает проблему исчезающих шрифтов в Resvg
+  const fontDefs = b64Font ? `<style>@font-face { font-family: '${selectedFontDef.family}'; src: url(data:font/truetype;base64,${b64Font}) format('truetype'); font-weight: 100 900; font-style: normal; } text, tspan { font-family: ${FONT_FAMILY}; text-rendering: geometricPrecision; }</style>` : '';
 
   const listLike = isListLayout(cfg.monthLayout);
   const compactLike = isCompactGridLayout(cfg.monthLayout) || listLike;
@@ -880,11 +612,6 @@ function renderSvg(cfg) {
   const contentBottom = innerBottom - footerHeight - Math.round(height * 0.014);
   const contentH = contentBottom - contentTop;
 
-  const selectedFontDef = FONTS[cfg.font] || FONTS.inter;
-  const b64Font = fontCache[cfg.font];
-  const FONT_FAMILY = getSafeFontStack(selectedFontDef.family, cfg.pngSafeFont);
-  const fontDefs = b64Font ? `<style>@font-face { font-family: '${selectedFontDef.family}'; src: url(data:font/truetype;base64,${b64Font}) format('truetype'); font-weight: 100 900; font-style: normal; } text, tspan { font-family: '${selectedFontDef.family}','DejaVu Sans','Noto Sans','Liberation Sans',Arial,sans-serif; }</style>` : '';
-
   const layout = getLayoutMetrics(cfg, width, height, contentH, sidePadding);
 
   let monthsSvg = '';
@@ -892,91 +619,60 @@ function renderSvg(cfg) {
     const heroGap = Math.round(width * 0.014);
     const heroH = Math.round(contentH * 0.40);
     monthsSvg += renderMonthGrid({ monthIndex: now.month(), year: now.year(), x: sidePadding, y: contentTop, w: width - sidePadding * 2, h: heroH, cfg: { ...cfg, monthLayout: 'single_month_focus', monthBadges: true, showWeekNumbers: true }, theme, labels, now, FONT: FONT_FAMILY });
-
     const miniTop = contentTop + heroH + heroGap;
-    const miniRows = 3, miniCols = 4;
-    const miniH = (contentBottom - miniTop - heroGap * (miniRows - 1)) / miniRows;
-    const miniW = (width - sidePadding * 2 - heroGap * (miniCols - 1)) / miniCols;
-    const otherMonths = Array.from({ length: 12 }, (_, i) => i).filter(i => i !== now.month());
-    otherMonths.forEach((monthIndex, i) => {
-      const col = i % miniCols;
-      const row = Math.floor(i / miniCols);
-      const x = sidePadding + col * (miniW + heroGap);
-      const y = miniTop + row * (miniH + heroGap);
-      monthsSvg += renderMonthGrid({
-        monthIndex,
-        year: now.year(),
-        x, y, w: miniW, h: miniH,
-        cfg: { ...cfg, monthLayout: 'grid_3x4_compact', focusCurrentMonth: false, monthBadges: false, showWeekNumbers: false, showWeekdays: true },
-        theme, labels, now, FONT: FONT_FAMILY
-      });
+    const miniH = (contentBottom - miniTop - heroGap * 2) / 3, miniW = (width - sidePadding * 2 - heroGap * 3) / 4;
+    Array.from({ length: 12 }, (_, i) => i).filter(i => i !== now.month()).forEach((monthIndex, i) => {
+      monthsSvg += renderMonthGrid({ monthIndex, year: now.year(), x: sidePadding + (i % 4) * (miniW + heroGap), y: miniTop + Math.floor(i / 4) * (miniH + heroGap), w: miniW, h: miniH, cfg: { ...cfg, monthLayout: 'grid_3x4_compact', focusCurrentMonth: false, monthBadges: false, showWeekNumbers: false, showWeekdays: true }, theme, labels, now, FONT: FONT_FAMILY });
     });
   } else {
     for (let i = 0; i < 12; i++) {
-      const col = i % layout.cols;
-      const row = Math.floor(i / layout.cols);
-      const x = sidePadding + col * (layout.monthW + layout.gap);
-      const y = contentTop + row * (layout.monthH + layout.gap);
-      monthsSvg += isListLayout(cfg.monthLayout)
-        ? renderMonthListRow({ monthIndex: i, year: now.year(), x, y, w: layout.monthW, h: layout.monthH, cfg, theme, labels, now, FONT: FONT_FAMILY })
-        : renderMonthGrid({ monthIndex: i, year: now.year(), x, y, w: layout.monthW, h: layout.monthH, cfg, theme, labels, now, FONT: FONT_FAMILY });
+      const x = sidePadding + (i % layout.cols) * (layout.monthW + layout.gap), y = contentTop + Math.floor(i / layout.cols) * (layout.monthH + layout.gap);
+      monthsSvg += isListLayout(cfg.monthLayout) ? renderMonthListRow({ monthIndex: i, year: now.year(), x, y, w: layout.monthW, h: layout.monthH, cfg, theme, labels, now, FONT: FONT_FAMILY }) : renderMonthGrid({ monthIndex: i, year: now.year(), x, y, w: layout.monthW, h: layout.monthH, cfg, theme, labels, now, FONT: FONT_FAMILY });
     }
   }
 
   let quarterLines = '';
   if (cfg.quarterDividers && layout.mode !== 'focus') {
-    if (isListLayout(cfg.monthLayout)) {
-      [3, 6, 9].forEach((idx) => {
-        const ly = contentTop + idx * layout.monthH + (idx - 0.5) * layout.gap;
-        quarterLines += `<line x1="${sidePadding}" y1="${ly}" x2="${width - sidePadding}" y2="${ly}" stroke="${alpha(theme.accent2, 0.12)}" stroke-dasharray="12 12" />`;
-      });
-    } else if (layout.cols === 3 && layout.rows === 4) {
-      for (let r = 1; r < layout.rows; r++) {
-        const ly = contentTop + r * layout.monthH + (r - 0.5) * layout.gap;
-        quarterLines += `<line x1="${sidePadding}" y1="${ly}" x2="${width - sidePadding}" y2="${ly}" stroke="${alpha(theme.accent2, 0.12)}" stroke-dasharray="10 12" />`;
-      }
-    } else if (layout.cols === 2 && layout.rows === 6) {
-      [2, 4].forEach((r) => {
-        const ly = contentTop + r * layout.monthH + (r - 0.5) * layout.gap;
-        quarterLines += `<line x1="${sidePadding}" y1="${ly}" x2="${width - sidePadding}" y2="${ly}" stroke="${alpha(theme.accent2, 0.10)}" stroke-dasharray="10 12" />`;
-      });
-    } else if (layout.cols === 6 && layout.rows === 2) {
-      const lineY = contentTop + layout.monthH + layout.gap / 2;
-      quarterLines += `<line x1="${sidePadding}" y1="${lineY}" x2="${width - sidePadding}" y2="${lineY}" stroke="${alpha(theme.accent2, 0.10)}" stroke-dasharray="10 12" />`;
-      [3].forEach((c) => {
-        const lx = sidePadding + c * layout.monthW + (c - 0.5) * layout.gap;
-        quarterLines += `<line x1="${lx}" y1="${contentTop}" x2="${lx}" y2="${contentBottom}" stroke="${alpha(theme.accent2, 0.08)}" stroke-dasharray="8 10" />`;
-      });
+    if (isListLayout(cfg.monthLayout)) { [3, 6, 9].forEach((idx) => quarterLines += `<line x1="${sidePadding}" y1="${contentTop + idx * layout.monthH + (idx - 0.5) * layout.gap}" x2="${width - sidePadding}" y2="${contentTop + idx * layout.monthH + (idx - 0.5) * layout.gap}" stroke="${alpha(theme.accent2, 0.12)}" stroke-dasharray="12 12" />`); } 
+    else if (layout.cols === 3 && layout.rows === 4) { for (let r = 1; r < layout.rows; r++) quarterLines += `<line x1="${sidePadding}" y1="${contentTop + r * layout.monthH + (r - 0.5) * layout.gap}" x2="${width - sidePadding}" y2="${contentTop + r * layout.monthH + (r - 0.5) * layout.gap}" stroke="${alpha(theme.accent2, 0.12)}" stroke-dasharray="10 12" />`; } 
+    else if (layout.cols === 2 && layout.rows === 6) { [2, 4].forEach((r) => quarterLines += `<line x1="${sidePadding}" y1="${contentTop + r * layout.monthH + (r - 0.5) * layout.gap}" x2="${width - sidePadding}" y2="${contentTop + r * layout.monthH + (r - 0.5) * layout.gap}" stroke="${alpha(theme.accent2, 0.10)}" stroke-dasharray="10 12" />`); } 
+    else if (layout.cols === 6 && layout.rows === 2) {
+      quarterLines += `<line x1="${sidePadding}" y1="${contentTop + layout.monthH + layout.gap / 2}" x2="${width - sidePadding}" y2="${contentTop + layout.monthH + layout.gap / 2}" stroke="${alpha(theme.accent2, 0.10)}" stroke-dasharray="10 12" />`;
+      [3].forEach((c) => quarterLines += `<line x1="${sidePadding + c * layout.monthW + (c - 0.5) * layout.gap}" y1="${contentTop}" x2="${sidePadding + c * layout.monthW + (c - 0.5) * layout.gap}" y2="${contentBottom}" stroke="${alpha(theme.accent2, 0.08)}" stroke-dasharray="8 10" />`);
     }
   }
 
-  const footerBox = { x: sidePadding, y: innerBottom - footerHeight, w: width - sidePadding * 2, h: Math.round(footerHeight * 0.92) };
-  return `<?xml version="1.0" encoding="UTF-8"?>
-  <svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">
-    <defs>${fontDefs}</defs>
-    ${renderBackground(cfg, theme, width, height)}
-    ${renderHeader(cfg, theme, labels, now, stats, width, sidePadding, innerTop, FONT_FAMILY)}
-    ${quarterLines}
-    ${monthsSvg}
-    ${renderFooter(cfg, theme, labels, now, stats, width, footerBox, FONT_FAMILY)}
-  </svg>`;
+  return `<?xml version="1.0" encoding="UTF-8"?><svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}"><defs>${fontDefs}</defs>${renderBackground(cfg, theme, width, height)}${renderHeader(cfg, theme, labels, now, stats, width, sidePadding, innerTop, FONT_FAMILY)}${quarterLines}${monthsSvg}${renderFooter(cfg, theme, labels, now, stats, width, { x: sidePadding, y: innerBottom - footerHeight, w: width - sidePadding * 2, h: Math.round(footerHeight * 0.92) }, FONT_FAMILY)}</svg>`;
 }
 
 app.use(express.static(path.join(__dirname, 'public')));
 app.get('/api/options', (req, res) => {
   res.json({ presets: PHONE_PRESETS, themes: THEMES, bgStyles: BG_STYLES, fonts: Object.fromEntries(Object.entries(FONTS).map(([k, v]) => [k, v.name])) });
 });
-app.get('/wallpaper.svg', (req, res) => {
+
+// Добавлено получение погоды для браузерного Live-превью!
+app.get('/wallpaper.svg', async (req, res) => {
   const cfg = getConfig(req.query);
+  cfg.weatherData = await fetchWeatherByCity(cfg.city);
   res.type('image/svg+xml').send(renderSvg(cfg));
 });
+
 app.get('/wallpaper.png', async (req, res) => {
   try {
+    const cacheKey = `${RENDER_VERSION}:${req.originalUrl}:${dayjs().format('YYYY-MM-DD')}`;
+    if (pngCache.has(cacheKey)) {
+      res.setHeader('Content-Type', 'image/png');
+      res.setHeader('X-Cache', 'HIT');
+      return res.send(pngCache.get(cacheKey));
+    }
+
     const cfg = getConfig(req.query);
+    cfg.weatherData = await fetchWeatherByCity(cfg.city);
     const svg = renderSvg(cfg);
 
     let png;
     try {
+      // Надежный рендер из v5
       const fontFiles = Object.values(FONTS)
         .map((f) => path.join(fontsDir, f.file))
         .filter((f) => fs.existsSync(f));
@@ -992,17 +688,23 @@ app.get('/wallpaper.png', async (req, res) => {
           monospaceFamily: selected.family,
         },
       });
-      png = resvg.render().asPng();
+      png = Buffer.from(resvg.render().asPng());
     } catch (renderErr) {
+      // Страховочный вариант из v5
       png = await sharp(Buffer.from(svg), { density: 300 }).png().toBuffer();
     }
 
+    if (pngCache.size < 1000) pngCache.set(cacheKey, png);
     res.setHeader('Content-Type', 'image/png');
-    res.setHeader('Cache-Control', 'no-store');
+    res.setHeader('Cache-Control', 'public, max-age=3600');
+    res.setHeader('X-Cache', 'MISS');
     res.send(png);
   } catch (err) {
     res.status(500).json({ error: 'ОШИБКА ГЕНЕРАЦИИ ОБОЕВ', details: err.message });
   }
 });
-app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'public', 'index.html')));
-app.listen(PORT, () => console.log(`Сервер запущен на http://localhost:${PORT}`));
+
+if (require.main === module) {
+  app.listen(PORT, () => console.log(`Сервер запущен на порту ${PORT}`));
+}
+module.exports = app;
