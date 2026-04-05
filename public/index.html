@@ -6,7 +6,8 @@
   <title>Wallpaper Calendar Pro</title>
   <style>
     :root{
-      --bg:#071018; --bg2:#0c1522;
+      --bg:#071018;
+      --bg2:#0c1522;
       --panel:rgba(12,18,29,.88); --panel2:rgba(18,27,42,.92);
       --line:rgba(255,255,255,.08); --line2:rgba(255,255,255,.14);
       --text:#edf2ff; --muted:#9aa8c1;
@@ -25,7 +26,7 @@
     .hero p{margin:0;color:var(--muted);max-width:900px;line-height:1.55}
     .layout{display:grid;grid-template-columns:minmax(340px,480px) 1fr;gap:14px;align-items:start}
     .panel{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);box-shadow:var(--shadow);backdrop-filter:blur(16px)}
-    .controls{padding:14px;position:sticky;top:10px; max-height: 95vh; overflow-y: auto;}
+    .controls{padding:14px;position:sticky;top:10px;max-height: 95vh; overflow-y: auto;}
     .preview-panel{padding:14px;display:grid;gap:12px}
     .section-head{display:flex;justify-content:space-between;align-items:center;gap:10px;margin:4px 0 12px}
     .section-title{font-size:13px;letter-spacing:.16em;text-transform:uppercase;color:var(--muted)}
@@ -280,7 +281,6 @@
       show_header_meta:true, strong_weekend_tint:true, glass_panels:true,
       c_bg: '#0a0d12', c_panel: '#131823', c_text: '#edf2ff', c_muted: '#8994a7', c_accent: '#ff8f2d', c_accent2: '#ffbc6f', c_weekend: '#ff8f7b'
     };
-
     const colorFields = ['c_bg', 'c_panel', 'c_text', 'c_muted', 'c_accent', 'c_accent2', 'c_weekend', 'c_today', 'c_event'];
     const fields = ['model','font','style','theme','bg_style','month_layout','weekend_mode','lang','timezone','footer','note','width','height','events','city', ...colorFields];
     const checks = ['show_header_meta','show_weekdays','accent_today','strong_weekend_tint','show_progress_ring','show_week_numbers','quarter_dividers','month_badges','focus_current_month','glass_panels'];
@@ -297,7 +297,6 @@
     async function loadOptions(){
       const res = await fetch('/api/options');
       optionsCache = await res.json();
-
       Object.entries(optionsCache.presets).forEach(([k, v]) => els.model.add(new Option(`${v.label} — ${v.width}×${v.height}`, k)));
       Object.entries(optionsCache.fonts).forEach(([k, name]) => els.font.add(new Option(name, k)));
       Object.entries(optionsCache.themes).forEach(([k, v]) => els.theme.add(new Option(v.name, k)));
@@ -341,8 +340,6 @@
       document.getElementById('pngUrlBox').textContent = pngUrl;
       
       if(push) history.replaceState({}, '', `${location.origin}/?${q.toString()}`);
-
-      // В v5 превью грузится прямо с сервера (SVG работает очень быстро)
       preview.src = `${location.origin}/wallpaper.svg?${q.toString()}&_ts=${Date.now()}`;
 
       document.getElementById('downloadBtn').onclick = () => window.open(pngUrl, '_blank');
@@ -421,7 +418,6 @@
 
     document.getElementById('resetBtn').addEventListener('click', () => { fillDefaults(); updatePreview(); });
     
-    // Умная задержка (Debounce) для текстовых полей, чтобы не перегружать сервер частыми запросами
     let typingTimer;
     [...fields, ...checks].forEach(id => {
       const el = els[id];
@@ -436,7 +432,6 @@
     });
 
     els.model.addEventListener('change', () => { applyPresetSize(); updatePreview(); });
-
     (async function init(){ await loadOptions(); renderColorSwatches(); loadFromQuery(); renderPresets(); })();
   </script>
 </body>
