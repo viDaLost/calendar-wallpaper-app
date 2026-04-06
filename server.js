@@ -253,14 +253,18 @@ async function fetchWeatherByCity(city, lang = 'ru') {
     const codes = Array.isArray(data.hourly?.weather_code) ? data.hourly.weather_code : [];
 
     if (times.length && temps.length) {
-      let nowIso = String(data.current.time || '');
-      if (nowIso.length >= 13) nowIso = nowIso.slice(0, 13) + ':00';
-      let nowIndex = times.findIndex(t => t >= nowIso);
-      if (nowIndex < 0) nowIndex = 0;
-      for (let idx = nowIndex; idx < times.length && hourly.length < 6; idx += 3) {
-        const t = Math.round(Number(temps[idx] || 0));
-        hourly.push({ hour: `${String(times[idx]).slice(11, 13)}:00`, temp: t > 0 ? `+${t}` : `${t}`, icon: weatherIconFromCode(Number(codes[idx] ?? code)) });
-      }
+      const targetHours = ['09:00', '12:00', '15:00', '18:00'];
+      targetHours.forEach((targetHour) => {
+        const idx = times.findIndex((t) => String(t).slice(11, 16) === targetHour);
+        if (idx >= 0) {
+          const t = Math.round(Number(temps[idx] || 0));
+          hourly.push({
+            hour: targetHour,
+            temp: t > 0 ? `+${t}` : `${t}`,
+            icon: weatherIconFromCode(Number(codes[idx] ?? code))
+          });
+        }
+      });
     }
 
     const temp = Math.round(Number(data.current.temperature_2m));
@@ -709,61 +713,55 @@ function renderFooter(cfg, theme, labels, now, stats, width, footerBox, FONT) {
       return base + chips;
 
     } else {
-      // Режим 2: Мульти-города — переработанный профессиональный циферблат без наложений
-      const titleText = cfg.lang === 'ru' ? 'Прогноз на день' : 'Day forecast';
-      const titleY = y + h * 0.14;
+      // Режим 2: мульти-города — более кастомный и устойчивый к наложениям
+      let out = base + `<text x="${x + pad}" y="${y + h * 0.16}" fill="${theme.accent2}" font-size="${subSize}" font-family="${FONT}" font-weight="700">${cfg.lang === 'ru' ? 'Прогноз на день' : 'Day forecast'}</text>`;
       const numCities = cfg.weatherDataList.length;
-      const gap = Math.max(12, Math.round(w * 0.018));
+      const gap = Math.max(10, Math.round(w * 0.018));
       const slotW = (w - pad * 2 - gap * (numCities - 1)) / numCities;
-      const cardH = h * 0.72;
-      const cardY = y + h * 0.21;
-
-      let out = base + `<text x="${x + pad}" y="${titleY}" fill="${theme.accent2}" font-size="${subSize * 0.96}" font-family="${FONT}" font-weight="800" letter-spacing="0.02em">${titleText}</text>`;
+      const cardH = h * 0.74;
+      const cardY = y + h * 0.20;
 
       cfg.weatherDataList.forEach((wd, i) => {
-          const slotX = x + pad + i * (slotW + gap);
-          const cardRadius = Math.max(18, Math.round(Math.min(slotW, cardH) * 0.16));
-          const cardInnerPad = Math.max(12, Math.round(slotW * 0.08));
-          const cityRaw = String((wd.cityLabel || '').split(',')[0] || '').trim();
-          const cityLabel = cityRaw.length > 14 ? cityRaw.slice(0, 13) + '…' : cityRaw;
-          const dialCx = slotX + slotW / 2;
-          const dialCy = cardY + cardH * 0.56;
-          const R = Math.min(slotW * 0.22, cardH * 0.24);
-          const coreR = R * 0.68;
-          const badgeW = Math.max(34, Math.round(slotW * 0.24));
-          const badgeH = Math.max(22, Math.round(cardH * 0.13));
-          const orbitOffset = R * 1.18;
+          const cardX = x + pad + i * (slotW + gap);
+          const cardPad = Math.max(10, slotW * 0.075);
+          const cardRadius = Math.max(18, Math.min(slotW, cardH) * 0.14);
+          const cx = cardX + slotW / 2;
+          const headerY = cardY + cardPad + subSize * 0.55;
+          const cityLabel = wd.cityLabel.split(',')[0].trim();
+          const shortCity = cityLabel.length > 11 ? cityLabel.slice(0, 10) + '…' : cityLabel;
+          const dialCy = cardY + cardH * 0.60;
+          const R = Math.min(slotW * 0.24, cardH * 0.23);
+          const hourly = Array.isArray(wd.hourly) ? wd.hourly.slice(0, 4) : [];
           const positions = [
-              { pt: (wd.hourly || [])[0], dx: 0, dy: -orbitOffset },
-              { pt: (wd.hourly || [])[1], dx: orbitOffset, dy: 0 },
-              { pt: (wd.hourly || [])[2], dx: 0, dy: orbitOffset },
-              { pt: (wd.hourly || [])[3], dx: -orbitOffset, dy: 0 }
+              { pt: hourly[0], dx: 0, dy: -R * 1.12 },
+              { pt: hourly[1], dx: R * 1.12, dy: 0 },
+              { pt: hourly[2], dx: 0, dy: R * 1.12 },
+              { pt: hourly[3], dx: -R * 1.12, dy: 0 }
           ];
 
-          out += `<rect x="${slotX}" y="${cardY}" width="${slotW}" height="${cardH}" rx="${cardRadius}" fill="${alpha(theme.bg, 0.22)}" stroke="${alpha(theme.accent2, 0.14)}" stroke-width="1.2"/>`;
-          out += `<rect x="${slotX + 1.5}" y="${cardY + 1.5}" width="${Math.max(0, slotW - 3)}" height="${Math.max(0, cardH - 3)}" rx="${Math.max(0, cardRadius - 1.5)}" fill="none" stroke="${alpha('#ffffff', 0.035)}" stroke-width="1"/>`;
+          out += `<rect x="${cardX}" y="${cardY}" width="${slotW}" height="${cardH}" rx="${cardRadius}" fill="${alpha(theme.panel, 0.72)}" stroke="${alpha(theme.accent2, 0.18)}" stroke-width="1.25"/>`;
+          out += `<rect x="${cardX + 1}" y="${cardY + 1}" width="${slotW - 2}" height="${cardH * 0.26}" rx="${Math.max(16, cardRadius - 4)}" fill="${alpha(theme.bg, 0.18)}"/>`;
 
-          out += `<text x="${slotX + cardInnerPad}" y="${cardY + cardH * 0.16}" fill="${theme.text}" font-size="${subSize * 0.86}" font-family="${FONT}" font-weight="800">${escapeXml(cityLabel)}</text>`;
-          out += `<text x="${slotX + slotW - cardInnerPad}" y="${cardY + cardH * 0.16}" text-anchor="end" fill="${theme.accent2}" font-size="${subSize * 0.78}" font-family="${FONT}" font-weight="700">${escapeXml((wd.dailyMax && wd.dailyMin) ? `${wd.dailyMax} / ${wd.dailyMin}` : '')}</text>`;
+          out += `<text x="${cardX + cardPad}" y="${headerY}" fill="${theme.text}" font-size="${subSize * 0.98}" font-family="${FONT}" font-weight="700">${escapeXml(shortCity)}</text>`;
+          out += `<text x="${cardX + slotW - cardPad}" y="${headerY}" text-anchor="end" fill="${theme.accent2}" font-size="${subSize * 0.92}" font-family="${FONT}" font-weight="800">${wd.temp}°</text>`;
 
-          out += `<circle cx="${dialCx}" cy="${dialCy}" r="${R}" fill="${alpha(theme.panel, 0.52)}" stroke="${alpha(theme.accent2, 0.22)}" stroke-width="1.3"/>`;
-          out += `<circle cx="${dialCx}" cy="${dialCy}" r="${coreR}" fill="${alpha(theme.bg, 0.76)}" stroke="${alpha(theme.accent, 0.16)}" stroke-width="1"/>`;
-          out += `<circle cx="${dialCx}" cy="${dialCy}" r="${R * 0.88}" fill="none" stroke="${alpha(theme.accent2, 0.10)}" stroke-width="1" stroke-dasharray="2.5 7"/>`;
-
-          out += `<text x="${dialCx}" y="${dialCy - R * 0.12}" text-anchor="middle" fill="${theme.text}" font-size="${R * 0.34}" font-family="${FONT}">${wd.icon}</text>`;
-          out += `<text x="${dialCx}" y="${dialCy + R * 0.34}" text-anchor="middle" fill="${theme.text}" font-size="${R * 0.42}" font-family="${FONT}" font-weight="900">${escapeXml(wd.temp)}°</text>`;
+          out += `<circle cx="${cx}" cy="${dialCy}" r="${R * 1.22}" fill="${alpha(theme.bg, 0.42)}" stroke="${alpha(theme.accent2, 0.12)}" stroke-width="1.1"/>`;
+          out += `<circle cx="${cx}" cy="${dialCy}" r="${R * 0.92}" fill="${alpha(theme.panel, 0.9)}" stroke="${alpha(theme.accent, 0.16)}" stroke-width="1"/>`;
+          out += `<text x="${cx}" y="${dialCy - R * 0.14}" text-anchor="middle" fill="${theme.text}" font-size="${R * 0.42}" font-family="${FONT}">${wd.icon}</text>`;
+          out += `<text x="${cx}" y="${dialCy + R * 0.42}" text-anchor="middle" fill="${theme.text}" font-size="${R * 0.52}" font-family="${FONT}" font-weight="800">${wd.temp}°</text>`;
 
           positions.forEach((pos) => {
               if (!pos.pt) return;
-              const px = dialCx + pos.dx;
+              const px = cx + pos.dx;
               const py = dialCy + pos.dy;
-              const shortHour = String(pos.pt.hour || '').split(':')[0].padStart(2, '0');
-              const tempLabel = `${pos.pt.temp}°`;
+              const badgeW = R * 1.12;
+              const badgeH = R * 0.52;
+              const shortHour = String(pos.pt.hour || '').slice(0, 2);
 
-              out += `<rect x="${px - badgeW / 2}" y="${py - badgeH / 2}" width="${badgeW}" height="${badgeH}" rx="${badgeH * 0.45}" fill="${alpha(theme.panel, 0.96)}" stroke="${alpha(theme.accent, 0.18)}" stroke-width="1"/>`;
-              out += `<text x="${px}" y="${py - badgeH * 0.50}" text-anchor="middle" fill="${theme.muted}" font-size="${Math.max(9, badgeH * 0.42)}" font-family="${FONT}" font-weight="700">${shortHour}</text>`;
-              out += `<text x="${px - badgeW * 0.08}" y="${py + badgeH * 0.15}" text-anchor="end" fill="${theme.text}" font-size="${Math.max(9, badgeH * 0.46)}" font-family="${FONT}">${pos.pt.icon}</text>`;
-              out += `<text x="${px + badgeW * 0.08}" y="${py + badgeH * 0.15}" text-anchor="start" fill="${theme.text}" font-size="${Math.max(9, badgeH * 0.42)}" font-family="${FONT}" font-weight="800">${escapeXml(tempLabel)}</text>`;
+              out += `<rect x="${px - badgeW / 2}" y="${py - badgeH / 2}" width="${badgeW}" height="${badgeH}" rx="${badgeH / 2}" fill="${alpha(theme.bg, 0.78)}" stroke="${alpha(theme.accent, 0.24)}" stroke-width="1"/>`;
+              out += `<text x="${px}" y="${py - badgeH * 0.08}" text-anchor="middle" fill="${theme.muted}" font-size="${badgeH * 0.42}" font-family="${FONT}" font-weight="700">${shortHour}</text>`;
+              out += `<text x="${px - badgeW * 0.08}" y="${py + badgeH * 0.28}" text-anchor="end" fill="${theme.text}" font-size="${badgeH * 0.42}" font-family="${FONT}">${pos.pt.icon}</text>`;
+              out += `<text x="${px + badgeW * 0.08}" y="${py + badgeH * 0.28}" text-anchor="start" fill="${theme.text}" font-size="${badgeH * 0.34}" font-family="${FONT}" font-weight="800">${pos.pt.temp}°</text>`;
           });
       });
       return out;
@@ -796,8 +794,7 @@ function renderSvg(cfg) {
   const listLike = isListLayout(cfg.monthLayout);
   const compactLike = isCompactGridLayout(cfg.monthLayout) || listLike;
   const headerHeight = Math.round(height * (listLike ? 0.088 : compactLike ? 0.09 : 0.095));
-  const weatherFooterBoost = cfg.footer === 'day_weather' ? (cfg.weatherDataList && cfg.weatherDataList.length > 1 ? 1.46 : 1.22) : 1;
-  const footerHeight = Math.round((height * (listLike ? 0.072 : compactLike ? 0.076 : 0.08)) * weatherFooterBoost);
+  const footerHeight = Math.round(height * (cfg.footer === 'day_weather' ? 0.115 : (listLike ? 0.072 : compactLike ? 0.076 : 0.08)));
   const contentTop = innerTop + headerHeight + Math.round(height * 0.012);
   const contentBottom = innerBottom - footerHeight - Math.round(height * 0.014);
   const contentH = contentBottom - contentTop;
