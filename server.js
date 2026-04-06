@@ -253,17 +253,14 @@ async function fetchWeatherByCity(city, lang = 'ru') {
     const codes = Array.isArray(data.hourly?.weather_code) ? data.hourly.weather_code : [];
 
     if (times.length && temps.length) {
-      const desiredHours = ['09:00', '12:00', '15:00', '18:00'];
-      const targetDay = String(data.current.time || times[0] || '').slice(0, 10);
-      desiredHours.forEach((hh) => {
-        const targetIso = `${targetDay}T${hh}`;
-        let idx = times.findIndex(t => String(t).slice(0, 16) === targetIso);
-        if (idx < 0) idx = times.findIndex(t => String(t).slice(11, 16) === hh);
-        if (idx >= 0) {
-          const t = Math.round(Number(temps[idx] || 0));
-          hourly.push({ hour: hh, temp: t > 0 ? `+${t}` : `${t}`, icon: weatherIconFromCode(Number(codes[idx] ?? code)) });
-        }
-      });
+      let nowIso = String(data.current.time || '');
+      if (nowIso.length >= 13) nowIso = nowIso.slice(0, 13) + ':00';
+      let nowIndex = times.findIndex(t => t >= nowIso);
+      if (nowIndex < 0) nowIndex = 0;
+      for (let idx = nowIndex; idx < times.length && hourly.length < 6; idx += 3) {
+        const t = Math.round(Number(temps[idx] || 0));
+        hourly.push({ hour: `${String(times[idx]).slice(11, 13)}:00`, temp: t > 0 ? `+${t}` : `${t}`, icon: weatherIconFromCode(Number(codes[idx] ?? code)) });
+      }
     }
 
     const temp = Math.round(Number(data.current.temperature_2m));
@@ -694,103 +691,58 @@ function renderFooter(cfg, theme, labels, now, stats, width, footerBox, FONT) {
       return base + `<text x="${x + pad}" y="${y + h * 0.34}" fill="${theme.accent2}" font-size="${subSize}" font-family="${FONT}" font-weight="700">${cfg.lang === 'ru' ? 'Прогноз на день' : 'Day forecast'}</text><text x="${x + pad}" y="${y + h * 0.66}" fill="${theme.text}" font-size="${textSize * 0.8}" font-family="${FONT}" font-weight="700">${cfg.lang === 'ru' ? 'Добавь город для погоды' : 'Add city for forecast'}</text>`;
     }
 
-    if (cfg.weatherDataList.length === 1) {
-      const wd = cfg.weatherDataList[0];
-      const cityLabel = String(wd.cityLabel || '').split(',')[0].trim();
-      const items = wd.hourly || [];
-      const singleTop = y + h * 0.12;
-      const cityY = y + h * 0.30;
-      const cx = x + w / 2;
-      const cy = y + h * 0.68;
-      const R = Math.min(w * 0.18, h * 0.28);
-      let out = '';
-      out += `<text x="${x + pad}" y="${singleTop}" fill="${theme.accent2}" font-size="${subSize}" font-family="${FONT}" font-weight="700">${cfg.lang === 'ru' ? 'Прогноз на день' : 'Day forecast'}</text>`;
-      if (cityLabel) out += `<text x="${cx}" y="${cityY}" text-anchor="middle" fill="${theme.text}" font-size="${Math.max(subSize * 1.45, R * 0.46)}" font-family="${FONT}" font-weight="700">${escapeXml(cityLabel)}</text>`;
+    const titleY = y + h * 0.18;
+    const contentTop = y + h * 0.28;
+    const contentBottom = y + h * 0.92;
+    const contentH = Math.max(10, contentBottom - contentTop);
+    const cities = cfg.weatherDataList.slice(0, 3);
+    const numCities = cities.length;
+    const cardGap = Math.max(10, Math.round(w * 0.02));
+    const totalGap = cardGap * (numCities - 1);
+    const cardW = Math.max(140, (w - pad * 2 - totalGap) / numCities);
+    const cardH = contentH;
+    const cityFont = Math.max(18, Math.min(cardH * 0.15, cardW * 0.13));
+    const rowGap = Math.max(6, Math.round(cardH * 0.028));
+    const cardPadX = Math.max(12, Math.round(cardW * 0.08));
+    const cardPadTop = Math.max(14, Math.round(cardH * 0.10));
+    const availableRowsH = Math.max(40, cardH - cardPadTop - cityFont - rowGap * 2 - Math.round(cardH * 0.06));
+    const rowH = Math.max(22, Math.min(availableRowsH / 4, cardH * 0.14));
+    const timeW = Math.max(52, Math.min(cardW * 0.30, 86));
+    const rowTextSize = Math.max(13, Math.min(rowH * 0.50, cardW * 0.10));
+    const rowIconSize = Math.max(14, Math.min(rowH * 0.60, cardW * 0.11));
+    const listStartY = contentTop + cardPadTop + cityFont + rowGap;
 
-      out += `<circle cx="${cx}" cy="${cy}" r="${R * 1.06}" fill="none" stroke="${alpha(theme.accent, 0.12)}" stroke-width="${Math.max(1.5, R * 0.04)}"/>`;
-      out += `<circle cx="${cx}" cy="${cy}" r="${R * 0.84}" fill="none" stroke="${alpha(theme.accent2, 0.16)}" stroke-width="${Math.max(1.5, R * 0.03)}"/>`;
-      out += `<circle cx="${cx}" cy="${cy}" r="${R * 0.58}" fill="${alpha(theme.bg, 0.30)}" stroke="${alpha(theme.accent, 0.10)}" stroke-width="1"/>`;
-      out += `<text x="${cx}" y="${cy - R * 0.10}" text-anchor="middle" fill="${theme.text}" font-size="${R * 0.42}" font-family="${FONT}">${wd.icon}</text>`;
-      out += `<text x="${cx}" y="${cy + R * 0.44}" text-anchor="middle" fill="${theme.text}" font-size="${R * 0.60}" font-family="${FONT}" font-weight="800">${wd.temp}°</text>`;
+    let out = base + `<text x="${x + pad}" y="${titleY}" fill="${theme.accent2}" font-size="${subSize}" font-family="${FONT}" font-weight="700">${cfg.lang === 'ru' ? 'Прогноз на день' : 'Day forecast'}</text>`;
+
+    cities.forEach((wd, i) => {
+      const cardX = x + pad + i * (cardW + cardGap);
+      const cardY = contentTop;
+      const cityLabelRaw = String(wd.cityLabel || '').split(',')[0].trim();
+      const maxCityChars = numCities >= 3 ? 12 : numCities === 2 ? 16 : 22;
+      const cityLabel = cityLabelRaw.length > maxCityChars ? cityLabelRaw.slice(0, maxCityChars - 1) + '…' : cityLabelRaw;
+
+      out += `<rect x="${cardX}" y="${cardY}" width="${cardW}" height="${cardH}" rx="${Math.max(18, Math.round(cardW * 0.10))}" fill="${alpha(theme.panel, 0.58)}" stroke="${alpha(theme.accent, 0.18)}" stroke-width="1.4"/>`;
+      out += `<text x="${cardX + cardW / 2}" y="${cardY + cardPadTop + cityFont * 0.90}" text-anchor="middle" fill="${theme.text}" font-size="${cityFont}" font-family="${FONT}" font-weight="700">${escapeXml(cityLabel)}</text>`;
+      out += `<line x1="${cardX + cardPadX}" y1="${cardY + cardPadTop + cityFont + rowGap * 0.2}" x2="${cardX + cardW - cardPadX}" y2="${cardY + cardPadTop + cityFont + rowGap * 0.2}" stroke="${alpha(theme.accent2, 0.12)}" stroke-width="1"/>`;
 
       const itemByHour = {};
-      items.forEach((item) => { itemByHour[String(item.hour).slice(0, 2)] = item; });
-      const positions = [
-        { hour: '09', dx: -R, dy: 0 },
-        { hour: '12', dx: 0, dy: -R },
-        { hour: '15', dx: R, dy: 0 },
-        { hour: '18', dx: 0, dy: R }
-      ];
-      positions.forEach((pos) => {
-        const pt = itemByHour[pos.hour];
-        if (!pt) return;
-        const px = cx + pos.dx;
-        const py = cy + pos.dy;
-        const badgeW = R * 0.82;
-        const badgeH = R * 0.42;
-        out += `<text x="${px}" y="${py - badgeH * 0.72}" text-anchor="middle" fill="${theme.muted}" font-size="${R * 0.22}" font-family="${FONT}" font-weight="700">${pos.hour}</text>`;
-        out += `<rect x="${px - badgeW / 2}" y="${py - badgeH / 2}" width="${badgeW}" height="${badgeH}" rx="${badgeH / 2}" fill="${alpha(theme.panel, 0.92)}" stroke="${alpha(theme.accent, 0.28)}" stroke-width="1.2"/>`;
-        out += `<text x="${px - badgeW * 0.12}" y="${py + badgeH * 0.10}" text-anchor="end" fill="${theme.text}" font-size="${badgeH * 0.55}" font-family="${FONT}">${pt.icon}</text>`;
-        out += `<text x="${px + badgeW * 0.06}" y="${py + badgeH * 0.12}" text-anchor="start" fill="${theme.text}" font-size="${badgeH * 0.46}" font-family="${FONT}" font-weight="800">${escapeXml(pt.temp)}°</text>`;
+      (wd.hourly || []).forEach((item) => { itemByHour[String(item.hour).slice(0, 5)] = item; });
+
+      ['09:00', '12:00', '15:00', '18:00'].forEach((hour, rowIdx) => {
+        const item = itemByHour[hour] || { hour, temp: '—', icon: '•' };
+        const rowY = listStartY + rowIdx * (rowH + rowGap);
+
+        out += `<rect x="${cardX + cardPadX}" y="${rowY}" width="${cardW - cardPadX * 2}" height="${rowH}" rx="${Math.max(10, rowH / 2)}" fill="${alpha(theme.bg, 0.26)}" stroke="${alpha(theme.accent, 0.12)}" stroke-width="1"/>`;
+        out += `<rect x="${cardX + cardPadX + 1}" y="${rowY + 1}" width="${timeW}" height="${rowH - 2}" rx="${Math.max(9, rowH / 2 - 1)}" fill="${alpha(theme.panel, 0.90)}" stroke="${alpha(theme.accent, 0.24)}" stroke-width="1"/>`;
+        out += `<text x="${cardX + cardPadX + timeW / 2}" y="${rowY + rowH * 0.66}" text-anchor="middle" fill="${theme.accent2}" font-size="${rowTextSize}" font-family="${FONT}" font-weight="800">${hour}</text>`;
+        out += `<text x="${cardX + cardPadX + timeW + Math.max(12, cardW * 0.05)}" y="${rowY + rowH * 0.66}" text-anchor="start" fill="${theme.text}" font-size="${rowIconSize}" font-family="${FONT}">${item.icon}</text>`;
+        out += `<text x="${cardX + cardW - cardPadX - Math.max(8, cardW * 0.02)}" y="${rowY + rowH * 0.66}" text-anchor="end" fill="${theme.text}" font-size="${rowTextSize}" font-family="${FONT}" font-weight="700">${escapeXml(item.temp)}°</text>`;
       });
-      return out;
+    });
 
-    } else {
-      // Режим 2: Мульти-города (Круглые циферблаты в стиле Apple Watch)
-      let out = base + `<text x="${x + pad}" y="${y + h * 0.18}" fill="${theme.accent2}" font-size="${subSize}" font-family="${FONT}" font-weight="700">${cfg.lang === 'ru' ? 'Прогноз на день' : 'Day forecast'}</text>`;
-      const numCities = cfg.weatherDataList.length;
-      const slotW = (w - pad * 2) / numCities;
-
-      cfg.weatherDataList.forEach((wd, i) => {
-          const cx = x + pad + i * slotW + slotW / 2;
-          const cy = y + h * 0.62;
-          const R = Math.min(slotW * 0.35, h * 0.28); // Строго контролируемый радиус
-
-          // Название города
-          const cityLabel = wd.cityLabel.split(',')[0].trim();
-          out += `<text x="${cx}" y="${cy - R - h * 0.05}" text-anchor="middle" fill="${theme.muted}" font-size="${subSize * 0.8}" font-family="${FONT}" font-weight="700">${escapeXml(cityLabel.length > 13 ? cityLabel.slice(0, 12) + '…' : cityLabel)}</text>`;
-
-          // Контур часов
-          out += `<circle cx="${cx}" cy="${cy}" r="${R}" fill="${alpha(theme.panel, 0.4)}" stroke="${alpha(theme.accent2, 0.2)}" stroke-width="1.5"/>`;
-          // Внутренняя зона
-          out += `<circle cx="${cx}" cy="${cy}" r="${R * 0.75}" fill="${alpha(theme.bg, 0.5)}" stroke="${alpha(theme.accent, 0.1)}" stroke-width="1"/>`;
-
-          // Текущая погода в центре: иконка сверху, температура крупно снизу
-          out += `<text x="${cx}" y="${cy - R * 0.12}" text-anchor="middle" fill="${theme.text}" font-size="${R * 0.45}" font-family="${FONT}">${wd.icon}</text>`;
-          out += `<text x="${cx}" y="${cy + R * 0.45}" text-anchor="middle" fill="${theme.text}" font-size="${R * 0.65}" font-family="${FONT}" font-weight="800">${wd.temp}°</text>`;
-
-          const itemByHour = {};
-          (wd.hourly || []).forEach((item) => { itemByHour[String(item.hour).slice(0, 2)] = item; });
-          const positions = [
-              { pt: itemByHour['12'], dx: 0, dy: -R },
-              { pt: itemByHour['15'], dx: R, dy: 0 },
-              { pt: itemByHour['18'], dx: 0, dy: R },
-              { pt: itemByHour['09'], dx: -R, dy: 0 }
-          ];
-
-          positions.forEach(pos => {
-              if (!pos.pt) return;
-              const px = cx + pos.dx;
-              const py = cy + pos.dy;
-
-              // Компактные скругленные плашки на орбите
-              const badgeS = R * 0.68;
-
-              out += `<rect x="${px - badgeS/2}" y="${py - badgeS/2}" width="${badgeS}" height="${badgeS}" rx="${badgeS * 0.35}" fill="${alpha(theme.panel, 0.95)}" stroke="${alpha(theme.accent, 0.3)}" stroke-width="1"/>`;
-
-              // Час (сокращаем "15:00" до "15", чтобы убрать визуальный шум)
-              const shortHour = pos.pt.hour.split(':')[0];
-              out += `<text x="${px}" y="${py - badgeS * 0.05}" text-anchor="middle" fill="${theme.muted}" font-size="${badgeS * 0.38}" font-family="${FONT}" font-weight="700">${shortHour}</text>`;
-
-              // Иконка и температура: ставим их в один ряд снизу с выравниванием от центра (отталкиваем друг от друга)
-              out += `<text x="${px - badgeS * 0.05}" y="${py + badgeS * 0.35}" text-anchor="end" fill="${theme.text}" font-size="${badgeS * 0.32}" font-family="${FONT}">${pos.pt.icon}</text>`;
-              out += `<text x="${px + badgeS * 0.05}" y="${py + badgeS * 0.35}" text-anchor="start" fill="${theme.text}" font-size="${badgeS * 0.30}" font-family="${FONT}" font-weight="800">${pos.pt.temp}°</text>`;
-          });
-      });
-      return out;
-    }
+    return out;
   }
-  
+
   if (cfg.footer === 'custom_note' && cfg.note) return base + (cfg.note).split('\n').map((line, i) => `<text x="${x + pad}" y="${y + h * 0.38 + i * subSize * 1.6}" fill="${theme.text}" font-size="${subSize}" font-family="${FONT}" font-weight="700">${escapeXml(line)}</text>`).join('');
   
   return base + `<text x="${x + pad}" y="${y + h * 0.36}" fill="${theme.text}" font-size="${textSize}" font-family="${FONT}" font-weight="800">${stats.daysLeft} ${labels.daysLeft}</text><text x="${x + pad}" y="${y + h * 0.66}" fill="${theme.muted}" font-size="${subSize}" font-family="${FONT}">${stats.percentPassed}% ${labels.passed}</text>`;
