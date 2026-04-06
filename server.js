@@ -687,62 +687,71 @@ function renderFooter(cfg, theme, labels, now, stats, width, footerBox, FONT) {
   }
   
   if (cfg.footer === 'day_weather') {
+    const title = cfg.lang === 'ru' ? 'Прогноз на день' : 'Day forecast';
+    const boxX = x - w * 0.015;
+    const boxW = w + w * 0.03;
+    const titleX = boxX + boxW * 0.07;
+    const titleY = y + h * 0.11;
+    let panel = `<rect x="${boxX}" y="${y}" width="${boxW}" height="${h}" rx="${Math.round(boxW * 0.05)}" fill="${alpha(theme.panel, 0.82)}" stroke="${alpha('#ffffff', cfg.glassPanels===false?0.06:0.08)}"/>`;
+    if (cfg.glassPanels !== false) panel += `<rect x="${boxX + 1.5}" y="${y + 1.5}" width="${Math.max(0, boxW - 3)}" height="${Math.max(0, h - 3)}" rx="${Math.max(0, Math.round(boxW * 0.05) - 1.5)}" fill="none" stroke="${alpha(theme.accent2, 0.05)}"/>`;
+    panel += `<text x="${titleX}" y="${titleY}" fill="${theme.accent2}" font-size="${subSize}" font-family="${FONT}" font-weight="700">${title}</text>`;
+
     if (!cfg.weatherDataList || cfg.weatherDataList.length === 0) {
-      return base + `<text x="${x + pad}" y="${y + h * 0.34}" fill="${theme.accent2}" font-size="${subSize}" font-family="${FONT}" font-weight="700">${cfg.lang === 'ru' ? 'Прогноз на день' : 'Day forecast'}</text><text x="${x + pad}" y="${y + h * 0.66}" fill="${theme.text}" font-size="${textSize * 0.8}" font-family="${FONT}" font-weight="700">${cfg.lang === 'ru' ? 'Добавь город для погоды' : 'Add city for forecast'}</text>`;
+      return panel + `<text x="${titleX}" y="${y + h * 0.52}" fill="${theme.text}" font-size="${textSize * 0.8}" font-family="${FONT}" font-weight="700">${cfg.lang === 'ru' ? 'Добавь город для погоды' : 'Add city for forecast'}</text>`;
     }
 
-    const titleY = y + h * 0.18;
-    const contentTop = y + h * 0.28;
-    const contentBottom = y + h * 0.92;
-    const contentH = Math.max(10, contentBottom - contentTop);
-    const cities = cfg.weatherDataList.slice(0, 3);
-    const numCities = cities.length;
-    const cardGap = Math.max(10, Math.round(w * 0.02));
-    const totalGap = cardGap * (numCities - 1);
-    const cardW = Math.max(140, (w - pad * 2 - totalGap) / numCities);
-    const cardH = contentH;
-    const cityFont = Math.max(18, Math.min(cardH * 0.15, cardW * 0.13));
-    const rowGap = Math.max(6, Math.round(cardH * 0.028));
-    const cardPadX = Math.max(12, Math.round(cardW * 0.08));
-    const cardPadTop = Math.max(14, Math.round(cardH * 0.10));
-    const availableRowsH = Math.max(40, cardH - cardPadTop - cityFont - rowGap * 2 - Math.round(cardH * 0.06));
-    const rowH = Math.max(22, Math.min(availableRowsH / 4, cardH * 0.14));
-    const timeW = Math.max(52, Math.min(cardW * 0.30, 86));
-    const rowTextSize = Math.max(13, Math.min(rowH * 0.50, cardW * 0.10));
-    const rowIconSize = Math.max(14, Math.min(rowH * 0.60, cardW * 0.11));
-    const listStartY = contentTop + cardPadTop + cityFont + rowGap;
+    const outerPad = Math.round(boxW * 0.065);
+    const gap = Math.max(18, Math.round(boxW * 0.03));
+    const contentTop = y + h * 0.25;
+    const contentBottom = y + h * 0.90;
+    const contentH = contentBottom - contentTop;
 
-    let out = base + `<text x="${x + pad}" y="${titleY}" fill="${theme.accent2}" font-size="${subSize}" font-family="${FONT}" font-weight="700">${cfg.lang === 'ru' ? 'Прогноз на день' : 'Day forecast'}</text>`;
+    if (cfg.weatherDataList.length === 1) {
+      const wd = cfg.weatherDataList[0];
+      const city = String(wd.cityLabel || '').split(',')[0].trim();
+      const items = (wd.hourly || []).slice(0, 4);
+      const citySize = subSize * 0.95;
+      const rowH = contentH / Math.max(4.2, items.length + 0.4);
+      const rowX = boxX + outerPad;
+      const rowW = boxW - outerPad * 2;
+      let out = panel;
+      if (city) out += `<text x="${boxX + boxW / 2}" y="${contentTop + citySize * 0.15}" text-anchor="middle" fill="${theme.text}" font-size="${citySize}" font-family="${FONT}" font-weight="700">${escapeXml(city)}</text>`;
+      items.forEach((item, idx) => {
+        const ry = contentTop + citySize * 0.55 + idx * rowH;
+        out += `<line x1="${rowX + rowW * 0.18}" y1="${ry + rowH * 0.78}" x2="${rowX + rowW}" y2="${ry + rowH * 0.78}" stroke="${alpha(theme.accent, 0.14)}"/>`;
+        out += `<rect x="${rowX}" y="${ry + rowH * 0.10}" width="${rowW * 0.18}" height="${rowH * 0.62}" rx="${rowH * 0.31}" fill="${alpha(theme.bg, 0.16)}" stroke="${alpha(theme.accent, 0.22)}"/>`;
+        out += `<text x="${rowX + rowW * 0.09}" y="${ry + rowH * 0.54}" text-anchor="middle" fill="${theme.accent2}" font-size="${subSize * 0.72}" font-family="${FONT}" font-weight="700">${escapeXml(item.hour)}</text>`;
+        out += `<text x="${rowX + rowW * 0.24}" y="${ry + rowH * 0.56}" fill="${theme.text}" font-size="${subSize * 0.9}" font-family="${FONT}">${item.icon}</text>`;
+        out += `<text x="${rowX + rowW}" y="${ry + rowH * 0.56}" text-anchor="end" fill="${theme.text}" font-size="${subSize * 0.86}" font-family="${FONT}" font-weight="800">${escapeXml(item.temp)}°</text>`;
+      });
+      return out;
+    }
 
-    cities.forEach((wd, i) => {
-      const cardX = x + pad + i * (cardW + cardGap);
-      const cardY = contentTop;
-      const cityLabelRaw = String(wd.cityLabel || '').split(',')[0].trim();
-      const maxCityChars = numCities >= 3 ? 12 : numCities === 2 ? 16 : 22;
-      const cityLabel = cityLabelRaw.length > maxCityChars ? cityLabelRaw.slice(0, maxCityChars - 1) + '…' : cityLabelRaw;
-
-      out += `<rect x="${cardX}" y="${cardY}" width="${cardW}" height="${cardH}" rx="${Math.max(18, Math.round(cardW * 0.10))}" fill="${alpha(theme.panel, 0.58)}" stroke="${alpha(theme.accent, 0.18)}" stroke-width="1.4"/>`;
-      out += `<text x="${cardX + cardW / 2}" y="${cardY + cardPadTop + cityFont * 0.90}" text-anchor="middle" fill="${theme.text}" font-size="${cityFont}" font-family="${FONT}" font-weight="700">${escapeXml(cityLabel)}</text>`;
-      out += `<line x1="${cardX + cardPadX}" y1="${cardY + cardPadTop + cityFont + rowGap * 0.2}" x2="${cardX + cardW - cardPadX}" y2="${cardY + cardPadTop + cityFont + rowGap * 0.2}" stroke="${alpha(theme.accent2, 0.12)}" stroke-width="1"/>`;
-
-      const itemByHour = {};
-      (wd.hourly || []).forEach((item) => { itemByHour[String(item.hour).slice(0, 5)] = item; });
-
-      ['09:00', '12:00', '15:00', '18:00'].forEach((hour, rowIdx) => {
-        const item = itemByHour[hour] || { hour, temp: '—', icon: '•' };
-        const rowY = listStartY + rowIdx * (rowH + rowGap);
-
-        out += `<rect x="${cardX + cardPadX}" y="${rowY}" width="${cardW - cardPadX * 2}" height="${rowH}" rx="${Math.max(10, rowH / 2)}" fill="${alpha(theme.bg, 0.26)}" stroke="${alpha(theme.accent, 0.12)}" stroke-width="1"/>`;
-        out += `<rect x="${cardX + cardPadX + 1}" y="${rowY + 1}" width="${timeW}" height="${rowH - 2}" rx="${Math.max(9, rowH / 2 - 1)}" fill="${alpha(theme.panel, 0.90)}" stroke="${alpha(theme.accent, 0.24)}" stroke-width="1"/>`;
-        out += `<text x="${cardX + cardPadX + timeW / 2}" y="${rowY + rowH * 0.66}" text-anchor="middle" fill="${theme.accent2}" font-size="${rowTextSize}" font-family="${FONT}" font-weight="800">${hour}</text>`;
-        out += `<text x="${cardX + cardPadX + timeW + Math.max(12, cardW * 0.05)}" y="${rowY + rowH * 0.66}" text-anchor="start" fill="${theme.text}" font-size="${rowIconSize}" font-family="${FONT}">${item.icon}</text>`;
-        out += `<text x="${cardX + cardW - cardPadX - Math.max(8, cardW * 0.02)}" y="${rowY + rowH * 0.66}" text-anchor="end" fill="${theme.text}" font-size="${rowTextSize}" font-family="${FONT}" font-weight="700">${escapeXml(item.temp)}°</text>`;
+    let out = panel;
+    const numCities = cfg.weatherDataList.length;
+    const slotW = (boxW - outerPad * 2 - gap * (numCities - 1)) / numCities;
+    cfg.weatherDataList.forEach((wd, i) => {
+      const city = String(wd.cityLabel || '').split(',')[0].trim();
+      const items = (wd.hourly || []).slice(0, 4);
+      const colX = boxX + outerPad + i * (slotW + gap);
+      const citySize = Math.min(subSize * 0.92, slotW * 0.14);
+      const cityLabel = city.length > 14 ? city.slice(0, 13) + '…' : city;
+      const rowTop = contentTop + citySize * 0.55;
+      const rowH = (contentBottom - rowTop) / Math.max(4.15, items.length + 0.15);
+      out += `<text x="${colX + slotW / 2}" y="${contentTop + citySize * 0.1}" text-anchor="middle" fill="${theme.text}" font-size="${citySize}" font-family="${FONT}" font-weight="700">${escapeXml(cityLabel)}</text>`;
+      out += `<line x1="${colX + slotW * 0.08}" y1="${contentTop + citySize * 0.32}" x2="${colX + slotW * 0.92}" y2="${contentTop + citySize * 0.32}" stroke="${alpha(theme.accent, 0.14)}"/>`;
+      items.forEach((item, idx) => {
+        const ry = rowTop + idx * rowH;
+        out += `<line x1="${colX + slotW * 0.18}" y1="${ry + rowH * 0.78}" x2="${colX + slotW * 0.92}" y2="${ry + rowH * 0.78}" stroke="${alpha(theme.accent, 0.14)}"/>`;
+        out += `<rect x="${colX + slotW * 0.02}" y="${ry + rowH * 0.10}" width="${slotW * 0.30}" height="${rowH * 0.62}" rx="${rowH * 0.31}" fill="${alpha(theme.bg, 0.16)}" stroke="${alpha(theme.accent, 0.22)}"/>`;
+        out += `<text x="${colX + slotW * 0.17}" y="${ry + rowH * 0.54}" text-anchor="middle" fill="${theme.accent2}" font-size="${subSize * 0.70}" font-family="${FONT}" font-weight="700">${escapeXml(item.hour)}</text>`;
+        out += `<text x="${colX + slotW * 0.40}" y="${ry + rowH * 0.56}" fill="${theme.text}" font-size="${subSize * 0.88}" font-family="${FONT}">${item.icon}</text>`;
+        out += `<text x="${colX + slotW * 0.92}" y="${ry + rowH * 0.56}" text-anchor="end" fill="${theme.text}" font-size="${subSize * 0.84}" font-family="${FONT}" font-weight="800">${escapeXml(item.temp)}°</text>`;
       });
     });
-
     return out;
   }
-
+  
   if (cfg.footer === 'custom_note' && cfg.note) return base + (cfg.note).split('\n').map((line, i) => `<text x="${x + pad}" y="${y + h * 0.38 + i * subSize * 1.6}" fill="${theme.text}" font-size="${subSize}" font-family="${FONT}" font-weight="700">${escapeXml(line)}</text>`).join('');
   
   return base + `<text x="${x + pad}" y="${y + h * 0.36}" fill="${theme.text}" font-size="${textSize}" font-family="${FONT}" font-weight="800">${stats.daysLeft} ${labels.daysLeft}</text><text x="${x + pad}" y="${y + h * 0.66}" fill="${theme.muted}" font-size="${subSize}" font-family="${FONT}">${stats.percentPassed}% ${labels.passed}</text>`;
