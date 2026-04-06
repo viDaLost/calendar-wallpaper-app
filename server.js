@@ -253,16 +253,15 @@ async function fetchWeatherByCity(city, lang = 'ru') {
     const codes = Array.isArray(data.hourly?.weather_code) ? data.hourly.weather_code : [];
 
     if (times.length && temps.length) {
-      const targetHours = ['09:00', '12:00', '15:00', '18:00'];
-      targetHours.forEach((targetHour) => {
-        const idx = times.findIndex((t) => String(t).slice(11, 16) === targetHour);
+      const desiredHours = ['09:00', '12:00', '15:00', '18:00'];
+      const targetDay = String(data.current.time || times[0] || '').slice(0, 10);
+      desiredHours.forEach((hh) => {
+        const targetIso = `${targetDay}T${hh}`;
+        let idx = times.findIndex(t => String(t).slice(0, 16) === targetIso);
+        if (idx < 0) idx = times.findIndex(t => String(t).slice(11, 16) === hh);
         if (idx >= 0) {
           const t = Math.round(Number(temps[idx] || 0));
-          hourly.push({
-            hour: targetHour,
-            temp: t > 0 ? `+${t}` : `${t}`,
-            icon: weatherIconFromCode(Number(codes[idx] ?? code))
-          });
+          hourly.push({ hour: hh, temp: t > 0 ? `+${t}` : `${t}`, icon: weatherIconFromCode(Number(codes[idx] ?? code)) });
         }
       });
     }
@@ -462,15 +461,12 @@ function renderHeader(cfg, theme, labels, now, stats, width, padding, topY, FONT
   const chipWidth = Math.round(width * 0.23);
   const chipHeight = Math.round(width * 0.07);
   const ringR = Math.round(width * 0.035);
-  const yearSize = Math.round(width * 0.092);
+  const yearSize = Math.round(width * 0.075);
   const yearY = topY + yearSize;
   
   const dateText = cfg.lang === 'ru' ? `${labels.today}: ${now.date()} ${labels.monthsGenitive[now.month()]}` : `${labels.today}: ${labels.months[now.month()]} ${now.date()}`;
-  const yearStroke = Math.max(1.5, Math.round(width * 0.0022));
   
-  const yearSvg = `
-    <text x="${width / 2}" y="${yearY + yearSize * 0.06}" text-anchor="middle" fill="${alpha(theme.bg, 0.55)}" font-size="${yearSize}" font-family="${FONT}" font-weight="900" letter-spacing="-0.03em">${now.year()}</text>
-    <text x="${width / 2}" y="${yearY}" text-anchor="middle" fill="${theme.text}" stroke="${alpha(theme.accent2, 0.28)}" stroke-width="${yearStroke}" paint-order="stroke" font-size="${yearSize}" font-family="${FONT}" font-weight="900" letter-spacing="-0.03em">${now.year()}</text>`;
+  const yearSvg = `<text x="${width / 2}" y="${yearY}" text-anchor="middle" fill="${theme.text}" font-size="${yearSize}" font-family="${FONT}" font-weight="900" letter-spacing="-0.03em">${now.year()}</text>`;
   const todaySvg = cfg.showHeaderMeta === false ? '' : `<text x="${padding}" y="${yearY - yearSize * 0.45}" fill="${theme.muted}" font-size="${subtitleSize}" font-family="${FONT}">${escapeXml(dateText)}</text>`;
   const badgeSvg = cfg.showHeaderMeta === false ? '' : `<rect x="${padding}" y="${yearY - yearSize * 0.15}" width="${chipWidth}" height="${chipHeight}" rx="${chipHeight / 2}" fill="${alpha(theme.panel, 0.92)}" stroke="${alpha(theme.accent2, 0.22)}"/><text x="${padding + chipWidth / 2}" y="${yearY - yearSize * 0.15 + chipHeight * 0.66}" text-anchor="middle" fill="${theme.accent2}" font-size="${Math.round(width * 0.024)}" font-family="${FONT}" font-weight="700">${labels.week} ${now.week()}</text>`;
 
@@ -699,21 +695,45 @@ function renderFooter(cfg, theme, labels, now, stats, width, footerBox, FONT) {
     }
 
     if (cfg.weatherDataList.length === 1) {
-      // Режим 1: Одиночный город (Исправлено наложение эмодзи и цифр)
       const wd = cfg.weatherDataList[0];
+      const cityLabel = String(wd.cityLabel || '').split(',')[0].trim();
       const items = wd.hourly || [];
-      let chips = `<text x="${x + pad}" y="${y + h * 0.23}" fill="${theme.accent2}" font-size="${subSize}" font-family="${FONT}" font-weight="700">${cfg.lang === 'ru' ? 'Прогноз на день' : 'Day forecast'}</text>`;
-      if (wd.cityLabel) chips += `<text x="${x + pad}" y="${y + h * 0.40}" fill="${theme.muted}" font-size="${subSize * 0.88}" font-family="${FONT}" font-weight="600">${escapeXml(wd.cityLabel)}</text>`;
-      
-      const chipW = (w - pad * 2 - Math.max(10, Math.round(w * 0.012)) * (items.length - 1)) / items.length;
-      items.forEach((item, i) => {
-        const cx = x + pad + i * (chipW + Math.max(10, Math.round(w * 0.012)));
-        chips += `<rect x="${cx}" y="${y + h * 0.48}" width="${chipW}" height="${h * 0.40}" rx="${h * 0.40 * 0.24}" fill="${alpha(theme.bg, 0.18)}" stroke="${alpha(theme.accent2, 0.10)}"/>`;
-        chips += `<text x="${cx + chipW / 2}" y="${y + h * 0.48 + h * 0.40 * 0.30}" text-anchor="middle" fill="${theme.muted}" font-size="${subSize * 0.70}" font-family="${FONT}" font-weight="700">${escapeXml(item.hour)}</text>`;
-        chips += `<text x="${cx + chipW / 2}" y="${y + h * 0.48 + h * 0.40 * 0.65}" text-anchor="middle" fill="${theme.text}" font-size="${subSize * 1.1}" font-family="${FONT}" font-weight="700">${item.icon}</text>`;
-        chips += `<text x="${cx + chipW / 2}" y="${y + h * 0.48 + h * 0.40 * 0.92}" text-anchor="middle" fill="${theme.text}" font-size="${textSize * 0.60}" font-family="${FONT}" font-weight="800">${escapeXml(item.temp)}°</text>`;
+      const singleTop = y + h * 0.12;
+      const cityY = y + h * 0.30;
+      const cx = x + w / 2;
+      const cy = y + h * 0.68;
+      const R = Math.min(w * 0.18, h * 0.28);
+      let out = '';
+      out += `<text x="${x + pad}" y="${singleTop}" fill="${theme.accent2}" font-size="${subSize}" font-family="${FONT}" font-weight="700">${cfg.lang === 'ru' ? 'Прогноз на день' : 'Day forecast'}</text>`;
+      if (cityLabel) out += `<text x="${cx}" y="${cityY}" text-anchor="middle" fill="${theme.text}" font-size="${Math.max(subSize * 1.45, R * 0.46)}" font-family="${FONT}" font-weight="700">${escapeXml(cityLabel)}</text>`;
+
+      out += `<circle cx="${cx}" cy="${cy}" r="${R * 1.06}" fill="none" stroke="${alpha(theme.accent, 0.12)}" stroke-width="${Math.max(1.5, R * 0.04)}"/>`;
+      out += `<circle cx="${cx}" cy="${cy}" r="${R * 0.84}" fill="none" stroke="${alpha(theme.accent2, 0.16)}" stroke-width="${Math.max(1.5, R * 0.03)}"/>`;
+      out += `<circle cx="${cx}" cy="${cy}" r="${R * 0.58}" fill="${alpha(theme.bg, 0.30)}" stroke="${alpha(theme.accent, 0.10)}" stroke-width="1"/>`;
+      out += `<text x="${cx}" y="${cy - R * 0.10}" text-anchor="middle" fill="${theme.text}" font-size="${R * 0.42}" font-family="${FONT}">${wd.icon}</text>`;
+      out += `<text x="${cx}" y="${cy + R * 0.44}" text-anchor="middle" fill="${theme.text}" font-size="${R * 0.60}" font-family="${FONT}" font-weight="800">${wd.temp}°</text>`;
+
+      const itemByHour = {};
+      items.forEach((item) => { itemByHour[String(item.hour).slice(0, 2)] = item; });
+      const positions = [
+        { hour: '09', dx: -R, dy: 0 },
+        { hour: '12', dx: 0, dy: -R },
+        { hour: '15', dx: R, dy: 0 },
+        { hour: '18', dx: 0, dy: R }
+      ];
+      positions.forEach((pos) => {
+        const pt = itemByHour[pos.hour];
+        if (!pt) return;
+        const px = cx + pos.dx;
+        const py = cy + pos.dy;
+        const badgeW = R * 0.82;
+        const badgeH = R * 0.42;
+        out += `<text x="${px}" y="${py - badgeH * 0.72}" text-anchor="middle" fill="${theme.muted}" font-size="${R * 0.22}" font-family="${FONT}" font-weight="700">${pos.hour}</text>`;
+        out += `<rect x="${px - badgeW / 2}" y="${py - badgeH / 2}" width="${badgeW}" height="${badgeH}" rx="${badgeH / 2}" fill="${alpha(theme.panel, 0.92)}" stroke="${alpha(theme.accent, 0.28)}" stroke-width="1.2"/>`;
+        out += `<text x="${px - badgeW * 0.12}" y="${py + badgeH * 0.10}" text-anchor="end" fill="${theme.text}" font-size="${badgeH * 0.55}" font-family="${FONT}">${pt.icon}</text>`;
+        out += `<text x="${px + badgeW * 0.06}" y="${py + badgeH * 0.12}" text-anchor="start" fill="${theme.text}" font-size="${badgeH * 0.46}" font-family="${FONT}" font-weight="800">${escapeXml(pt.temp)}°</text>`;
       });
-      return base + chips;
+      return out;
 
     } else {
       // Режим 2: Мульти-города (Круглые циферблаты в стиле Apple Watch)
@@ -723,44 +743,48 @@ function renderFooter(cfg, theme, labels, now, stats, width, footerBox, FONT) {
 
       cfg.weatherDataList.forEach((wd, i) => {
           const cx = x + pad + i * slotW + slotW / 2;
-          const cy = y + h * 0.65;
-          const R = Math.min(slotW * 0.28, h * 0.24);
+          const cy = y + h * 0.62;
+          const R = Math.min(slotW * 0.35, h * 0.28); // Строго контролируемый радиус
+
+          // Название города
           const cityLabel = wd.cityLabel.split(',')[0].trim();
-          const cityFont = Math.min(subSize * 0.92, slotW * 0.17);
-          const cityY = y + h * 0.30;
+          out += `<text x="${cx}" y="${cy - R - h * 0.05}" text-anchor="middle" fill="${theme.muted}" font-size="${subSize * 0.8}" font-family="${FONT}" font-weight="700">${escapeXml(cityLabel.length > 13 ? cityLabel.slice(0, 12) + '…' : cityLabel)}</text>`;
 
-          out += `<rect x="${cx - slotW * 0.46}" y="${y + h * 0.23}" width="${slotW * 0.92}" height="${h * 0.54}" rx="${Math.max(18, slotW * 0.08)}" fill="${alpha(theme.bg, 0.12)}" stroke="${alpha(theme.accent2, 0.18)}"/>`;
-          out += `<text x="${cx}" y="${cityY}" text-anchor="middle" fill="${theme.text}" font-size="${cityFont}" font-family="${FONT}" font-weight="800">${escapeXml(cityLabel.length > 12 ? cityLabel.slice(0, 11) + '…' : cityLabel)}</text>`;
+          // Контур часов
+          out += `<circle cx="${cx}" cy="${cy}" r="${R}" fill="${alpha(theme.panel, 0.4)}" stroke="${alpha(theme.accent2, 0.2)}" stroke-width="1.5"/>`;
+          // Внутренняя зона
+          out += `<circle cx="${cx}" cy="${cy}" r="${R * 0.75}" fill="${alpha(theme.bg, 0.5)}" stroke="${alpha(theme.accent, 0.1)}" stroke-width="1"/>`;
 
-          out += `<circle cx="${cx}" cy="${cy}" r="${R}" fill="${alpha(theme.panel, 0.46)}" stroke="${alpha(theme.accent2, 0.22)}" stroke-width="1.5"/>`;
-          out += `<circle cx="${cx}" cy="${cy}" r="${R * 0.72}" fill="${alpha(theme.bg, 0.64)}" stroke="${alpha(theme.accent, 0.10)}" stroke-width="1"/>`;
-          out += `<circle cx="${cx}" cy="${cy}" r="${R * 1.18}" fill="none" stroke="${alpha(theme.accent, 0.10)}" stroke-width="1.2"/>`;
-          out += `<circle cx="${cx}" cy="${cy}" r="${R * 1.38}" fill="none" stroke="${alpha(theme.accent2, 0.08)}" stroke-width="1"/>`;
+          // Текущая погода в центре: иконка сверху, температура крупно снизу
+          out += `<text x="${cx}" y="${cy - R * 0.12}" text-anchor="middle" fill="${theme.text}" font-size="${R * 0.45}" font-family="${FONT}">${wd.icon}</text>`;
+          out += `<text x="${cx}" y="${cy + R * 0.45}" text-anchor="middle" fill="${theme.text}" font-size="${R * 0.65}" font-family="${FONT}" font-weight="800">${wd.temp}°</text>`;
 
-          out += `<text x="${cx}" y="${cy - R * 0.12}" text-anchor="middle" fill="${theme.text}" font-size="${R * 0.42}" font-family="${FONT}">${wd.icon}</text>`;
-          out += `<text x="${cx}" y="${cy + R * 0.42}" text-anchor="middle" fill="${theme.text}" font-size="${R * 0.60}" font-family="${FONT}" font-weight="800">${wd.temp}°</text>`;
-
-          const hourlyMap = new Map((wd.hourly || []).map((item) => [String(item.hour).slice(0,2), item]));
+          const itemByHour = {};
+          (wd.hourly || []).forEach((item) => { itemByHour[String(item.hour).slice(0, 2)] = item; });
           const positions = [
-              { key: '09', dx: -R * 1.14, dy: 0 },
-              { key: '12', dx: 0, dy: -R * 1.14 },
-              { key: '15', dx: R * 1.14, dy: 0 },
-              { key: '18', dx: 0, dy: R * 1.14 }
+              { pt: itemByHour['12'], dx: 0, dy: -R },
+              { pt: itemByHour['15'], dx: R, dy: 0 },
+              { pt: itemByHour['18'], dx: 0, dy: R },
+              { pt: itemByHour['09'], dx: -R, dy: 0 }
           ];
 
           positions.forEach(pos => {
-              const pt = hourlyMap.get(pos.key);
-              if (!pt) return;
+              if (!pos.pt) return;
               const px = cx + pos.dx;
               const py = cy + pos.dy;
-              const badgeW = R * 0.88;
-              const badgeH = R * 0.42;
-              const hourY = py - badgeH * 0.52;
 
-              out += `<text x="${px}" y="${hourY}" text-anchor="middle" fill="${theme.muted}" font-size="${R * 0.24}" font-family="${FONT}" font-weight="800">${pos.key}</text>`;
-              out += `<rect x="${px - badgeW/2}" y="${py - badgeH/2}" width="${badgeW}" height="${badgeH}" rx="${badgeH * 0.5}" fill="${alpha(theme.panel, 0.96)}" stroke="${alpha(theme.accent, 0.28)}" stroke-width="1"/>`;
-              out += `<text x="${px - badgeW * 0.08}" y="${py + badgeH * 0.15}" text-anchor="end" fill="${theme.text}" font-size="${badgeH * 0.48}" font-family="${FONT}">${pt.icon}</text>`;
-              out += `<text x="${px + badgeW * 0.04}" y="${py + badgeH * 0.15}" text-anchor="start" fill="${theme.text}" font-size="${badgeH * 0.42}" font-family="${FONT}" font-weight="800">${pt.temp}°</text>`;
+              // Компактные скругленные плашки на орбите
+              const badgeS = R * 0.68;
+
+              out += `<rect x="${px - badgeS/2}" y="${py - badgeS/2}" width="${badgeS}" height="${badgeS}" rx="${badgeS * 0.35}" fill="${alpha(theme.panel, 0.95)}" stroke="${alpha(theme.accent, 0.3)}" stroke-width="1"/>`;
+
+              // Час (сокращаем "15:00" до "15", чтобы убрать визуальный шум)
+              const shortHour = pos.pt.hour.split(':')[0];
+              out += `<text x="${px}" y="${py - badgeS * 0.05}" text-anchor="middle" fill="${theme.muted}" font-size="${badgeS * 0.38}" font-family="${FONT}" font-weight="700">${shortHour}</text>`;
+
+              // Иконка и температура: ставим их в один ряд снизу с выравниванием от центра (отталкиваем друг от друга)
+              out += `<text x="${px - badgeS * 0.05}" y="${py + badgeS * 0.35}" text-anchor="end" fill="${theme.text}" font-size="${badgeS * 0.32}" font-family="${FONT}">${pos.pt.icon}</text>`;
+              out += `<text x="${px + badgeS * 0.05}" y="${py + badgeS * 0.35}" text-anchor="start" fill="${theme.text}" font-size="${badgeS * 0.30}" font-family="${FONT}" font-weight="800">${pos.pt.temp}°</text>`;
           });
       });
       return out;
