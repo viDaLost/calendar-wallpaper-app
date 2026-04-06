@@ -462,12 +462,15 @@ function renderHeader(cfg, theme, labels, now, stats, width, padding, topY, FONT
   const chipWidth = Math.round(width * 0.23);
   const chipHeight = Math.round(width * 0.07);
   const ringR = Math.round(width * 0.035);
-  const yearSize = Math.round(width * 0.075);
+  const yearSize = Math.round(width * 0.092);
   const yearY = topY + yearSize;
   
   const dateText = cfg.lang === 'ru' ? `${labels.today}: ${now.date()} ${labels.monthsGenitive[now.month()]}` : `${labels.today}: ${labels.months[now.month()]} ${now.date()}`;
+  const yearStroke = Math.max(1.5, Math.round(width * 0.0022));
   
-  const yearSvg = `<text x="${width / 2}" y="${yearY}" text-anchor="middle" fill="${theme.text}" font-size="${yearSize}" font-family="${FONT}" font-weight="900" letter-spacing="-0.03em">${now.year()}</text>`;
+  const yearSvg = `
+    <text x="${width / 2}" y="${yearY + yearSize * 0.06}" text-anchor="middle" fill="${alpha(theme.bg, 0.55)}" font-size="${yearSize}" font-family="${FONT}" font-weight="900" letter-spacing="-0.03em">${now.year()}</text>
+    <text x="${width / 2}" y="${yearY}" text-anchor="middle" fill="${theme.text}" stroke="${alpha(theme.accent2, 0.28)}" stroke-width="${yearStroke}" paint-order="stroke" font-size="${yearSize}" font-family="${FONT}" font-weight="900" letter-spacing="-0.03em">${now.year()}</text>`;
   const todaySvg = cfg.showHeaderMeta === false ? '' : `<text x="${padding}" y="${yearY - yearSize * 0.45}" fill="${theme.muted}" font-size="${subtitleSize}" font-family="${FONT}">${escapeXml(dateText)}</text>`;
   const badgeSvg = cfg.showHeaderMeta === false ? '' : `<rect x="${padding}" y="${yearY - yearSize * 0.15}" width="${chipWidth}" height="${chipHeight}" rx="${chipHeight / 2}" fill="${alpha(theme.panel, 0.92)}" stroke="${alpha(theme.accent2, 0.22)}"/><text x="${padding + chipWidth / 2}" y="${yearY - yearSize * 0.15 + chipHeight * 0.66}" text-anchor="middle" fill="${theme.accent2}" font-size="${Math.round(width * 0.024)}" font-family="${FONT}" font-weight="700">${labels.week} ${now.week()}</text>`;
 
@@ -713,55 +716,51 @@ function renderFooter(cfg, theme, labels, now, stats, width, footerBox, FONT) {
       return base + chips;
 
     } else {
-      // Режим 2: мульти-города — более кастомный и устойчивый к наложениям
-      let out = base + `<text x="${x + pad}" y="${y + h * 0.16}" fill="${theme.accent2}" font-size="${subSize}" font-family="${FONT}" font-weight="700">${cfg.lang === 'ru' ? 'Прогноз на день' : 'Day forecast'}</text>`;
+      // Режим 2: Мульти-города (Круглые циферблаты в стиле Apple Watch)
+      let out = base + `<text x="${x + pad}" y="${y + h * 0.18}" fill="${theme.accent2}" font-size="${subSize}" font-family="${FONT}" font-weight="700">${cfg.lang === 'ru' ? 'Прогноз на день' : 'Day forecast'}</text>`;
       const numCities = cfg.weatherDataList.length;
-      const gap = Math.max(10, Math.round(w * 0.018));
-      const slotW = (w - pad * 2 - gap * (numCities - 1)) / numCities;
-      const cardH = h * 0.74;
-      const cardY = y + h * 0.20;
+      const slotW = (w - pad * 2) / numCities;
 
       cfg.weatherDataList.forEach((wd, i) => {
-          const cardX = x + pad + i * (slotW + gap);
-          const cardPad = Math.max(10, slotW * 0.075);
-          const cardRadius = Math.max(18, Math.min(slotW, cardH) * 0.14);
-          const cx = cardX + slotW / 2;
-          const headerY = cardY + cardPad + subSize * 0.55;
+          const cx = x + pad + i * slotW + slotW / 2;
+          const cy = y + h * 0.65;
+          const R = Math.min(slotW * 0.28, h * 0.24);
           const cityLabel = wd.cityLabel.split(',')[0].trim();
-          const shortCity = cityLabel.length > 11 ? cityLabel.slice(0, 10) + '…' : cityLabel;
-          const dialCy = cardY + cardH * 0.60;
-          const R = Math.min(slotW * 0.24, cardH * 0.23);
-          const hourly = Array.isArray(wd.hourly) ? wd.hourly.slice(0, 4) : [];
+          const cityFont = Math.min(subSize * 0.92, slotW * 0.17);
+          const cityY = y + h * 0.30;
+
+          out += `<rect x="${cx - slotW * 0.46}" y="${y + h * 0.23}" width="${slotW * 0.92}" height="${h * 0.54}" rx="${Math.max(18, slotW * 0.08)}" fill="${alpha(theme.bg, 0.12)}" stroke="${alpha(theme.accent2, 0.18)}"/>`;
+          out += `<text x="${cx}" y="${cityY}" text-anchor="middle" fill="${theme.text}" font-size="${cityFont}" font-family="${FONT}" font-weight="800">${escapeXml(cityLabel.length > 12 ? cityLabel.slice(0, 11) + '…' : cityLabel)}</text>`;
+
+          out += `<circle cx="${cx}" cy="${cy}" r="${R}" fill="${alpha(theme.panel, 0.46)}" stroke="${alpha(theme.accent2, 0.22)}" stroke-width="1.5"/>`;
+          out += `<circle cx="${cx}" cy="${cy}" r="${R * 0.72}" fill="${alpha(theme.bg, 0.64)}" stroke="${alpha(theme.accent, 0.10)}" stroke-width="1"/>`;
+          out += `<circle cx="${cx}" cy="${cy}" r="${R * 1.18}" fill="none" stroke="${alpha(theme.accent, 0.10)}" stroke-width="1.2"/>`;
+          out += `<circle cx="${cx}" cy="${cy}" r="${R * 1.38}" fill="none" stroke="${alpha(theme.accent2, 0.08)}" stroke-width="1"/>`;
+
+          out += `<text x="${cx}" y="${cy - R * 0.12}" text-anchor="middle" fill="${theme.text}" font-size="${R * 0.42}" font-family="${FONT}">${wd.icon}</text>`;
+          out += `<text x="${cx}" y="${cy + R * 0.42}" text-anchor="middle" fill="${theme.text}" font-size="${R * 0.60}" font-family="${FONT}" font-weight="800">${wd.temp}°</text>`;
+
+          const hourlyMap = new Map((wd.hourly || []).map((item) => [String(item.hour).slice(0,2), item]));
           const positions = [
-              { pt: hourly[0], dx: 0, dy: -R * 1.12 },
-              { pt: hourly[1], dx: R * 1.12, dy: 0 },
-              { pt: hourly[2], dx: 0, dy: R * 1.12 },
-              { pt: hourly[3], dx: -R * 1.12, dy: 0 }
+              { key: '09', dx: -R * 1.14, dy: 0 },
+              { key: '12', dx: 0, dy: -R * 1.14 },
+              { key: '15', dx: R * 1.14, dy: 0 },
+              { key: '18', dx: 0, dy: R * 1.14 }
           ];
 
-          out += `<rect x="${cardX}" y="${cardY}" width="${slotW}" height="${cardH}" rx="${cardRadius}" fill="${alpha(theme.panel, 0.72)}" stroke="${alpha(theme.accent2, 0.18)}" stroke-width="1.25"/>`;
-          out += `<rect x="${cardX + 1}" y="${cardY + 1}" width="${slotW - 2}" height="${cardH * 0.26}" rx="${Math.max(16, cardRadius - 4)}" fill="${alpha(theme.bg, 0.18)}"/>`;
-
-          out += `<text x="${cardX + cardPad}" y="${headerY}" fill="${theme.text}" font-size="${subSize * 0.98}" font-family="${FONT}" font-weight="700">${escapeXml(shortCity)}</text>`;
-          out += `<text x="${cardX + slotW - cardPad}" y="${headerY}" text-anchor="end" fill="${theme.accent2}" font-size="${subSize * 0.92}" font-family="${FONT}" font-weight="800">${wd.temp}°</text>`;
-
-          out += `<circle cx="${cx}" cy="${dialCy}" r="${R * 1.22}" fill="${alpha(theme.bg, 0.42)}" stroke="${alpha(theme.accent2, 0.12)}" stroke-width="1.1"/>`;
-          out += `<circle cx="${cx}" cy="${dialCy}" r="${R * 0.92}" fill="${alpha(theme.panel, 0.9)}" stroke="${alpha(theme.accent, 0.16)}" stroke-width="1"/>`;
-          out += `<text x="${cx}" y="${dialCy - R * 0.14}" text-anchor="middle" fill="${theme.text}" font-size="${R * 0.42}" font-family="${FONT}">${wd.icon}</text>`;
-          out += `<text x="${cx}" y="${dialCy + R * 0.42}" text-anchor="middle" fill="${theme.text}" font-size="${R * 0.52}" font-family="${FONT}" font-weight="800">${wd.temp}°</text>`;
-
-          positions.forEach((pos) => {
-              if (!pos.pt) return;
+          positions.forEach(pos => {
+              const pt = hourlyMap.get(pos.key);
+              if (!pt) return;
               const px = cx + pos.dx;
-              const py = dialCy + pos.dy;
-              const badgeW = R * 1.12;
-              const badgeH = R * 0.52;
-              const shortHour = String(pos.pt.hour || '').slice(0, 2);
+              const py = cy + pos.dy;
+              const badgeW = R * 0.88;
+              const badgeH = R * 0.42;
+              const hourY = py - badgeH * 0.52;
 
-              out += `<rect x="${px - badgeW / 2}" y="${py - badgeH / 2}" width="${badgeW}" height="${badgeH}" rx="${badgeH / 2}" fill="${alpha(theme.bg, 0.78)}" stroke="${alpha(theme.accent, 0.24)}" stroke-width="1"/>`;
-              out += `<text x="${px}" y="${py - badgeH * 0.08}" text-anchor="middle" fill="${theme.muted}" font-size="${badgeH * 0.42}" font-family="${FONT}" font-weight="700">${shortHour}</text>`;
-              out += `<text x="${px - badgeW * 0.08}" y="${py + badgeH * 0.28}" text-anchor="end" fill="${theme.text}" font-size="${badgeH * 0.42}" font-family="${FONT}">${pos.pt.icon}</text>`;
-              out += `<text x="${px + badgeW * 0.08}" y="${py + badgeH * 0.28}" text-anchor="start" fill="${theme.text}" font-size="${badgeH * 0.34}" font-family="${FONT}" font-weight="800">${pos.pt.temp}°</text>`;
+              out += `<text x="${px}" y="${hourY}" text-anchor="middle" fill="${theme.muted}" font-size="${R * 0.24}" font-family="${FONT}" font-weight="800">${pos.key}</text>`;
+              out += `<rect x="${px - badgeW/2}" y="${py - badgeH/2}" width="${badgeW}" height="${badgeH}" rx="${badgeH * 0.5}" fill="${alpha(theme.panel, 0.96)}" stroke="${alpha(theme.accent, 0.28)}" stroke-width="1"/>`;
+              out += `<text x="${px - badgeW * 0.08}" y="${py + badgeH * 0.15}" text-anchor="end" fill="${theme.text}" font-size="${badgeH * 0.48}" font-family="${FONT}">${pt.icon}</text>`;
+              out += `<text x="${px + badgeW * 0.04}" y="${py + badgeH * 0.15}" text-anchor="start" fill="${theme.text}" font-size="${badgeH * 0.42}" font-family="${FONT}" font-weight="800">${pt.temp}°</text>`;
           });
       });
       return out;
@@ -794,7 +793,7 @@ function renderSvg(cfg) {
   const listLike = isListLayout(cfg.monthLayout);
   const compactLike = isCompactGridLayout(cfg.monthLayout) || listLike;
   const headerHeight = Math.round(height * (listLike ? 0.088 : compactLike ? 0.09 : 0.095));
-  const footerHeight = Math.round(height * (cfg.footer === 'day_weather' ? 0.115 : (listLike ? 0.072 : compactLike ? 0.076 : 0.08)));
+  const footerHeight = Math.round(height * (listLike ? 0.072 : compactLike ? 0.076 : 0.08));
   const contentTop = innerTop + headerHeight + Math.round(height * 0.012);
   const contentBottom = innerBottom - footerHeight - Math.round(height * 0.014);
   const contentH = contentBottom - contentTop;
