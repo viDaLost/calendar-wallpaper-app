@@ -136,6 +136,65 @@ function alpha(hex, opacity) {
   return `rgba(${(bigint >> 16) & 255},${(bigint >> 8) & 255},${bigint & 255},${opacity})`;
 }
 
+function normalizeQueryValue(value) {
+  if (Array.isArray(value)) return value.map(normalizeQueryValue).filter(Boolean).join(',');
+  if (value == null) return '';
+  return String(value).trim();
+}
+
+function splitCityCandidates(value) {
+  return normalizeQueryValue(value)
+    .split(/[|;\n]/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function normalizeCityName(value) {
+  const raw = normalizeQueryValue(value);
+  if (!raw) return '';
+  return raw
+    .replace(/^\s*(город|city)\s*[:\-]?\s*/i, '')
+    .split(',')[0]
+    .trim();
+}
+
+function collectRequestedCities(query) {
+  const keys = ['city1', 'city2', 'city3', 'city', 'city_1', 'city_2', 'city_3', 'weather_city', 'weatherCity', 'cities', 'weather_cities', 'weatherCities'];
+  const out = [];
+  const pushValue = (value) => {
+    for (const part of splitCityCandidates(value)) {
+      const city = normalizeCityName(part);
+      if (city) out.push(city);
+    }
+  };
+
+  keys.forEach((key) => {
+    if (Object.prototype.hasOwnProperty.call(query, key)) pushValue(query[key]);
+  });
+
+  Object.keys(query || {}).forEach((key) => {
+    if (/^city\d+$/i.test(key) || /^city_\d+$/i.test(key) || /^weatherCity\d+$/i.test(key)) pushValue(query[key]);
+  });
+
+  const deduped = [];
+  const seen = new Set();
+  out.forEach((city) => {
+    const lowered = city.toLowerCase();
+    if (seen.has(lowered)) return;
+    seen.add(lowered);
+    deduped.push(city);
+  });
+  return deduped.slice(0, 3);
+}
+
+async function resolveWeatherList(cities, lang) {
+  if (!Array.isArray(cities) || cities.length === 0) return [];
+  const settled = await Promise.allSettled(cities.slice(0, 3).map((city) => fetchWeatherByCity(city, lang)));
+  return settled
+    .map((item) => item.status === 'fulfilled' ? item.value : null)
+    .filter(Boolean);
+}
+
 function parseEvents(eventsStr) {
   const map = {};
   if (!eventsStr) return map;
@@ -297,8 +356,7 @@ function getConfig(query) {
   let rawBg = query.bg_style || 'mesh_organic';
   if(rawBg === 'glass') rawBg = 'liquid_glass'; if(rawBg === 'mesh') rawBg = 'carbon'; if(rawBg === 'grain_light') rawBg = 'paper';
 
-  const rawCities = [query.city1, query.city2, query.city3].filter(c => c && c.trim() !== '').map(c => c.split(',')[0].trim());
-  const legacyCity = query.city ? query.city.split(',')[0].trim() : '';
+  const rawCities = collectRequestedCities(query);
 
   return {
     model: query.model || 'iphone_15',
@@ -314,7 +372,7 @@ function getConfig(query) {
     timezone: clamp(num(query.timezone, 3), -12, 14),
     footer: query.footer || 'year_summary', note: (query.note || '').slice(0, 120),
     events: query.events || '', 
-    citiesToFetch: rawCities.length > 0 ? rawCities : (legacyCity ? [legacyCity] : []),
+    citiesToFetch: rawCities,
     eventColor: query.c_event || themeObj.accent,
     showWeekdays: String(query.show_weekdays || '1') === '1', accentToday: String(query.accent_today || '1') === '1',
     showProgressRing: String(query.show_progress_ring || '1') === '1', showWeekNumbers: String(query.show_week_numbers || '0') === '1',
@@ -844,11 +902,9 @@ app.get('/api/weather', async (req, res) => {
 
 app.get('/wallpaper.svg', async (req, res) => {
   const cfg = getConfig(req.query);
-  cfg.weatherDataList = [];
-  for (const city of cfg.citiesToFetch) {
-    const data = await fetchWeatherByCity(city, cfg.lang);
-    if (data) cfg.weatherDataList.push(data);
-  }
+  cfg.weatherDataList = await resolveWeatherList(cfg.citiesToFetch, cfg.lang);
+  res.setHeader('X-Weather-Requested', String(cfg.citiesToFetch.length));
+  res.setHeader('X-Weather-Resolved', String(cfg.weatherDataList.length));
   res.type('image/svg+xml').send(renderSvg(cfg));
 });
 
@@ -862,11 +918,7 @@ app.get('/wallpaper.png', async (req, res) => {
     }
 
     const cfg = getConfig(req.query);
-    cfg.weatherDataList = [];
-    for (const city of cfg.citiesToFetch) {
-        const data = await fetchWeatherByCity(city, cfg.lang);
-        if (data) cfg.weatherDataList.push(data);
-    }
+    cfg.weatherDataList = await resolveWeatherList(cfg.citiesToFetch, cfg.lang);
     const svg = renderSvg(cfg);
 
     let png;
@@ -895,6 +947,8 @@ app.get('/wallpaper.png', async (req, res) => {
     res.setHeader('Content-Type', 'image/png');
     res.setHeader('Cache-Control', 'public, max-age=3600');
     res.setHeader('X-Cache', 'MISS');
+    res.setHeader('X-Weather-Requested', String(cfg.citiesToFetch.length));
+    res.setHeader('X-Weather-Resolved', String(cfg.weatherDataList.length));
     res.send(png);
   } catch (err) {
     res.status(500).json({ error: 'ОШИБКА ГЕНЕРАЦИИ ОБОЕВ', details: err.message });
