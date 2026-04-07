@@ -142,9 +142,29 @@ function normalizeQueryValue(value) {
   return String(value).trim();
 }
 
-function splitCityCandidates(value) {
-  return normalizeQueryValue(value)
-    .split(/[|;\n]/)
+function splitCityCandidates(value, key = '') {
+  if (Array.isArray(value)) return value.flatMap((item) => splitCityCandidates(item, key));
+
+  const raw = normalizeQueryValue(value);
+  if (!raw) return [];
+
+  const trimmed = raw.trim();
+
+  if ((trimmed.startsWith('[') && trimmed.endsWith(']')) || (trimmed.startsWith('{') && trimmed.endsWith('}'))) {
+    try {
+      const parsed = JSON.parse(trimmed);
+      if (Array.isArray(parsed)) return parsed.flatMap((item) => splitCityCandidates(item, key));
+      if (parsed && typeof parsed === 'object') {
+        return Object.values(parsed).flatMap((item) => splitCityCandidates(item, key));
+      }
+    } catch (_) {}
+  }
+
+  const normalizedKey = String(key || '').toLowerCase();
+  const shouldSplitComma = /cities|weathercities|weather_cities|citylist|city_list/.test(normalizedKey) || trimmed.includes('|') || trimmed.includes(';') || trimmed.includes('\n');
+  const parts = shouldSplitComma ? trimmed.split(/[|;,\n]/) : [trimmed];
+
+  return parts
     .map((item) => item.trim())
     .filter(Boolean);
 }
@@ -152,28 +172,54 @@ function splitCityCandidates(value) {
 function normalizeCityName(value) {
   const raw = normalizeQueryValue(value);
   if (!raw) return '';
-  return raw
+
+  const cleaned = raw
     .replace(/^\s*(город|city)\s*[:\-]?\s*/i, '')
-    .split(',')[0]
+    .replace(/^\s*\d+\s*[\.)\-:]\s*/, '')
+    .replace(/^\s*[—–-]\s*/, '')
     .trim();
+
+  if (!cleaned) return '';
+
+  const commaParts = cleaned.split(',').map((part) => part.trim()).filter(Boolean);
+  if (commaParts.length >= 2) {
+    const first = commaParts[0];
+    const second = commaParts[1];
+    const looksLikeCountryTail = /^(russia|russian federation|россия|ru|netherlands|nederland|nl|usa|us|uk|germany|deutschland|france|italy|spain|turkey|georgia|armenia|kazakhstan)$/i.test(second);
+    return looksLikeCountryTail ? first : cleaned;
+  }
+
+  return cleaned;
 }
 
 function collectRequestedCities(query) {
-  const keys = ['city1', 'city2', 'city3', 'city', 'city_1', 'city_2', 'city_3', 'weather_city', 'weatherCity', 'cities', 'weather_cities', 'weatherCities'];
+  const keys = ['city1', 'city2', 'city3', 'city', 'city_1', 'city_2', 'city_3', 'weather_city', 'weatherCity', 'cities', 'weather_cities', 'weatherCities', 'cityList', 'city_list'];
   const out = [];
-  const pushValue = (value) => {
-    for (const part of splitCityCandidates(value)) {
+  const pushValue = (value, key = '') => {
+    for (const part of splitCityCandidates(value, key)) {
       const city = normalizeCityName(part);
       if (city) out.push(city);
     }
   };
 
   keys.forEach((key) => {
-    if (Object.prototype.hasOwnProperty.call(query, key)) pushValue(query[key]);
+    if (Object.prototype.hasOwnProperty.call(query, key)) pushValue(query[key], key);
   });
 
   Object.keys(query || {}).forEach((key) => {
-    if (/^city\d+$/i.test(key) || /^city_\d+$/i.test(key) || /^weatherCity\d+$/i.test(key)) pushValue(query[key]);
+    if (
+      /^city\d+$/i.test(key) ||
+      /^city_\d+$/i.test(key) ||
+      /^city\[\d+\]$/i.test(key) ||
+      /^weathercity\d+$/i.test(key) ||
+      /^weather_city_\d+$/i.test(key) ||
+      /^weathercity_\d+$/i.test(key) ||
+      /^weather\[city\d+\]$/i.test(key) ||
+      /(?:^|_)(city|cities)(?:$|_)/i.test(key) ||
+      /weather.*city/i.test(key)
+    ) {
+      pushValue(query[key], key);
+    }
   });
 
   const deduped = [];
@@ -900,11 +946,24 @@ app.get('/api/weather', async (req, res) => {
   return res.json({ ok: true, city, data });
 });
 
+
+app.get('/api/debug-weather', async (req, res) => {
+  const cfg = getConfig(req.query || {});
+  const resolved = await resolveWeatherList(cfg.citiesToFetch, cfg.lang);
+  res.json({
+    ok: true,
+    requestedCities: cfg.citiesToFetch,
+    resolvedCount: resolved.length,
+    resolved
+  });
+});
+
 app.get('/wallpaper.svg', async (req, res) => {
   const cfg = getConfig(req.query);
   cfg.weatherDataList = await resolveWeatherList(cfg.citiesToFetch, cfg.lang);
   res.setHeader('X-Weather-Requested', String(cfg.citiesToFetch.length));
   res.setHeader('X-Weather-Resolved', String(cfg.weatherDataList.length));
+  res.setHeader('X-Weather-Cities', cfg.citiesToFetch.join(' | '));
   res.type('image/svg+xml').send(renderSvg(cfg));
 });
 
@@ -949,6 +1008,7 @@ app.get('/wallpaper.png', async (req, res) => {
     res.setHeader('X-Cache', 'MISS');
     res.setHeader('X-Weather-Requested', String(cfg.citiesToFetch.length));
     res.setHeader('X-Weather-Resolved', String(cfg.weatherDataList.length));
+    res.setHeader('X-Weather-Cities', cfg.citiesToFetch.join(' | '));
     res.send(png);
   } catch (err) {
     res.status(500).json({ error: 'ОШИБКА ГЕНЕРАЦИИ ОБОЕВ', details: err.message });
