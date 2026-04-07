@@ -8,6 +8,7 @@ const isLeapYear = require('dayjs/plugin/isLeapYear');
 const weekOfYear = require('dayjs/plugin/weekOfYear');
 const advancedFormat = require('dayjs/plugin/advancedFormat');
 const fs = require('fs');
+const https = require('https'); // Используем супер-надежный нативный модуль
 
 dayjs.extend(utc);
 dayjs.extend(isLeapYear);
@@ -22,7 +23,7 @@ const pngCache = new Map();
 const cacheSweepTimer = setInterval(() => pngCache.clear(), 1000 * 60 * 60);
 if (cacheSweepTimer.unref) cacheSweepTimer.unref();
 
-const RENDER_VERSION = 'v7-multi-city-fixed';
+const RENDER_VERSION = 'v8-emoji-crash-fix';
 
 const FONTS = {
   inter: { name: 'Inter (Стандарт)', file: 'inter.ttf', family: 'Inter' },
@@ -232,34 +233,51 @@ function collectRequestedCities(query) {
   return deduped.slice(0, 3);
 }
 
-// === ОБНОВЛЕННАЯ ЛОГИКА ПОГОДЫ ===
+// === ОБНОВЛЕННАЯ ЛОГИКА ПОГОДЫ И СЕТИ ===
 const weatherCache = new Map();
 
-// Новая надежная функция для получения JSON с использованием встроенного fetch API
-async function fetchJsonWithTimeout(url, timeoutMs = 4000) {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
-  
-  try {
-    const resp = await fetch(url, {
-      signal: controller.signal,
+// Супер-надежный сетевой запрос через встроенный https. 
+// Защищает от зависаний Vercel Edge Runtime.
+function fetchJsonViaHttps(url, timeoutMs = 4000) {
+  return new Promise((resolve, reject) => {
+    const req = https.get(url, {
       headers: {
         'Accept': 'application/json',
-        // Добавлен User-Agent, чтобы Open-Meteo не блокировал запросы
         'User-Agent': 'WallpaperCalendarPro/1.0 (Vercel; Node.js)'
-      }
+      },
+      timeout: timeoutMs,
+    }, (res) => {
+      let data = '';
+      res.setEncoding('utf8');
+      res.on('data', chunk => data += chunk);
+      res.on('end', () => {
+        if (res.statusCode < 200 || res.statusCode >= 300) {
+          return reject(new Error(`HTTP ${res.statusCode}`));
+        }
+        try { resolve(JSON.parse(data)); } 
+        catch (e) { reject(new Error('INVALID_JSON')); }
+      });
     });
-    
-    if (!resp.ok) {
-      throw new Error(`HTTP Error ${resp.status}`);
-    }
-    return await resp.json();
-  } finally {
-    clearTimeout(timer);
-  }
+    // Если запрос зависает — жестко убиваем его, спасая приложение
+    req.on('timeout', () => req.destroy(new Error('TIMEOUT')));
+    req.on('error', reject);
+  });
 }
 
-function weatherIconFromCode(code) {
+// Эта функция решает проблему падения (краша) Vercel из-за Эмодзи.
+// resvg-js падает на Linux без шрифтов эмодзи. Для PNG мы переключаемся на безопасные символы.
+function weatherIconFromCode(code, safeText = false) {
+  if (safeText) {
+    // Безопасные текстовые символы (поддерживаются всеми шрифтами без крашей)
+    if (code >= 1 && code <= 3) return '☁';
+    if (code >= 45 && code <= 48) return '≈';
+    if (code >= 51 && code <= 67) return '☂';
+    if (code >= 71 && code <= 77) return '❄';
+    if (code >= 80 && code <= 82) return '☂';
+    if (code >= 95) return '⚡';
+    return '☀';
+  }
+  // Полноценные эмодзи для веб-превью (если поддерживаются)
   if (code >= 1 && code <= 3) return '⛅';
   if (code >= 45 && code <= 48) return '🌫️';
   if (code >= 51 && code <= 67) return '🌧️';
@@ -271,21 +289,15 @@ function weatherIconFromCode(code) {
 
 async function geocodeCity(normalizedCity, lang = 'ru') {
   try {
-    // Сначала пробуем запросить на нужном языке (например, на русском)
     const primaryUrl = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(normalizedCity)}&count=1&language=${lang}&format=json`;
-    const geoData = await fetchJsonWithTimeout(primaryUrl, 3000);
+    const geoData = await fetchJsonViaHttps(primaryUrl, 3000);
     
-    if (geoData && Array.isArray(geoData.results) && geoData.results.length > 0) {
-      return geoData.results[0];
-    }
+    if (geoData && Array.isArray(geoData.results) && geoData.results.length > 0) return geoData.results[0];
     
-    // Если ничего не нашли, делаем фоллбэк на английский язык
     const fallbackUrl = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(normalizedCity)}&count=1&language=en&format=json`;
-    const fallbackData = await fetchJsonWithTimeout(fallbackUrl, 3000);
+    const fallbackData = await fetchJsonViaHttps(fallbackUrl, 3000);
     
-    if (fallbackData && Array.isArray(fallbackData.results) && fallbackData.results.length > 0) {
-      return fallbackData.results[0];
-    }
+    if (fallbackData && Array.isArray(fallbackData.results) && fallbackData.results.length > 0) return fallbackData.results[0];
   } catch (e) {
     console.warn(`Geocode failed for ${normalizedCity}: ${e.message}`);
   }
@@ -299,15 +311,11 @@ async function fetchWeatherByCity(city, lang = 'ru') {
   const cacheKey = normalizedCity.toLowerCase();
   const cached = weatherCache.get(cacheKey);
   
-  // Возвращаем кэш, если он еще свежий (даже если там null, чтобы не спамить API ошибками)
-  if (cached && cached.expiresAt > Date.now()) {
-    return cached.data;
-  }
+  if (cached && cached.expiresAt > Date.now()) return cached.data;
 
   try {
     const place = await geocodeCity(normalizedCity, lang);
     if (!place || typeof place.latitude !== 'number') {
-      // "Негативный" кэш: если город не найден, запоминаем это на 2 минуты
       weatherCache.set(cacheKey, { data: null, expiresAt: Date.now() + 1000 * 120 });
       return null;
     }
@@ -315,11 +323,9 @@ async function fetchWeatherByCity(city, lang = 'ru') {
     const tz = place.timezone || 'auto';
     const url = `https://api.open-meteo.com/v1/forecast?latitude=${place.latitude}&longitude=${place.longitude}&current=temperature_2m,weather_code,is_day&hourly=temperature_2m,weather_code&daily=temperature_2m_max,temperature_2m_min,weather_code&forecast_days=2&timezone=${encodeURIComponent(tz)}`;
     
-    const data = await fetchJsonWithTimeout(url, 4000);
+    const data = await fetchJsonViaHttps(url, 4000);
     
-    if (!data?.current || data.current.temperature_2m == null) {
-      throw new Error('Invalid weather payload');
-    }
+    if (!data?.current || data.current.temperature_2m == null) throw new Error('Invalid weather payload');
 
     const code = Number(data.current.weather_code || 0);
     const hourly = [];
@@ -334,7 +340,12 @@ async function fetchWeatherByCity(city, lang = 'ru') {
       if (nowIndex < 0) nowIndex = 0;
       for (let idx = nowIndex; idx < times.length && hourly.length < 6; idx += 3) {
         const t = Math.round(Number(temps[idx] || 0));
-        hourly.push({ hour: `${String(times[idx]).slice(11, 13)}:00`, temp: t > 0 ? `+${t}` : `${t}`, icon: weatherIconFromCode(Number(codes[idx] ?? code)) });
+        hourly.push({ 
+          hour: `${String(times[idx]).slice(11, 13)}:00`, 
+          temp: t > 0 ? `+${t}` : `${t}`, 
+          code: Number(codes[idx] ?? code),
+          icon: weatherIconFromCode(Number(codes[idx] ?? code), false) // Для API
+        });
       }
     }
 
@@ -344,7 +355,8 @@ async function fetchWeatherByCity(city, lang = 'ru') {
 
     const result = {
       temp: temp > 0 ? `+${temp}` : `${temp}`,
-      icon: weatherIconFromCode(code),
+      code: code,
+      icon: weatherIconFromCode(code, false), // Для API
       cityLabel: String(place.name || normalizedCity).trim(),
       timezone: tz,
       dailyMax: typeof dailyMax === 'number' && Number.isFinite(dailyMax) ? (dailyMax > 0 ? `+${dailyMax}` : `${dailyMax}`) : null,
@@ -352,12 +364,10 @@ async function fetchWeatherByCity(city, lang = 'ru') {
       hourly
     };
     
-    // Успешный кэш на 30 минут
     weatherCache.set(cacheKey, { data: result, expiresAt: Date.now() + 1000 * 60 * 30 });
     return result;
   } catch (e) { 
     console.warn(`Weather fetch failed for ${normalizedCity}: ${e.message}`);
-    // "Негативный" кэш на случай сетевой ошибки (2 минуты)
     weatherCache.set(cacheKey, { data: null, expiresAt: Date.now() + 1000 * 120 });
     return null; 
   }
@@ -432,7 +442,8 @@ function getConfig(query) {
     quarterDividers: String(query.quarter_dividers || '1') === '1', monthBadges: String(query.month_badges || '1') === '1',
     focusCurrentMonth: String(query.focus_current_month || '1') === '1', lockscreenSafe: String(query.lockscreen_safe || '1') === '1',
     showHeaderMeta: String(query.show_header_meta || '1') === '1', strongWeekendTint: String(query.strong_weekend_tint || '1') === '1',
-    glassPanels: String(query.glass_panels || '1') === '1', pngSafeFont: query.__target === 'png'
+    glassPanels: String(query.glass_panels || '1') === '1', 
+    pngSafeFont: query.__target === 'png' // Флаг для генерации PNG без эмодзи
   };
 }
 
@@ -469,7 +480,8 @@ function weatherSummary(cfg, lang) {
   if (!wd) return lang === 'ru' ? 'Погода не выбрана' : 'No city weather';
   const city = String(wd.cityLabel || '').trim();
   const hiLo = wd.dailyMax && wd.dailyMin ? ` · ${wd.dailyMax} / ${wd.dailyMin}` : '';
-  return `${wd.icon} ${wd.temp}°C${hiLo}${city ? ` · ${city}` : ''}`.trim();
+  const iconToUse = weatherIconFromCode(wd.code, cfg.pngSafeFont);
+  return `${iconToUse} ${wd.temp}°C${hiLo}${city ? ` · ${city}` : ''}`.trim();
 }
 
 function renderStaticNoiseBackground(theme, width, height) {
@@ -592,7 +604,8 @@ function renderHeader(cfg, theme, labels, now, stats, width, padding, topY, FONT
 
     cfg.weatherDataList.slice(0, 3).forEach((wd) => {
       const cityLabel = String(wd.cityLabel || '').split(',')[0].trim();
-      rightSvg += `<text x="${weatherX}" y="${currentY}" text-anchor="end" fill="${theme.text}" font-size="${wTitleSize}" font-family="${FONT}" font-weight="700">${wd.temp}°C ${wd.icon}</text>`;
+      const iconToUse = weatherIconFromCode(wd.code, cfg.pngSafeFont);
+      rightSvg += `<text x="${weatherX}" y="${currentY}" text-anchor="end" fill="${theme.text}" font-size="${wTitleSize}" font-family="${FONT}" font-weight="700">${wd.temp}°C ${iconToUse}</text>`;
       if (cityLabel) {
         rightSvg += `<text x="${weatherX}" y="${currentY + wTitleSize * 0.95}" text-anchor="end" fill="${theme.muted}" font-size="${wSubSize}" font-family="${FONT}" font-weight="600">${escapeXml(cityLabel.length > 18 ? cityLabel.slice(0,17)+'…' : cityLabel)}</text>`;
       }
@@ -676,7 +689,6 @@ function renderMonthGrid({ monthIndex, year, x, y, w, h, cfg, theme, labels, now
 
     if (isCustomEvent) out += `<rect x="${cx - cellW * 0.35}" y="${cy - cellHReal * 0.6}" width="${cellW * 0.7}" height="${cellHReal * 0.75}" rx="${Math.min(cellW, cellHReal) * 0.2}" fill="${alpha(cfg.eventColor, 0.18)}" stroke="${alpha(cfg.eventColor, 0.34)}"/>`;
 
-    // --- СТИЛИ ИНДИКАЦИИ ДНЕЙ ---
     if (cfg.style === 'slash') {
       if (isToday) out += `<line x1="${cx - cellW * 0.35}" y1="${cy + cellHReal * 0.15}" x2="${cx + cellW * 0.35}" y2="${cy - cellHReal * 0.5}" stroke="${alpha(theme.accent, 0.8)}" stroke-width="${Math.max(2, w * 0.005)}"/>`;
       out += `<text x="${cx}" y="${cy}" text-anchor="middle" fill="${textColor}" font-size="${numSize}" font-family="${FONT}" font-weight="${isToday ? 800 : 600}">${day}</text>`;
@@ -737,292 +749,4 @@ function renderMonthListRow({ monthIndex, year, x, y, w, h, cfg, theme, labels, 
   if (cfg.monthBadges) out += `<rect x="${x + w - padX - badgeW}" y="${y + h * 0.17}" width="${badgeW}" height="${h * 0.20}" rx="${h * 0.10}" fill="${isCurrent ? alpha(theme.accent, 0.18) : alpha('#ffffff', 0.05)}"/><text x="${x + w - padX - badgeW / 2}" y="${y + h * 0.30}" text-anchor="middle" fill="${isCurrent ? theme.accent2 : theme.muted}" font-size="${Math.round(h * 0.10)}" font-family="${FONT}" font-weight="700">${first.daysInMonth()}${cfg.lang === 'ru' ? 'д' : 'd'}</text>`;
 
   const gridTop = y + (cfg.showWeekdays ? h * (compact ? 0.22 : 0.24) : h * (compact ? 0.14 : 0.16)) + (cfg.showWeekdays ? h * (compact ? 0.04 : 0.05) : 0);
-  if (cfg.showWeekdays) labels.weekdays.forEach((wd, i) => out += `<text x="${innerX + i * cellW + cellW / 2}" y="${y + h * 0.24}" text-anchor="middle" fill="${i >= 5 ? alpha(theme.weekend, 0.95) : theme.muted}" font-size="${Math.max(8, Math.round(Math.min(h * (compact ? 0.078 : 0.088), cellW * 0.24)))}" font-family="${FONT}" font-weight="700">${wd}</text>`);
-  
-  if (cfg.strongWeekendTint) [5, 6].forEach((wCol, idx) => out += `<rect x="${innerX + wCol * cellW + cellW * 0.08}" y="${gridTop - cellH * 0.18}" width="${cellW * 0.84}" height="${cellH * 5.2}" rx="${cellW * 0.22}" fill="${alpha(theme.weekend, idx === 0 ? 0.06 : 0.09)}"/>`);
-
-  const isRestDay = isRestDayFactory(cfg, year);
-  const firstWeekday = (first.day() + 6) % 7;
-  for (let day = 1; day <= first.daysInMonth(); day++) {
-    const cx = innerX + ((firstWeekday + day - 1) % 7) * cellW + cellW / 2;
-    const cy = gridTop + Math.floor((firstWeekday + day - 1) / 7) * cellH + cellH * 0.72;
-    const date = dayjs(`${year}-${String(monthIndex + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`);
-    const isToday = cfg.accentToday && date.isSame(now, 'day');
-    const isCustomEvent = cfg.eventsMap && cfg.eventsMap[`${String(monthIndex + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`];
-    let textColor = isToday ? theme.text : isRestDay(date) ? theme.weekend : (date.isBefore(now, 'day') && now.month() === monthIndex) ? alpha(theme.text, 0.64) : theme.text;
-    if (isCustomEvent && !isToday) textColor = cfg.eventColor;
-
-    if (isCustomEvent) out += `<rect x="${cx - cellW * 0.35}" y="${cy - cellH * 0.65}" width="${cellW * 0.7}" height="${cellH * 0.75}" rx="${Math.min(cellW, cellH) * 0.2}" fill="${alpha(cfg.eventColor, 0.18)}" stroke="${alpha(cfg.eventColor, 0.34)}"/>`;
-    if (isToday) out += `<rect x="${cx - cellW * 0.34}" y="${cy - cellH * 0.58}" width="${cellW * 0.68}" height="${cellH * 0.72}" rx="${Math.min(cellW, cellH) * 0.22}" fill="${alpha(theme.accent, 0.24)}" stroke="${alpha(theme.accent2, 0.28)}"/>`;
-    if (cfg.style === 'dots' || cfg.style === 'micro') out += `<circle cx="${cx}" cy="${cy - cellH * 0.24}" r="${Math.max(1.1, Math.min(cellW, cellH) * 0.08)}" fill="${isToday ? theme.accent : isRestDay(date) ? theme.weekend : alpha(theme.text, 0.22)}"/>`;
-    out += `<text x="${cx}" y="${cy + (cfg.style === 'dots' || cfg.style === 'micro' ? cellH * 0.18 : 0)}" text-anchor="middle" fill="${textColor}" font-size="${Math.max(8, Math.round(Math.min(cellW, cellH) * (compact ? 0.40 : 0.44)))}" font-family="${FONT}" font-weight="${isToday ? 800 : 600}">${day}</text>`;
-  }
-  return out;
-}
-
-function renderFooter(cfg, theme, labels, now, stats, width, footerBox, FONT) {
-  const { x, y, w, h } = footerBox;
-  let base = `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${Math.round(w * 0.05)}" fill="${alpha(theme.panel, 0.82)}" stroke="${alpha('#ffffff', cfg.glassPanels===false?0.06:0.08)}"/>`;
-  if (cfg.glassPanels !== false) base += `<rect x="${x + 1.5}" y="${y + 1.5}" width="${Math.max(0, w - 3)}" height="${Math.max(0, h - 3)}" rx="${Math.max(0, Math.round(w * 0.05) - 1.5)}" fill="none" stroke="${alpha(theme.accent2, 0.05)}"/>`; 
-  
-  const pad = Math.round(w * 0.04);
-  const textSize = Math.round(h * 0.22);
-  const subSize = Math.round(h * 0.15);
-  
-  if (cfg.footer === 'quote') {
-    const arr = cfg.lang === 'ru' ? ['Маленькие шаги собирают большой год.', 'Спокойный ритм сильнее хаоса.'] : ['Small steps shape a big year.', 'Consistency beats intensity.'];
-    return base + (cfg.note || arr[now.year() % 2]).split('\n').map((line, i) => `<text x="${x + w / 2}" y="${y + h * 0.38 + i * subSize * 1.45}" text-anchor="middle" fill="${theme.text}" font-size="${subSize}" font-family="${FONT}" font-weight="700">${escapeXml(line)}</text>`).join('');
-  }
-  if (cfg.footer === 'progress_bar') return base + `<text x="${x + pad}" y="${y + h * 0.32}" fill="${theme.text}" font-size="${textSize}" font-family="${FONT}" font-weight="800">${stats.percentPassed}% ${labels.passed}</text><rect x="${x + pad}" y="${y + h * 0.55}" width="${w - pad * 2}" height="${h * 0.12}" rx="${h * 0.06}" fill="${alpha(theme.bg, 0.7)}" /><rect x="${x + pad}" y="${y + h * 0.55}" width="${(w - pad * 2) * stats.percentPassed / 100}" height="${h * 0.12}" rx="${h * 0.06}" fill="${theme.accent}" />`;
-  if (cfg.footer === 'today_card') return base + `<text x="${x + pad}" y="${y + h * 0.34}" fill="${theme.accent2}" font-size="${subSize}" font-family="${FONT}" font-weight="700">${labels.today}</text><text x="${x + pad}" y="${y + h * 0.68}" fill="${theme.text}" font-size="${textSize}" font-family="${FONT}" font-weight="800">${escapeXml(cfg.lang === 'ru' ? `${labels.weekdaysFull[(now.day() + 6) % 7]}, ${now.date()} ${labels.monthsGenitive[now.month()]}` : `${labels.weekdaysFull[(now.day() + 6) % 7]}, ${labels.months[now.month()]} ${now.date()}`)}</text>`;
-  
-  if (cfg.footer === 'next_event') {
-    const n = findNearestEvent(cfg, now, labels);
-    return base + `<text x="${x + pad}" y="${y + h * 0.32}" fill="${theme.accent2}" font-size="${subSize}" font-family="${FONT}" font-weight="700">${cfg.lang === 'ru' ? 'Ближайший ориентир' : 'Next marker'}</text><text x="${x + pad}" y="${y + h * 0.62}" fill="${theme.text}" font-size="${textSize}" font-family="${FONT}" font-weight="800">${escapeXml(n ? n.title : (cfg.lang === 'ru' ? 'Событий нет' : 'No events'))}</text><text x="${x + pad}" y="${y + h * 0.82}" fill="${theme.muted}" font-size="${subSize}" font-family="${FONT}" font-weight="600">${escapeXml(n ? (cfg.lang === 'ru' ? `Через ${n.diff} дн. · ${n.label}` : `In ${n.diff} days · ${n.label}`) : weatherSummary(cfg, cfg.lang))}</text>`;
-  }
-  if (cfg.footer === 'seasonal_focus') return base + `<text x="${x + pad}" y="${y + h * 0.26}" fill="${theme.accent2}" font-size="${subSize}" font-family="${FONT}" font-weight="700">${cfg.lang === 'ru' ? 'Сезонный режим' : 'Season mode'}</text><text x="${x + pad}" y="${y + h * 0.5}" fill="${theme.text}" font-size="${textSize}" font-family="${FONT}" font-weight="800">${escapeXml(cfg.lang === 'ru' ? `${getSeasonLabel('ru', now.month())} · ${stats.daysLeft} дн. до конца года` : `${getSeasonLabel('en', now.month())} · ${stats.daysLeft} days left`)}</text><text x="${x + pad}" y="${y + h * 0.72}" fill="${theme.muted}" font-size="${subSize}" font-family="${FONT}" font-weight="600">${escapeXml((cfg.note || (cfg.lang === 'ru' ? 'Спокойный темп, ясный фокус.' : 'Calm pace, clear focus.')).slice(0, 48))}</text>`;
-  
-  if (cfg.footer === 'weather_strip') {
-    if (cfg.weatherDataList && cfg.weatherDataList.length > 1) {
-      const numCities = cfg.weatherDataList.length;
-      const slotW = (w - pad * 2) / numCities;
-      let out = base + `<text x="${x + pad}" y="${y + h * 0.28}" fill="${theme.accent2}" font-size="${subSize}" font-family="${FONT}" font-weight="700">${cfg.lang === 'ru' ? 'Сводка среды' : 'Ambient summary'}</text>`;
-      cfg.weatherDataList.forEach((wd, i) => {
-        const cx = x + pad + i * slotW;
-        out += `<text x="${cx}" y="${y + h * 0.65}" fill="${theme.text}" font-size="${textSize*0.8}" font-family="${FONT}" font-weight="800">${escapeXml(wd.temp + '°C ' + wd.icon)}</text>`;
-        out += `<text x="${cx}" y="${y + h * 0.88}" fill="${theme.muted}" font-size="${subSize*0.85}" font-family="${FONT}" font-weight="600">${escapeXml(wd.cityLabel.length > 12 ? wd.cityLabel.slice(0,11)+'…' : wd.cityLabel)}</text>`;
-      });
-      return out;
-    }
-    return base + `<text x="${x + pad}" y="${y + h * 0.34}" fill="${theme.accent2}" font-size="${subSize}" font-family="${FONT}" font-weight="700">${cfg.lang === 'ru' ? 'Сводка среды' : 'Ambient summary'}</text><text x="${x + pad}" y="${y + h * 0.62}" fill="${theme.text}" font-size="${textSize}" font-family="${FONT}" font-weight="800">${escapeXml(weatherSummary(cfg, cfg.lang))}</text><text x="${x + pad}" y="${y + h * 0.82}" fill="${theme.muted}" font-size="${subSize}" font-family="${FONT}" font-weight="600">UTC${cfg.timezone >= 0 ? '+'+cfg.timezone : cfg.timezone} · ${labels.months[now.month()]} ${now.date()}</text>`;
-  }
-  
-  if (cfg.footer === 'day_weather') {
-    const title = cfg.lang === 'ru' ? 'Прогноз на день' : 'Day forecast';
-    const boxX = x - w * 0.015;
-    const boxW = w + w * 0.03;
-    const titleX = boxX + boxW * 0.07;
-    const titleY = y + h * 0.11;
-    let panel = `<rect x="${boxX}" y="${y}" width="${boxW}" height="${h}" rx="${Math.round(boxW * 0.05)}" fill="${alpha(theme.panel, 0.82)}" stroke="${alpha('#ffffff', cfg.glassPanels===false?0.06:0.08)}"/>`;
-    if (cfg.glassPanels !== false) panel += `<rect x="${boxX + 1.5}" y="${y + 1.5}" width="${Math.max(0, boxW - 3)}" height="${Math.max(0, h - 3)}" rx="${Math.max(0, Math.round(boxW * 0.05) - 1.5)}" fill="none" stroke="${alpha(theme.accent2, 0.05)}"/>`;
-    panel += `<text x="${titleX}" y="${titleY}" fill="${theme.accent2}" font-size="${subSize}" font-family="${FONT}" font-weight="700">${title}</text>`;
-
-    if (!cfg.weatherDataList || cfg.weatherDataList.length === 0) {
-      return panel + `<text x="${titleX}" y="${y + h * 0.52}" fill="${theme.text}" font-size="${textSize * 0.8}" font-family="${FONT}" font-weight="700">${cfg.lang === 'ru' ? 'Добавь город для погоды' : 'Add city for forecast'}</text>`;
-    }
-
-    const outerPad = Math.round(boxW * 0.065);
-    const gap = Math.max(18, Math.round(boxW * 0.03));
-    const contentTop = y + h * 0.25;
-    const contentBottom = y + h * 0.90;
-    const contentH = contentBottom - contentTop;
-
-    if (cfg.weatherDataList.length === 1) {
-      const wd = cfg.weatherDataList[0];
-      const city = String(wd.cityLabel || '').split(',')[0].trim();
-      const items = (wd.hourly || []).slice(0, 4);
-      const citySize = subSize * 0.95;
-      const rowH = contentH / Math.max(4.2, items.length + 0.4);
-      const rowX = boxX + outerPad;
-      const rowW = boxW - outerPad * 2;
-      let out = panel;
-      if (city) out += `<text x="${boxX + boxW / 2}" y="${contentTop + citySize * 0.15}" text-anchor="middle" fill="${theme.text}" font-size="${citySize}" font-family="${FONT}" font-weight="700">${escapeXml(city)}</text>`;
-      items.forEach((item, idx) => {
-        const ry = contentTop + citySize * 0.55 + idx * rowH;
-        out += `<line x1="${rowX + rowW * 0.18}" y1="${ry + rowH * 0.78}" x2="${rowX + rowW}" y2="${ry + rowH * 0.78}" stroke="${alpha(theme.accent, 0.14)}"/>`;
-        out += `<rect x="${rowX}" y="${ry + rowH * 0.10}" width="${rowW * 0.18}" height="${rowH * 0.62}" rx="${rowH * 0.31}" fill="${alpha(theme.bg, 0.16)}" stroke="${alpha(theme.accent, 0.22)}"/>`;
-        out += `<text x="${rowX + rowW * 0.09}" y="${ry + rowH * 0.54}" text-anchor="middle" fill="${theme.accent2}" font-size="${subSize * 0.72}" font-family="${FONT}" font-weight="700">${escapeXml(item.hour)}</text>`;
-        out += `<text x="${rowX + rowW * 0.24}" y="${ry + rowH * 0.56}" fill="${theme.text}" font-size="${subSize * 0.9}" font-family="${FONT}">${item.icon}</text>`;
-        out += `<text x="${rowX + rowW}" y="${ry + rowH * 0.56}" text-anchor="end" fill="${theme.text}" font-size="${subSize * 0.86}" font-family="${FONT}" font-weight="800">${escapeXml(item.temp)}°</text>`;
-      });
-      return out;
-    }
-
-    let out = panel;
-    const numCities = cfg.weatherDataList.length;
-    const slotW = (boxW - outerPad * 2 - gap * (numCities - 1)) / numCities;
-    cfg.weatherDataList.forEach((wd, i) => {
-      const city = String(wd.cityLabel || '').split(',')[0].trim();
-      const items = (wd.hourly || []).slice(0, 4);
-      const colX = boxX + outerPad + i * (slotW + gap);
-      const citySize = Math.min(subSize * 0.92, slotW * 0.14);
-      const cityLabel = city.length > 14 ? city.slice(0, 13) + '…' : city;
-      const rowTop = contentTop + citySize * 0.55;
-      const rowH = (contentBottom - rowTop) / Math.max(4.15, items.length + 0.15);
-      out += `<text x="${colX + slotW / 2}" y="${contentTop + citySize * 0.1}" text-anchor="middle" fill="${theme.text}" font-size="${citySize}" font-family="${FONT}" font-weight="700">${escapeXml(cityLabel)}</text>`;
-      out += `<line x1="${colX + slotW * 0.08}" y1="${contentTop + citySize * 0.32}" x2="${colX + slotW * 0.92}" y2="${contentTop + citySize * 0.32}" stroke="${alpha(theme.accent, 0.14)}"/>`;
-      items.forEach((item, idx) => {
-        const ry = rowTop + idx * rowH;
-        out += `<line x1="${colX + slotW * 0.18}" y1="${ry + rowH * 0.78}" x2="${colX + slotW * 0.92}" y2="${ry + rowH * 0.78}" stroke="${alpha(theme.accent, 0.14)}"/>`;
-        out += `<rect x="${colX + slotW * 0.02}" y="${ry + rowH * 0.10}" width="${slotW * 0.30}" height="${rowH * 0.62}" rx="${rowH * 0.31}" fill="${alpha(theme.bg, 0.16)}" stroke="${alpha(theme.accent, 0.22)}"/>`;
-        out += `<text x="${colX + slotW * 0.17}" y="${ry + rowH * 0.54}" text-anchor="middle" fill="${theme.accent2}" font-size="${subSize * 0.70}" font-family="${FONT}" font-weight="700">${escapeXml(item.hour)}</text>`;
-        out += `<text x="${colX + slotW * 0.40}" y="${ry + rowH * 0.56}" fill="${theme.text}" font-size="${subSize * 0.88}" font-family="${FONT}">${item.icon}</text>`;
-        out += `<text x="${colX + slotW * 0.92}" y="${ry + rowH * 0.56}" text-anchor="end" fill="${theme.text}" font-size="${subSize * 0.84}" font-family="${FONT}" font-weight="800">${escapeXml(item.temp)}°</text>`;
-      });
-    });
-    return out;
-  }
-  
-  if (cfg.footer === 'custom_note' && cfg.note) return base + (cfg.note).split('\n').map((line, i) => `<text x="${x + pad}" y="${y + h * 0.38 + i * subSize * 1.6}" fill="${theme.text}" font-size="${subSize}" font-family="${FONT}" font-weight="700">${escapeXml(line)}</text>`).join('');
-  
-  return base + `<text x="${x + pad}" y="${y + h * 0.36}" fill="${theme.text}" font-size="${textSize}" font-family="${FONT}" font-weight="800">${stats.daysLeft} ${labels.daysLeft}</text><text x="${x + pad}" y="${y + h * 0.66}" fill="${theme.muted}" font-size="${subSize}" font-family="${FONT}">${stats.percentPassed}% ${labels.passed}</text>`;
-}
-
-function renderSvg(cfg) {
-  const theme = cfg.themeObj;
-  const labels = getLabels(cfg.lang);
-  const now = dayjs.utc().add(cfg.timezone, 'hour');
-  const stats = yearStats(now);
-  cfg.eventsMap = parseEvents(cfg.events);
-
-  const { width, height } = cfg;
-  const sidePadding = Math.round(width * 0.035);
-  const innerTop = cfg.lockscreenSafe ? Math.round(height * 0.24 + width * 0.04) : sidePadding;
-  const innerBottom = height - (cfg.lockscreenSafe ? Math.round(height * 0.105 + width * 0.03) : sidePadding);
-
-  const selectedFontDef = FONTS[cfg.font] || FONTS.inter;
-  const b64Font = fontCache[cfg.font];
-  const FONT_FAMILY = getSafeFontStack(selectedFontDef.family, cfg.pngSafeFont);
-  
-  const fontDefs = b64Font ? `<style>@font-face { font-family: '${selectedFontDef.family}'; src: url(data:font/truetype;base64,${b64Font}) format('truetype'); font-weight: 100 900; font-style: normal; } text, tspan { font-family: ${FONT_FAMILY}; text-rendering: geometricPrecision; }</style>` : '';
-
-  const listLike = isListLayout(cfg.monthLayout);
-  const compactLike = isCompactGridLayout(cfg.monthLayout) || listLike;
-  const headerHeight = Math.round(height * (listLike ? 0.088 : compactLike ? 0.09 : 0.095));
-  const footerHeight = Math.round(height * (listLike ? 0.072 : compactLike ? 0.076 : 0.08));
-  const contentTop = innerTop + headerHeight + Math.round(height * 0.012);
-  const contentBottom = innerBottom - footerHeight - Math.round(height * 0.014);
-  const contentH = contentBottom - contentTop;
-
-  const layout = getLayoutMetrics(cfg, width, height, contentH, sidePadding);
-
-  let monthsSvg = '';
-  if (layout.mode === 'focus') {
-    const heroGap = Math.round(width * 0.014);
-    const heroH = Math.round(contentH * 0.40);
-    monthsSvg += renderMonthGrid({ monthIndex: now.month(), year: now.year(), x: sidePadding, y: contentTop, w: width - sidePadding * 2, h: heroH, cfg: { ...cfg, monthLayout: 'single_month_focus', monthBadges: true, showWeekNumbers: true }, theme, labels, now, FONT: FONT_FAMILY });
-    const miniTop = contentTop + heroH + heroGap;
-    const miniH = (contentBottom - miniTop - heroGap * 2) / 3, miniW = (width - sidePadding * 2 - heroGap * 3) / 4;
-    Array.from({ length: 12 }, (_, i) => i).filter(i => i !== now.month()).forEach((monthIndex, i) => {
-      monthsSvg += renderMonthGrid({ monthIndex, year: now.year(), x: sidePadding + (i % 4) * (miniW + heroGap), y: miniTop + Math.floor(i / 4) * (miniH + heroGap), w: miniW, h: miniH, cfg: { ...cfg, monthLayout: 'grid_3x4_compact', focusCurrentMonth: false, monthBadges: false, showWeekNumbers: false, showWeekdays: true }, theme, labels, now, FONT: FONT_FAMILY });
-    });
-  } else if (layout.mode === 'focus_single') {
-    const heroH = Math.round(contentH * 0.65); 
-    const heroY = contentTop + (contentH - heroH) / 2;
-    monthsSvg += renderMonthGrid({ monthIndex: now.month(), year: now.year(), x: sidePadding, y: heroY, w: width - sidePadding * 2, h: heroH, cfg: { ...cfg, monthLayout: 'current_month_only', monthBadges: true, showWeekNumbers: true }, theme, labels, now, FONT: FONT_FAMILY });
-  } else if (layout.mode === 'current_three') {
-    for (let i = 0; i < 3; i++) {
-        const targetDate = now.add(i, 'month');
-        const h = layout.monthH;
-        const y = contentTop + i * (h + layout.gap);
-        monthsSvg += renderMonthGrid({ monthIndex: targetDate.month(), year: targetDate.year(), x: sidePadding, y, w: layout.monthW, h, cfg: { ...cfg, monthLayout: 'single_month_focus', monthBadges: true }, theme, labels, now, FONT: FONT_FAMILY });
-    }
-  } else {
-    for (let i = 0; i < 12; i++) {
-      const x = sidePadding + (i % layout.cols) * (layout.monthW + layout.gap), y = contentTop + Math.floor(i / layout.cols) * (layout.monthH + layout.gap);
-      monthsSvg += isListLayout(cfg.monthLayout) ? renderMonthListRow({ monthIndex: i, year: now.year(), x, y, w: layout.monthW, h: layout.monthH, cfg, theme, labels, now, FONT: FONT_FAMILY }) : renderMonthGrid({ monthIndex: i, year: now.year(), x, y, w: layout.monthW, h: layout.monthH, cfg, theme, labels, now, FONT: FONT_FAMILY });
-    }
-  }
-
-  let quarterLines = '';
-  if (cfg.quarterDividers && layout.mode !== 'focus' && layout.mode !== 'focus_single' && layout.mode !== 'current_three') {
-    if (isListLayout(cfg.monthLayout) && layout.rows === 12) { [3, 6, 9].forEach((idx) => quarterLines += `<line x1="${sidePadding}" y1="${contentTop + idx * layout.monthH + (idx - 0.5) * layout.gap}" x2="${width - sidePadding}" y2="${contentTop + idx * layout.monthH + (idx - 0.5) * layout.gap}" stroke="${alpha(theme.accent2, 0.12)}" stroke-dasharray="12 12" />`); } 
-    else if (layout.cols === 3 && layout.rows === 4) { for (let r = 1; r < layout.rows; r++) quarterLines += `<line x1="${sidePadding}" y1="${contentTop + r * layout.monthH + (r - 0.5) * layout.gap}" x2="${width - sidePadding}" y2="${contentTop + r * layout.monthH + (r - 0.5) * layout.gap}" stroke="${alpha(theme.accent2, 0.12)}" stroke-dasharray="10 12" />`; } 
-    else if (layout.cols === 4 && layout.rows === 3) { for (let r = 1; r < layout.rows; r++) quarterLines += `<line x1="${sidePadding}" y1="${contentTop + r * layout.monthH + (r - 0.5) * layout.gap}" x2="${width - sidePadding}" y2="${contentTop + r * layout.monthH + (r - 0.5) * layout.gap}" stroke="${alpha(theme.accent2, 0.12)}" stroke-dasharray="10 12" />`; }
-    else if (layout.cols === 2 && layout.rows === 6) { [2, 4].forEach((r) => quarterLines += `<line x1="${sidePadding}" y1="${contentTop + r * layout.monthH + (r - 0.5) * layout.gap}" x2="${width - sidePadding}" y2="${contentTop + r * layout.monthH + (r - 0.5) * layout.gap}" stroke="${alpha(theme.accent2, 0.10)}" stroke-dasharray="10 12" />`); } 
-    else if (layout.cols === 6 && layout.rows === 2) {
-      quarterLines += `<line x1="${sidePadding}" y1="${contentTop + layout.monthH + layout.gap / 2}" x2="${width - sidePadding}" y2="${contentTop + layout.monthH + layout.gap / 2}" stroke="${alpha(theme.accent2, 0.10)}" stroke-dasharray="10 12" />`;
-      [3].forEach((c) => quarterLines += `<line x1="${sidePadding + c * layout.monthW + (c - 0.5) * layout.gap}" y1="${contentTop}" x2="${sidePadding + c * layout.monthW + (c - 0.5) * layout.gap}" y2="${contentBottom}" stroke="${alpha(theme.accent2, 0.08)}" stroke-dasharray="8 10" />`);
-    }
-  }
-
-  return `<?xml version="1.0" encoding="UTF-8"?><svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}"><defs>${fontDefs}</defs>${renderBackground(cfg, theme, width, height)}${renderHeader(cfg, theme, labels, now, stats, width, sidePadding, innerTop, FONT_FAMILY)}${quarterLines}${monthsSvg}${renderFooter(cfg, theme, labels, now, stats, width, { x: sidePadding, y: innerBottom - footerHeight, w: width - sidePadding * 2, h: Math.round(footerHeight * 0.92) }, FONT_FAMILY)}</svg>`;
-}
-
-app.use(express.static(path.join(__dirname, 'public')));
-app.get('/api/options', (req, res) => {
-  res.json({ presets: PHONE_PRESETS, themes: THEMES, bgStyles: BG_STYLES, fonts: Object.fromEntries(Object.entries(FONTS).map(([k, v]) => [k, v.name])) });
-});
-
-app.get('/api/weather', async (req, res) => {
-  const city = String(req.query.city || '').trim();
-  const lang = String(req.query.lang || 'ru').trim();
-  if (!city) return res.status(400).json({ ok: false, error: 'CITY_REQUIRED' });
-  const data = await fetchWeatherByCity(city, lang);
-  if (!data) return res.status(404).json({ ok: false, error: 'WEATHER_NOT_FOUND', city });
-  return res.json({ ok: true, city, data });
-});
-
-
-app.get('/api/debug-weather', async (req, res) => {
-  const cfg = getConfig(req.query || {});
-  const resolved = await resolveWeatherList(cfg.citiesToFetch, cfg.lang);
-  res.json({
-    ok: true,
-    requestedCities: cfg.citiesToFetch,
-    resolvedCount: resolved.length,
-    resolved
-  });
-});
-
-app.get('/wallpaper.svg', async (req, res) => {
-  const cfg = getConfig(req.query);
-  cfg.weatherDataList = await resolveWeatherList(cfg.citiesToFetch, cfg.lang);
-  res.setHeader('X-Weather-Requested', String(cfg.citiesToFetch.length));
-  res.setHeader('X-Weather-Resolved', String(cfg.weatherDataList.length));
-  res.setHeader('X-Weather-Cities', cfg.citiesToFetch.join(' | '));
-  res.type('image/svg+xml').send(renderSvg(cfg));
-});
-
-app.get('/wallpaper.png', async (req, res) => {
-  try {
-    const cacheKey = `${RENDER_VERSION}:${req.originalUrl}:${dayjs().format('YYYY-MM-DD-HH')}`;
-    if (pngCache.has(cacheKey)) {
-      res.setHeader('Content-Type', 'image/png');
-      res.setHeader('X-Cache', 'HIT');
-      return res.send(pngCache.get(cacheKey));
-    }
-
-    const cfg = getConfig(req.query);
-    cfg.weatherDataList = await resolveWeatherList(cfg.citiesToFetch, cfg.lang);
-    const svg = renderSvg(cfg);
-
-    let png;
-    try {
-      const fontFiles = Object.values(FONTS)
-        .map((f) => path.join(fontsDir, f.file))
-        .filter((f) => fs.existsSync(f));
-      const selected = FONTS[cfg.font] || FONTS.inter;
-      const resvg = new Resvg(svg, {
-        fitTo: { mode: 'original' },
-        font: {
-          fontFiles,
-          loadSystemFonts: true,
-          defaultFontFamily: selected.family,
-          sansSerifFamily: selected.family,
-          serifFamily: selected.family,
-          monospaceFamily: selected.family,
-        },
-      });
-      png = Buffer.from(resvg.render().asPng());
-    } catch (renderErr) {
-      png = await sharp(Buffer.from(svg), { density: 300 }).png().toBuffer();
-    }
-
-    if (pngCache.size < 1000) pngCache.set(cacheKey, png);
-    res.setHeader('Content-Type', 'image/png');
-    res.setHeader('Cache-Control', 'public, max-age=3600');
-    res.setHeader('X-Cache', 'MISS');
-    res.setHeader('X-Weather-Requested', String(cfg.citiesToFetch.length));
-    res.setHeader('X-Weather-Resolved', String(cfg.weatherDataList.length));
-    res.setHeader('X-Weather-Cities', cfg.citiesToFetch.join(' | '));
-    res.send(png);
-  } catch (err) {
-    res.status(500).json({ error: 'ОШИБКА ГЕНЕРАЦИИ ОБОЕВ', details: err.message });
-  }
-});
-
-if (require.main === module) {
-  app.listen(PORT, () => console.log(`Сервер запущен на порту ${PORT}`));
-}
-module.exports = app;
+  if (cfg.showWeekdays) labels.weekdays.forEach((wd, i) => out += `<text x="${innerX + i * cellW + cellW / 2}" y="${y + h * 0.24}" text-anchor="middle" fill="${i >= 5 ? alpha(theme.weekend, 0.95) : theme.muted}" font-size="${Math.max(8, Math.round(Math.min(h * (compact ? 0.078 : 0.08
