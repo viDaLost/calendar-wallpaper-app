@@ -8,7 +8,7 @@ const isLeapYear = require('dayjs/plugin/isLeapYear');
 const weekOfYear = require('dayjs/plugin/weekOfYear');
 const advancedFormat = require('dayjs/plugin/advancedFormat');
 const fs = require('fs');
-const https = require('https'); // Встроенный модуль, работает везде
+const https = require('https');
 
 dayjs.extend(utc);
 dayjs.extend(isLeapYear);
@@ -23,7 +23,7 @@ const pngCache = new Map();
 const cacheSweepTimer = setInterval(() => pngCache.clear(), 1000 * 60 * 60);
 if (cacheSweepTimer.unref) cacheSweepTimer.unref();
 
-const RENDER_VERSION = 'v7-multi-city-https-fixed';
+const RENDER_VERSION = 'v8-wttr-weather';
 
 const FONTS = {
   inter: { name: 'Inter (Стандарт)', file: 'inter.ttf', family: 'Inter' },
@@ -233,17 +233,16 @@ function collectRequestedCities(query) {
   return deduped.slice(0, 3);
 }
 
-// === БЕЗОПАСНАЯ ЛОГИКА ПОГОДЫ НА БАЗЕ HTTPS ===
+// === НОВАЯ БЕЗОПАСНАЯ ЛОГИКА ПОГОДЫ (Провайдер wttr.in) ===
 const weatherCache = new Map();
 
-// Функция загрузки JSON, совместимая со всеми версиями Node.js
-function fetchJsonViaHttps(url, timeoutMs = 3500) {
+function fetchJsonViaHttps(url, timeoutMs = 4000) {
   return new Promise((resolve, reject) => {
     const req = https.get(url, {
-      headers: {
-        'Accept': 'application/json',
-        // Добавлен User-Agent для обхода блокировок API
-        'User-Agent': 'Mozilla/5.0 (compatible; VercelApp/1.0; +https://github.com)'
+      headers: { 
+        'Accept': 'application/json', 
+        // wttr.in отлично работает с юзер-агентом curl, это исключает 99% блокировок
+        'User-Agent': 'curl/7.68.0' 
       },
       timeout: timeoutMs,
     }, (res) => {
@@ -257,124 +256,116 @@ function fetchJsonViaHttps(url, timeoutMs = 3500) {
         try { 
           resolve(JSON.parse(data)); 
         } catch (e) { 
-          reject(new Error(`INVALID_JSON`)); 
+          reject(new Error('INVALID_JSON')); 
         }
       });
     });
 
-    // Обработка таймаута без падения сервера
-    req.on('timeout', () => {
-      req.destroy();
-      reject(new Error('TIMEOUT'));
+    req.on('timeout', () => { 
+      req.destroy(); 
+      reject(new Error('TIMEOUT')); 
     });
-
+    
     req.on('error', (err) => {
       reject(err);
     });
   });
 }
 
-function weatherIconFromCode(code) {
-  if (code >= 1 && code <= 3) return '⛅';
-  if (code >= 45 && code <= 48) return '🌫️';
-  if (code >= 51 && code <= 67) return '🌧️';
-  if (code >= 71 && code <= 77) return '❄️';
-  if (code >= 80 && code <= 82) return '🌦️';
-  if (code >= 95) return '⛈️';
-  return '☀️';
-}
-
-async function geocodeCity(normalizedCity, lang = 'ru') {
-  try {
-    // Сначала пробуем запросить на нужном языке (например, на русском)
-    const primaryUrl = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(normalizedCity)}&count=1&language=${lang}&format=json`;
-    const geoData = await fetchJsonViaHttps(primaryUrl, 3000);
-    
-    if (geoData && Array.isArray(geoData.results) && geoData.results.length > 0) {
-      return geoData.results[0];
-    }
-    
-    // Если ничего не нашли, делаем фоллбэк на английский язык
-    const fallbackUrl = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(normalizedCity)}&count=1&language=en&format=json`;
-    const fallbackData = await fetchJsonViaHttps(fallbackUrl, 3000);
-    
-    if (fallbackData && Array.isArray(fallbackData.results) && fallbackData.results.length > 0) {
-      return fallbackData.results[0];
-    }
-  } catch (e) {
-    console.warn(`Geocode failed for ${normalizedCity}: ${e.message}`);
-  }
-  return null;
+function getWwoIcon(code) {
+  const c = Number(code);
+  if (c === 113) return '☀️'; // Ясно
+  if (c === 116) return '⛅'; // Облачно с прояснениями
+  if ([119, 122].includes(c)) return '☁️'; // Пасмурно
+  if ([143, 248, 260].includes(c)) return '🌫️'; // Туман
+  if ([176, 263, 266, 281, 284, 293, 296, 299, 302, 305, 308, 311, 314, 353, 356, 359].includes(c)) return '🌧️'; // Дождь
+  if ([179, 182, 185, 227, 230, 317, 320, 323, 326, 329, 332, 335, 338, 350, 362, 365, 368, 371, 374, 377].includes(c)) return '❄️'; // Снег
+  if ([200, 386, 389, 392, 395].includes(c)) return '⛈️'; // Гроза
+  return '☀️'; // По умолчанию
 }
 
 async function fetchWeatherByCity(city, lang = 'ru') {
   const normalizedCity = String(city || '').split(',')[0].trim();
   if (!normalizedCity) return null;
-  
+
   const cacheKey = normalizedCity.toLowerCase();
   const cached = weatherCache.get(cacheKey);
   
-  // Возвращаем кэш, если он еще свежий
   if (cached && cached.expiresAt > Date.now()) {
     return cached.data;
   }
 
   try {
-    const place = await geocodeCity(normalizedCity, lang);
-    if (!place || typeof place.latitude !== 'number') {
-      // "Негативный" кэш: если город не найден, запоминаем это на 2 минуты
-      weatherCache.set(cacheKey, { data: null, expiresAt: Date.now() + 1000 * 120 });
-      return null;
+    // Используем wttr.in, который сам геокодирует город по названию
+    const url = `https://wttr.in/${encodeURIComponent(normalizedCity)}?format=j1&lang=${lang}`;
+    const data = await fetchJsonViaHttps(url, 4000);
+
+    if (!data || !data.current_condition || !data.current_condition[0]) {
+      throw new Error('Invalid weather payload from wttr.in');
     }
 
-    const tz = place.timezone || 'auto';
-    const url = `https://api.open-meteo.com/v1/forecast?latitude=${place.latitude}&longitude=${place.longitude}&current=temperature_2m,weather_code,is_day&hourly=temperature_2m,weather_code&daily=temperature_2m_max,temperature_2m_min,weather_code&forecast_days=2&timezone=${encodeURIComponent(tz)}`;
-    
-    const data = await fetchJsonViaHttps(url, 3500);
-    
-    if (!data?.current || data.current.temperature_2m == null) {
-      throw new Error('Invalid weather payload');
+    const current = data.current_condition[0];
+    const temp = Math.round(Number(current.temp_C || 0));
+    const icon = getWwoIcon(current.weatherCode);
+
+    let areaName = normalizedCity;
+    if (data.nearest_area && data.nearest_area[0] && data.nearest_area[0].areaName && data.nearest_area[0].areaName[0]) {
+        areaName = data.nearest_area[0].areaName[0].value;
     }
 
-    const code = Number(data.current.weather_code || 0);
+    let dailyMax = null;
+    let dailyMin = null;
     const hourly = [];
-    const times = Array.isArray(data.hourly?.time) ? data.hourly.time : [];
-    const temps = Array.isArray(data.hourly?.temperature_2m) ? data.hourly.temperature_2m : [];
-    const codes = Array.isArray(data.hourly?.weather_code) ? data.hourly.weather_code : [];
 
-    if (times.length && temps.length) {
-      let nowIso = String(data.current.time || '');
-      if (nowIso.length >= 13) nowIso = nowIso.slice(0, 13) + ':00';
-      let nowIndex = times.findIndex(t => t >= nowIso);
-      if (nowIndex < 0) nowIndex = 0;
-      for (let idx = nowIndex; idx < times.length && hourly.length < 6; idx += 3) {
-        const t = Math.round(Number(temps[idx] || 0));
-        hourly.push({ hour: `${String(times[idx]).slice(11, 13)}:00`, temp: t > 0 ? `+${t}` : `${t}`, icon: weatherIconFromCode(Number(codes[idx] ?? code)) });
-      }
+    const today = data.weather && data.weather[0] ? data.weather[0] : null;
+    if (today) {
+        dailyMax = Math.round(Number(today.maxtempC));
+        dailyMin = Math.round(Number(today.mintempC));
+
+        if (Array.isArray(today.hourly)) {
+            const currentHour = new Date().getUTCHours();
+            // wttr.in возвращает данные с шагом в 3 часа (0, 300, 600...)
+            let startIndex = today.hourly.findIndex(h => (Number(h.time) / 100) >= currentHour);
+            if (startIndex < 0) startIndex = 0;
+
+            for (let i = 0; i < 4; i++) {
+                const hData = today.hourly[(startIndex + i) % today.hourly.length];
+                if (!hData) continue;
+                
+                let timeStr = String(hData.time);
+                if (timeStr === '0') timeStr = '00:00';
+                else if (timeStr.length === 3) timeStr = `0${timeStr[0]}:00`;
+                else if (timeStr.length === 4) timeStr = `${timeStr.slice(0, 2)}:00`;
+
+                const hTemp = Math.round(Number(hData.tempC));
+                hourly.push({
+                    hour: timeStr,
+                    temp: hTemp > 0 ? `+${hTemp}` : `${hTemp}`,
+                    icon: getWwoIcon(hData.weatherCode)
+                });
+            }
+        }
     }
-
-    const temp = Math.round(Number(data.current.temperature_2m));
-    const dailyMax = Array.isArray(data.daily?.temperature_2m_max) ? Math.round(Number(data.daily.temperature_2m_max[0])) : null;
-    const dailyMin = Array.isArray(data.daily?.temperature_2m_min) ? Math.round(Number(data.daily.temperature_2m_min[0])) : null;
 
     const result = {
       temp: temp > 0 ? `+${temp}` : `${temp}`,
-      icon: weatherIconFromCode(code),
-      cityLabel: String(place.name || normalizedCity).trim(),
-      timezone: tz,
-      dailyMax: typeof dailyMax === 'number' && Number.isFinite(dailyMax) ? (dailyMax > 0 ? `+${dailyMax}` : `${dailyMax}`) : null,
-      dailyMin: typeof dailyMin === 'number' && Number.isFinite(dailyMin) ? (dailyMin > 0 ? `+${dailyMin}` : `${dailyMin}`) : null,
+      icon,
+      cityLabel: areaName,
+      timezone: 'auto',
+      dailyMax: dailyMax !== null ? (dailyMax > 0 ? `+${dailyMax}` : `${dailyMax}`) : null,
+      dailyMin: dailyMin !== null ? (dailyMin > 0 ? `+${dailyMin}` : `${dailyMin}`) : null,
       hourly
     };
-    
-    // Успешный кэш на 30 минут
+
     weatherCache.set(cacheKey, { data: result, expiresAt: Date.now() + 1000 * 60 * 30 });
     return result;
-  } catch (e) { 
-    console.warn(`Weather fetch failed for ${normalizedCity}: ${e.message}`);
-    // "Негативный" кэш на случай сетевой ошибки (2 минуты)
+
+  } catch (e) {
+    console.error(`Ошибка погоды для ${normalizedCity}: ${e.message}`);
+    // Если ошибка сети или города нет — сохраняем негативный результат на 2 минуты,
+    // чтобы Vercel не крашился при каждой попытке рендера
     weatherCache.set(cacheKey, { data: null, expiresAt: Date.now() + 1000 * 120 });
-    return null; 
+    return null;
   }
 }
 
@@ -968,7 +959,6 @@ app.get('/api/weather', async (req, res) => {
   return res.json({ ok: true, city, data });
 });
 
-
 app.get('/api/debug-weather', async (req, res) => {
   const cfg = getConfig(req.query || {});
   const resolved = await resolveWeatherList(cfg.citiesToFetch, cfg.lang);
@@ -985,7 +975,7 @@ app.get('/wallpaper.svg', async (req, res) => {
   cfg.weatherDataList = await resolveWeatherList(cfg.citiesToFetch, cfg.lang);
   res.setHeader('X-Weather-Requested', String(cfg.citiesToFetch.length));
   res.setHeader('X-Weather-Resolved', String(cfg.weatherDataList.length));
-  res.setHeader('X-Weather-Cities', cfg.citiesToFetch.join(' | '));
+  res.setHeader('X-Weather-Cities', encodeURIComponent(cfg.citiesToFetch.join(' | ')));
   res.type('image/svg+xml').send(renderSvg(cfg));
 });
 
@@ -999,6 +989,8 @@ app.get('/wallpaper.png', async (req, res) => {
     }
 
     const cfg = getConfig(req.query);
+    // Теперь, даже если погода вернёт ошибку, функция не упадёт, 
+    // а просто продолжит генерацию картинки с пустым массивом погоды
     cfg.weatherDataList = await resolveWeatherList(cfg.citiesToFetch, cfg.lang);
     const svg = renderSvg(cfg);
 
@@ -1021,6 +1013,7 @@ app.get('/wallpaper.png', async (req, res) => {
       });
       png = Buffer.from(resvg.render().asPng());
     } catch (renderErr) {
+      console.error('Resvg render failed, fallback to sharp:', renderErr);
       png = await sharp(Buffer.from(svg), { density: 300 }).png().toBuffer();
     }
 
@@ -1030,10 +1023,10 @@ app.get('/wallpaper.png', async (req, res) => {
     res.setHeader('X-Cache', 'MISS');
     res.setHeader('X-Weather-Requested', String(cfg.citiesToFetch.length));
     res.setHeader('X-Weather-Resolved', String(cfg.weatherDataList.length));
-    res.setHeader('X-Weather-Cities', cfg.citiesToFetch.join(' | '));
     res.send(png);
   } catch (err) {
-    res.status(500).json({ error: 'ОШИБКА ГЕНЕРАЦИИ ОБОЕВ', details: err.message });
+    console.error('CRITICAL PNG ERROR:', err);
+    res.status(500).send('SERVER ERROR');
   }
 });
 
