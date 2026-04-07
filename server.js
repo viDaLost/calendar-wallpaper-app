@@ -8,7 +8,6 @@ const isLeapYear = require('dayjs/plugin/isLeapYear');
 const weekOfYear = require('dayjs/plugin/weekOfYear');
 const advancedFormat = require('dayjs/plugin/advancedFormat');
 const fs = require('fs');
-const https = require('https');
 
 dayjs.extend(utc);
 dayjs.extend(isLeapYear);
@@ -23,7 +22,7 @@ const pngCache = new Map();
 const cacheSweepTimer = setInterval(() => pngCache.clear(), 1000 * 60 * 60);
 if (cacheSweepTimer.unref) cacheSweepTimer.unref();
 
-const RENDER_VERSION = 'v7-multi-city';
+const RENDER_VERSION = 'v7-multi-city-fixed';
 
 const FONTS = {
   inter: { name: 'Inter (Стандарт)', file: 'inter.ttf', family: 'Inter' },
@@ -233,78 +232,31 @@ function collectRequestedCities(query) {
   return deduped.slice(0, 3);
 }
 
-async function resolveWeatherList(cities, lang) {
-  if (!Array.isArray(cities) || cities.length === 0) return [];
-  const settled = await Promise.allSettled(cities.slice(0, 3).map((city) => fetchWeatherByCity(city, lang)));
-  return settled
-    .map((item) => item.status === 'fulfilled' ? item.value : null)
-    .filter(Boolean);
-}
-
-function parseEvents(eventsStr) {
-  const map = {};
-  if (!eventsStr) return map;
-  eventsStr.split(',').forEach(part => {
-    const splitIdx = part.indexOf(':');
-    if(splitIdx > -1) {
-      let date = part.slice(0, splitIdx).trim();
-      const name = part.slice(splitIdx + 1).trim();
-      const dateParts = date.split('-');
-      if (dateParts.length === 2) date = `${dateParts[0].padStart(2, '0')}-${dateParts[1].padStart(2, '0')}`;
-      if (date && name) map[date] = name;
-    }
-  });
-  return map;
-}
-
-function getLabels(lang) {
-  return lang === 'ru'
-    ? { months: ['Январь','Февраль','Март','Апрель','Май','Июнь','Июль','Август','Сентябрь','Октябрь','Ноябрь','Декабрь'], monthsGenitive: ['января','февраля','марта','апреля','мая','июня','июля','августа','сентября','октября','ноября','декабря'], monthsShort: ['Янв','Фев','Мар','Апр','Май','Июн','Июл','Авг','Сен','Окт','Ноя','Дек'], monthsMedium: ['Январь','Февраль','Март','Апрель','Май','Июнь','Июль','Август','Сент.','Октябрь','Ноябрь','Декабрь'], weekdays: ['Пн','Вт','Ср','Чт','Пт','Сб','Вс'], weekdaysFull: ['понедельник','вторник','среда','четверг','пятница','суббота','воскресенье'], today: 'Сегодня', year: 'год', daysLeft: 'дн. осталось', passed: 'пройдено', week: 'Неделя' }
-    : { months: ['January','February','March','April','May','June','July','August','September','October','November','December'], monthsGenitive: ['January','February','March','April','May','June','July','August','September','October','November','December'], monthsShort: ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'], monthsMedium: ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sept','Oct','Nov','Dec'], weekdays: ['Mo','Tu','We','Th','Fr','Sa','Su'], weekdaysFull: ['monday','tuesday','wednesday','thursday','friday','saturday','sunday'], today: 'Today', year: 'year', daysLeft: 'days left', passed: 'passed', week: 'Week' };
-}
-
-// === ЛОГИКА ПОГОДЫ ===
+// === ОБНОВЛЕННАЯ ЛОГИКА ПОГОДЫ ===
 const weatherCache = new Map();
 
-function fetchJsonViaHttps(url, timeoutMs = 6000, customHeaders = {}) {
-  return new Promise((resolve, reject) => {
-    const req = https.get(url, {
+// Новая надежная функция для получения JSON с использованием встроенного fetch API
+async function fetchJsonWithTimeout(url, timeoutMs = 4000) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  
+  try {
+    const resp = await fetch(url, {
+      signal: controller.signal,
       headers: {
-        'accept': 'application/json',
-        'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
-        ...customHeaders
-      },
-      timeout: timeoutMs,
-    }, (res) => {
-      let data = '';
-      res.setEncoding('utf8');
-      res.on('data', chunk => data += chunk);
-      res.on('end', () => {
-        if (res.statusCode < 200 || res.statusCode >= 300) return reject(new Error(`HTTP ${res.statusCode}`));
-        try { resolve(JSON.parse(data)); } catch (e) { reject(new Error(`INVALID_JSON`)); }
-      });
+        'Accept': 'application/json',
+        // Добавлен User-Agent, чтобы Open-Meteo не блокировал запросы
+        'User-Agent': 'WallpaperCalendarPro/1.0 (Vercel; Node.js)'
+      }
     });
-    req.on('timeout', () => req.destroy(new Error('TIMEOUT')));
-    req.on('error', reject);
-  });
-}
-
-async function fetchJsonWithTimeout(url, timeoutMs = 6000) {
-  const headers = { 'accept': 'application/json', 'user-agent': 'Mozilla/5.0' };
-  if (typeof fetch === 'function') {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), timeoutMs);
-    try {
-      const resp = await fetch(url, { signal: controller.signal, headers });
-      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-      return await resp.json();
-    } catch (e) {
-      return await fetchJsonViaHttps(url, timeoutMs, headers);
-    } finally {
-      clearTimeout(timer);
+    
+    if (!resp.ok) {
+      throw new Error(`HTTP Error ${resp.status}`);
     }
+    return await resp.json();
+  } finally {
+    clearTimeout(timer);
   }
-  return await fetchJsonViaHttps(url, timeoutMs, headers);
 }
 
 function weatherIconFromCode(code) {
@@ -318,18 +270,24 @@ function weatherIconFromCode(code) {
 }
 
 async function geocodeCity(normalizedCity, lang = 'ru') {
-  const queries = [
-    `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(normalizedCity)}&count=5&language=${lang}&format=json`,
-    `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(normalizedCity)}&count=5&language=en&format=json`
-  ];
-  for (const url of queries) {
-    try {
-      const geoData = await fetchJsonWithTimeout(url, 4000);
-      if (Array.isArray(geoData?.results) && geoData.results.length) {
-        const exact = geoData.results.find((r) => String(r.name || '').toLowerCase() === normalizedCity.toLowerCase());
-        return exact || geoData.results[0];
-      }
-    } catch (_) {}
+  try {
+    // Сначала пробуем запросить на нужном языке (например, на русском)
+    const primaryUrl = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(normalizedCity)}&count=1&language=${lang}&format=json`;
+    const geoData = await fetchJsonWithTimeout(primaryUrl, 3000);
+    
+    if (geoData && Array.isArray(geoData.results) && geoData.results.length > 0) {
+      return geoData.results[0];
+    }
+    
+    // Если ничего не нашли, делаем фоллбэк на английский язык
+    const fallbackUrl = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(normalizedCity)}&count=1&language=en&format=json`;
+    const fallbackData = await fetchJsonWithTimeout(fallbackUrl, 3000);
+    
+    if (fallbackData && Array.isArray(fallbackData.results) && fallbackData.results.length > 0) {
+      return fallbackData.results[0];
+    }
+  } catch (e) {
+    console.warn(`Geocode failed for ${normalizedCity}: ${e.message}`);
   }
   return null;
 }
@@ -337,19 +295,31 @@ async function geocodeCity(normalizedCity, lang = 'ru') {
 async function fetchWeatherByCity(city, lang = 'ru') {
   const normalizedCity = String(city || '').split(',')[0].trim();
   if (!normalizedCity) return null;
+  
   const cacheKey = normalizedCity.toLowerCase();
   const cached = weatherCache.get(cacheKey);
-  if (cached && cached.expiresAt > Date.now()) return cached.data;
+  
+  // Возвращаем кэш, если он еще свежий (даже если там null, чтобы не спамить API ошибками)
+  if (cached && cached.expiresAt > Date.now()) {
+    return cached.data;
+  }
 
   try {
     const place = await geocodeCity(normalizedCity, lang);
-    if (!place || typeof place.latitude !== 'number') return null;
+    if (!place || typeof place.latitude !== 'number') {
+      // "Негативный" кэш: если город не найден, запоминаем это на 2 минуты
+      weatherCache.set(cacheKey, { data: null, expiresAt: Date.now() + 1000 * 120 });
+      return null;
+    }
 
     const tz = place.timezone || 'auto';
     const url = `https://api.open-meteo.com/v1/forecast?latitude=${place.latitude}&longitude=${place.longitude}&current=temperature_2m,weather_code,is_day&hourly=temperature_2m,weather_code&daily=temperature_2m_max,temperature_2m_min,weather_code&forecast_days=2&timezone=${encodeURIComponent(tz)}`;
     
-    const data = await fetchJsonWithTimeout(url, 6000);
-    if (!data?.current || data.current.temperature_2m == null) return null;
+    const data = await fetchJsonWithTimeout(url, 4000);
+    
+    if (!data?.current || data.current.temperature_2m == null) {
+      throw new Error('Invalid weather payload');
+    }
 
     const code = Number(data.current.weather_code || 0);
     const hourly = [];
@@ -381,9 +351,46 @@ async function fetchWeatherByCity(city, lang = 'ru') {
       dailyMin: typeof dailyMin === 'number' && Number.isFinite(dailyMin) ? (dailyMin > 0 ? `+${dailyMin}` : `${dailyMin}`) : null,
       hourly
     };
+    
+    // Успешный кэш на 30 минут
     weatherCache.set(cacheKey, { data: result, expiresAt: Date.now() + 1000 * 60 * 30 });
     return result;
-  } catch (e) { return null; }
+  } catch (e) { 
+    console.warn(`Weather fetch failed for ${normalizedCity}: ${e.message}`);
+    // "Негативный" кэш на случай сетевой ошибки (2 минуты)
+    weatherCache.set(cacheKey, { data: null, expiresAt: Date.now() + 1000 * 120 });
+    return null; 
+  }
+}
+
+async function resolveWeatherList(cities, lang) {
+  if (!Array.isArray(cities) || cities.length === 0) return [];
+  const settled = await Promise.allSettled(cities.slice(0, 3).map((city) => fetchWeatherByCity(city, lang)));
+  return settled
+    .map((item) => item.status === 'fulfilled' ? item.value : null)
+    .filter(Boolean);
+}
+
+function parseEvents(eventsStr) {
+  const map = {};
+  if (!eventsStr) return map;
+  eventsStr.split(',').forEach(part => {
+    const splitIdx = part.indexOf(':');
+    if(splitIdx > -1) {
+      let date = part.slice(0, splitIdx).trim();
+      const name = part.slice(splitIdx + 1).trim();
+      const dateParts = date.split('-');
+      if (dateParts.length === 2) date = `${dateParts[0].padStart(2, '0')}-${dateParts[1].padStart(2, '0')}`;
+      if (date && name) map[date] = name;
+    }
+  });
+  return map;
+}
+
+function getLabels(lang) {
+  return lang === 'ru'
+    ? { months: ['Январь','Февраль','Март','Апрель','Май','Июнь','Июль','Август','Сентябрь','Октябрь','Ноябрь','Декабрь'], monthsGenitive: ['января','февраля','марта','апреля','мая','июня','июля','августа','сентября','октября','ноября','декабря'], monthsShort: ['Янв','Фев','Мар','Апр','Май','Июн','Июл','Авг','Сен','Окт','Ноя','Дек'], monthsMedium: ['Январь','Февраль','Март','Апрель','Май','Июнь','Июль','Август','Сент.','Октябрь','Ноябрь','Декабрь'], weekdays: ['Пн','Вт','Ср','Чт','Пт','Сб','Вс'], weekdaysFull: ['понедельник','вторник','среда','четверг','пятница','суббота','воскресенье'], today: 'Сегодня', year: 'год', daysLeft: 'дн. осталось', passed: 'пройдено', week: 'Неделя' }
+    : { months: ['January','February','March','April','May','June','July','August','September','October','November','December'], monthsGenitive: ['January','February','March','April','May','June','July','August','September','October','November','December'], monthsShort: ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'], monthsMedium: ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sept','Oct','Nov','Dec'], weekdays: ['Mo','Tu','We','Th','Fr','Sa','Su'], weekdaysFull: ['monday','tuesday','wednesday','thursday','friday','saturday','sunday'], today: 'Today', year: 'year', daysLeft: 'days left', passed: 'passed', week: 'Week' };
 }
 
 function getConfig(query) {
