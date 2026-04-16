@@ -23,7 +23,7 @@ const pngCache = new Map();
 const cacheSweepTimer = setInterval(() => pngCache.clear(), 1000 * 60 * 60);
 if (cacheSweepTimer.unref) cacheSweepTimer.unref();
 
-const RENDER_VERSION = 'v8-wttr-weather';
+const RENDER_VERSION = 'v9-openmeteo-fallback-weather';
 
 const FONTS = {
   inter: { name: 'Inter (Стандарт)', file: 'inter.ttf', family: 'Inter' },
@@ -233,139 +233,249 @@ function collectRequestedCities(query) {
   return deduped.slice(0, 3);
 }
 
-// === НОВАЯ БЕЗОПАСНАЯ ЛОГИКА ПОГОДЫ (Провайдер wttr.in) ===
+// === СТАБИЛЬНАЯ ЛОГИКА ПОГОДЫ: Open-Meteo + fallback на wttr.in ===
 const weatherCache = new Map();
+const WEATHER_SUCCESS_TTL_MS = 1000 * 60 * 30;
+const WEATHER_STALE_TTL_MS = 1000 * 60 * 60 * 6;
+const WEATHER_NEGATIVE_TTL_MS = 1000 * 45;
 
-function fetchJsonViaHttps(url, timeoutMs = 4000) {
+function fetchJsonViaHttps(url, timeoutMs = 4500, headers = {}) {
   return new Promise((resolve, reject) => {
     const req = https.get(url, {
-      headers: { 
-        'Accept': 'application/json', 
-        // wttr.in отлично работает с юзер-агентом curl, это исключает 99% блокировок
-        'User-Agent': 'curl/7.68.0' 
+      headers: {
+        'Accept': 'application/json',
+        'User-Agent': 'calendar-wallpaper-app/1.0',
+        ...headers,
       },
       timeout: timeoutMs,
     }, (res) => {
       let data = '';
       res.setEncoding('utf8');
-      res.on('data', chunk => data += chunk);
+      res.on('data', (chunk) => data += chunk);
       res.on('end', () => {
         if (res.statusCode < 200 || res.statusCode >= 300) {
-          return reject(new Error(`HTTP ${res.statusCode}`));
+          return reject(new Error(`HTTP_${res.statusCode}`));
         }
-        try { 
-          resolve(JSON.parse(data)); 
-        } catch (e) { 
-          reject(new Error('INVALID_JSON')); 
+        try {
+          resolve(JSON.parse(data));
+        } catch (_) {
+          reject(new Error('INVALID_JSON'));
         }
       });
     });
 
-    req.on('timeout', () => { 
-      req.destroy(); 
-      reject(new Error('TIMEOUT')); 
+    req.on('timeout', () => {
+      req.destroy(new Error('TIMEOUT'));
     });
-    
-    req.on('error', (err) => {
-      reject(err);
-    });
+
+    req.on('error', (err) => reject(err));
   });
+}
+
+function getOpenMeteoIcon(code) {
+  const c = Number(code);
+  if (c === 0) return '☀️';
+  if ([1, 2].includes(c)) return '⛅';
+  if (c === 3) return '☁️';
+  if ([45, 48].includes(c)) return '🌫️';
+  if ([51, 53, 55, 56, 57, 61, 63, 65, 66, 67, 80, 81, 82].includes(c)) return '🌧️';
+  if ([71, 73, 75, 77, 85, 86].includes(c)) return '❄️';
+  if ([95, 96, 99].includes(c)) return '⛈️';
+  return '☀️';
 }
 
 function getWwoIcon(code) {
   const c = Number(code);
-  if (c === 113) return '☀️'; // Ясно
-  if (c === 116) return '⛅'; // Облачно с прояснениями
-  if ([119, 122].includes(c)) return '☁️'; // Пасмурно
-  if ([143, 248, 260].includes(c)) return '🌫️'; // Туман
-  if ([176, 263, 266, 281, 284, 293, 296, 299, 302, 305, 308, 311, 314, 353, 356, 359].includes(c)) return '🌧️'; // Дождь
-  if ([179, 182, 185, 227, 230, 317, 320, 323, 326, 329, 332, 335, 338, 350, 362, 365, 368, 371, 374, 377].includes(c)) return '❄️'; // Снег
-  if ([200, 386, 389, 392, 395].includes(c)) return '⛈️'; // Гроза
-  return '☀️'; // По умолчанию
+  if (c === 113) return '☀️';
+  if (c === 116) return '⛅';
+  if ([119, 122].includes(c)) return '☁️';
+  if ([143, 248, 260].includes(c)) return '🌫️';
+  if ([176, 263, 266, 281, 284, 293, 296, 299, 302, 305, 308, 311, 314, 353, 356, 359].includes(c)) return '🌧️';
+  if ([179, 182, 185, 227, 230, 317, 320, 323, 326, 329, 332, 335, 338, 350, 362, 365, 368, 371, 374, 377].includes(c)) return '❄️';
+  if ([200, 386, 389, 392, 395].includes(c)) return '⛈️';
+  return '☀️';
+}
+
+function formatSignedTemp(value) {
+  const rounded = Math.round(Number(value || 0));
+  return rounded > 0 ? `+${rounded}` : `${rounded}`;
+}
+
+function formatHourLabel(value) {
+  const raw = String(value || '');
+  if (!raw) return '';
+  if (raw.includes('T')) return raw.slice(11, 16);
+  if (raw === '0') return '00:00';
+  if (raw.length === 3) return `0${raw[0]}:00`;
+  if (raw.length === 4) return `${raw.slice(0, 2)}:00`;
+  return raw;
+}
+
+function normalizeWeatherCacheKey(city, lang = 'ru') {
+  return `${String(city || '').trim().toLowerCase()}::${String(lang || 'ru').trim().toLowerCase()}`;
+}
+
+function getCachedWeather(cacheKey) {
+  const cached = weatherCache.get(cacheKey);
+  if (!cached) return null;
+  if (cached.expiresAt > Date.now()) return { kind: 'fresh', entry: cached };
+  if (cached.data && cached.staleUntil && cached.staleUntil > Date.now()) return { kind: 'stale', entry: cached };
+  return null;
+}
+
+function setWeatherCache(cacheKey, data, expiresAt, staleUntil, meta = {}) {
+  weatherCache.set(cacheKey, { data, expiresAt, staleUntil, ...meta });
+}
+
+function pickHourlyEntries(times = [], temps = [], codes = [], limit = 4) {
+  const entries = [];
+  const now = Date.now();
+  const raw = times.map((time, index) => ({
+    index,
+    time,
+    ts: Number.isFinite(Date.parse(time)) ? Date.parse(time) : Number.NaN,
+  }));
+
+  let start = raw.findIndex((item) => Number.isFinite(item.ts) && item.ts >= now);
+  if (start < 0) start = 0;
+
+  for (let i = start; i < raw.length && entries.length < limit; i += 1) {
+    const idx = raw[i].index;
+    if (temps[idx] == null) continue;
+    entries.push({
+      hour: formatHourLabel(raw[i].time),
+      temp: formatSignedTemp(temps[idx]),
+      icon: getOpenMeteoIcon(codes[idx]),
+    });
+  }
+
+  return entries;
+}
+
+async function geocodeCityOpenMeteo(city, lang = 'ru') {
+  const query = String(city || '').trim();
+  if (!query) return null;
+
+  const urls = [
+    `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(query)}&count=5&language=${encodeURIComponent(lang)}&format=json`,
+    `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(query)}&count=5&format=json`,
+  ];
+
+  for (const url of urls) {
+    try {
+      const data = await fetchJsonViaHttps(url, 3500);
+      if (!data || !Array.isArray(data.results) || data.results.length === 0) continue;
+      const directMatch = data.results.find((item) => String(item.name || '').trim().toLowerCase() === query.toLowerCase());
+      return directMatch || data.results[0];
+    } catch (_) {}
+  }
+
+  return null;
+}
+
+async function fetchWeatherFromOpenMeteo(city, lang = 'ru') {
+  const location = await geocodeCityOpenMeteo(city, lang);
+  if (!location || !Number.isFinite(location.latitude) || !Number.isFinite(location.longitude)) {
+    throw new Error('GEOCODE_NOT_FOUND');
+  }
+
+  const timezone = location.timezone || 'auto';
+  const forecastUrl = `https://api.open-meteo.com/v1/forecast?latitude=${encodeURIComponent(location.latitude)}&longitude=${encodeURIComponent(location.longitude)}&timezone=${encodeURIComponent(timezone)}&current=temperature_2m,weather_code&daily=temperature_2m_max,temperature_2m_min&hourly=temperature_2m,weather_code&forecast_days=2`;
+  const data = await fetchJsonViaHttps(forecastUrl, 4500);
+
+  if (!data || !data.current) {
+    throw new Error('OPEN_METEO_INVALID_PAYLOAD');
+  }
+
+  return {
+    provider: 'open-meteo',
+    temp: formatSignedTemp(data.current.temperature_2m),
+    icon: getOpenMeteoIcon(data.current.weather_code),
+    cityLabel: [location.name, location.admin1, location.country].filter(Boolean).join(', '),
+    timezone: data.timezone || timezone,
+    dailyMax: data.daily && Array.isArray(data.daily.temperature_2m_max) ? formatSignedTemp(data.daily.temperature_2m_max[0]) : null,
+    dailyMin: data.daily && Array.isArray(data.daily.temperature_2m_min) ? formatSignedTemp(data.daily.temperature_2m_min[0]) : null,
+    hourly: pickHourlyEntries(
+      data.hourly && Array.isArray(data.hourly.time) ? data.hourly.time : [],
+      data.hourly && Array.isArray(data.hourly.temperature_2m) ? data.hourly.temperature_2m : [],
+      data.hourly && Array.isArray(data.hourly.weather_code) ? data.hourly.weather_code : [],
+      4,
+    ),
+  };
+}
+
+async function fetchWeatherFromWttr(city, lang = 'ru') {
+  const normalizedCity = String(city || '').trim();
+  if (!normalizedCity) throw new Error('CITY_EMPTY');
+
+  const url = `https://wttr.in/${encodeURIComponent(normalizedCity)}?format=j1&lang=${encodeURIComponent(lang)}`;
+  const data = await fetchJsonViaHttps(url, 4000, { 'User-Agent': 'curl/7.68.0' });
+
+  if (!data || !data.current_condition || !data.current_condition[0]) {
+    throw new Error('WTTR_INVALID_PAYLOAD');
+  }
+
+  const current = data.current_condition[0];
+  const today = data.weather && data.weather[0] ? data.weather[0] : null;
+  const hourly = [];
+
+  if (today && Array.isArray(today.hourly)) {
+    for (let i = 0; i < today.hourly.length && hourly.length < 4; i += 1) {
+      const hData = today.hourly[i];
+      if (!hData) continue;
+      hourly.push({
+        hour: formatHourLabel(hData.time),
+        temp: formatSignedTemp(hData.tempC),
+        icon: getWwoIcon(hData.weatherCode),
+      });
+    }
+  }
+
+  let areaName = normalizedCity;
+  if (data.nearest_area && data.nearest_area[0] && data.nearest_area[0].areaName && data.nearest_area[0].areaName[0]) {
+    areaName = data.nearest_area[0].areaName[0].value;
+  }
+
+  return {
+    provider: 'wttr.in',
+    temp: formatSignedTemp(current.temp_C),
+    icon: getWwoIcon(current.weatherCode),
+    cityLabel: areaName,
+    timezone: 'auto',
+    dailyMax: today ? formatSignedTemp(today.maxtempC) : null,
+    dailyMin: today ? formatSignedTemp(today.mintempC) : null,
+    hourly,
+  };
 }
 
 async function fetchWeatherByCity(city, lang = 'ru') {
-  const normalizedCity = String(city || '').split(',')[0].trim();
+  const normalizedCity = String(city || '').trim();
   if (!normalizedCity) return null;
 
-  const cacheKey = normalizedCity.toLowerCase();
-  const cached = weatherCache.get(cacheKey);
-  
-  if (cached && cached.expiresAt > Date.now()) {
-    return cached.data;
+  const cacheKey = normalizeWeatherCacheKey(normalizedCity, lang);
+  const cached = getCachedWeather(cacheKey);
+  if (cached && cached.kind === 'fresh') {
+    return cached.entry.data;
   }
 
   try {
-    // Используем wttr.in, который сам геокодирует город по названию
-    const url = `https://wttr.in/${encodeURIComponent(normalizedCity)}?format=j1&lang=${lang}`;
-    const data = await fetchJsonViaHttps(url, 4000);
-
-    if (!data || !data.current_condition || !data.current_condition[0]) {
-      throw new Error('Invalid weather payload from wttr.in');
-    }
-
-    const current = data.current_condition[0];
-    const temp = Math.round(Number(current.temp_C || 0));
-    const icon = getWwoIcon(current.weatherCode);
-
-    let areaName = normalizedCity;
-    if (data.nearest_area && data.nearest_area[0] && data.nearest_area[0].areaName && data.nearest_area[0].areaName[0]) {
-        areaName = data.nearest_area[0].areaName[0].value;
-    }
-
-    let dailyMax = null;
-    let dailyMin = null;
-    const hourly = [];
-
-    const today = data.weather && data.weather[0] ? data.weather[0] : null;
-    if (today) {
-        dailyMax = Math.round(Number(today.maxtempC));
-        dailyMin = Math.round(Number(today.mintempC));
-
-        if (Array.isArray(today.hourly)) {
-            const currentHour = new Date().getUTCHours();
-            // wttr.in возвращает данные с шагом в 3 часа (0, 300, 600...)
-            let startIndex = today.hourly.findIndex(h => (Number(h.time) / 100) >= currentHour);
-            if (startIndex < 0) startIndex = 0;
-
-            for (let i = 0; i < 4; i++) {
-                const hData = today.hourly[(startIndex + i) % today.hourly.length];
-                if (!hData) continue;
-                
-                let timeStr = String(hData.time);
-                if (timeStr === '0') timeStr = '00:00';
-                else if (timeStr.length === 3) timeStr = `0${timeStr[0]}:00`;
-                else if (timeStr.length === 4) timeStr = `${timeStr.slice(0, 2)}:00`;
-
-                const hTemp = Math.round(Number(hData.tempC));
-                hourly.push({
-                    hour: timeStr,
-                    temp: hTemp > 0 ? `+${hTemp}` : `${hTemp}`,
-                    icon: getWwoIcon(hData.weatherCode)
-                });
-            }
-        }
-    }
-
-    const result = {
-      temp: temp > 0 ? `+${temp}` : `${temp}`,
-      icon,
-      cityLabel: areaName,
-      timezone: 'auto',
-      dailyMax: dailyMax !== null ? (dailyMax > 0 ? `+${dailyMax}` : `${dailyMax}`) : null,
-      dailyMin: dailyMin !== null ? (dailyMin > 0 ? `+${dailyMin}` : `${dailyMin}`) : null,
-      hourly
-    };
-
-    weatherCache.set(cacheKey, { data: result, expiresAt: Date.now() + 1000 * 60 * 30 });
+    const result = await fetchWeatherFromOpenMeteo(normalizedCity, lang);
+    setWeatherCache(cacheKey, result, Date.now() + WEATHER_SUCCESS_TTL_MS, Date.now() + WEATHER_STALE_TTL_MS, { status: 'ok' });
     return result;
-
-  } catch (e) {
-    console.error(`Ошибка погоды для ${normalizedCity}: ${e.message}`);
-    // Если ошибка сети или города нет — сохраняем негативный результат на 2 минуты,
-    // чтобы Vercel не крашился при каждой попытке рендера
-    weatherCache.set(cacheKey, { data: null, expiresAt: Date.now() + 1000 * 120 });
-    return null;
+  } catch (openMeteoError) {
+    try {
+      const result = await fetchWeatherFromWttr(normalizedCity, lang);
+      setWeatherCache(cacheKey, result, Date.now() + WEATHER_SUCCESS_TTL_MS, Date.now() + WEATHER_STALE_TTL_MS, { status: 'ok-fallback' });
+      return result;
+    } catch (wttrError) {
+      if (cached && cached.entry && cached.entry.data) {
+        console.error(`Погода для ${normalizedCity}: ошибка провайдеров, отдаю устаревший кеш. Open-Meteo=${openMeteoError.message}; wttr.in=${wttrError.message}`);
+        return cached.entry.data;
+      }
+      console.error(`Ошибка погоды для ${normalizedCity}: Open-Meteo=${openMeteoError.message}; wttr.in=${wttrError.message}`);
+      setWeatherCache(cacheKey, null, Date.now() + WEATHER_NEGATIVE_TTL_MS, null, { status: 'temporary-failure' });
+      return null;
+    }
   }
 }
 
@@ -966,16 +1076,29 @@ app.get('/api/debug-weather', async (req, res) => {
     ok: true,
     requestedCities: cfg.citiesToFetch,
     resolvedCount: resolved.length,
-    resolved
+    resolved,
+    cacheKeys: cfg.citiesToFetch.map((city) => normalizeWeatherCacheKey(city, cfg.lang))
   });
 });
 
-app.get('/wallpaper.svg', async (req, res) => {
-  const cfg = getConfig(req.query);
+async function attachWeatherToConfig(cfg) {
   cfg.weatherDataList = await resolveWeatherList(cfg.citiesToFetch, cfg.lang);
-  res.setHeader('X-Weather-Requested', String(cfg.citiesToFetch.length));
-  res.setHeader('X-Weather-Resolved', String(cfg.weatherDataList.length));
-  res.setHeader('X-Weather-Cities', encodeURIComponent(cfg.citiesToFetch.join(' | ')));
+  cfg.weatherRequestedCount = cfg.citiesToFetch.length;
+  cfg.weatherResolvedCount = cfg.weatherDataList.length;
+  cfg.weatherProviders = [...new Set(cfg.weatherDataList.map((item) => item && item.provider).filter(Boolean))];
+  return cfg;
+}
+
+function applyWeatherHeaders(res, cfg) {
+  res.setHeader('X-Weather-Requested', String(cfg.weatherRequestedCount || 0));
+  res.setHeader('X-Weather-Resolved', String(cfg.weatherResolvedCount || 0));
+  res.setHeader('X-Weather-Cities', encodeURIComponent((cfg.citiesToFetch || []).join(' | ')));
+  res.setHeader('X-Weather-Providers', encodeURIComponent((cfg.weatherProviders || []).join(',')));
+}
+
+app.get('/wallpaper.svg', async (req, res) => {
+  const cfg = await attachWeatherToConfig(getConfig(req.query));
+  applyWeatherHeaders(res, cfg);
   res.type('image/svg+xml').send(renderSvg(cfg));
 });
 
@@ -988,10 +1111,7 @@ app.get('/wallpaper.png', async (req, res) => {
       return res.send(pngCache.get(cacheKey));
     }
 
-    const cfg = getConfig(req.query);
-    // Теперь, даже если погода вернёт ошибку, функция не упадёт, 
-    // а просто продолжит генерацию картинки с пустым массивом погоды
-    cfg.weatherDataList = await resolveWeatherList(cfg.citiesToFetch, cfg.lang);
+    const cfg = await attachWeatherToConfig(getConfig(req.query));
     const svg = renderSvg(cfg);
 
     let png;
@@ -1017,12 +1137,18 @@ app.get('/wallpaper.png', async (req, res) => {
       png = await sharp(Buffer.from(svg), { density: 300 }).png().toBuffer();
     }
 
-    if (pngCache.size < 1000) pngCache.set(cacheKey, png);
+    const requestedWeather = (cfg.weatherRequestedCount || 0) > 0;
+    const resolvedWeather = (cfg.weatherResolvedCount || 0) > 0;
+    const shouldCachePng = !requestedWeather || resolvedWeather;
+
+    if (shouldCachePng && pngCache.size < 1000) {
+      pngCache.set(cacheKey, png);
+    }
+
     res.setHeader('Content-Type', 'image/png');
-    res.setHeader('Cache-Control', 'public, max-age=3600');
-    res.setHeader('X-Cache', 'MISS');
-    res.setHeader('X-Weather-Requested', String(cfg.citiesToFetch.length));
-    res.setHeader('X-Weather-Resolved', String(cfg.weatherDataList.length));
+    res.setHeader('Cache-Control', shouldCachePng ? 'public, max-age=3600' : 'no-store, max-age=0');
+    res.setHeader('X-Cache', shouldCachePng ? 'MISS' : 'BYPASS');
+    applyWeatherHeaders(res, cfg);
     res.send(png);
   } catch (err) {
     console.error('CRITICAL PNG ERROR:', err);
