@@ -272,28 +272,94 @@ function fetchJsonViaHttps(url, timeoutMs = 4500, headers = {}) {
   });
 }
 
-function getOpenMeteoIcon(code) {
+const WEATHER_TARGET_HOURS = ['09:00', '12:00', '15:00', '18:00'];
+
+function getOpenMeteoIconType(code) {
   const c = Number(code);
-  if (c === 0) return '☀️';
-  if ([1, 2].includes(c)) return '⛅';
-  if (c === 3) return '☁️';
-  if ([45, 48].includes(c)) return '🌫️';
-  if ([51, 53, 55, 56, 57, 61, 63, 65, 66, 67, 80, 81, 82].includes(c)) return '🌧️';
-  if ([71, 73, 75, 77, 85, 86].includes(c)) return '❄️';
-  if ([95, 96, 99].includes(c)) return '⛈️';
-  return '☀️';
+  if (c === 0) return 'sun';
+  if ([1, 2].includes(c)) return 'partly';
+  if (c === 3) return 'cloud';
+  if ([45, 48].includes(c)) return 'fog';
+  if ([51, 53, 55, 56, 57, 61, 63, 65, 66, 67, 80, 81, 82].includes(c)) return 'rain';
+  if ([71, 73, 75, 77, 85, 86].includes(c)) return 'snow';
+  if ([95, 96, 99].includes(c)) return 'storm';
+  return 'sun';
 }
 
-function getWwoIcon(code) {
+function getWwoIconType(code) {
   const c = Number(code);
-  if (c === 113) return '☀️';
-  if (c === 116) return '⛅';
-  if ([119, 122].includes(c)) return '☁️';
-  if ([143, 248, 260].includes(c)) return '🌫️';
-  if ([176, 263, 266, 281, 284, 293, 296, 299, 302, 305, 308, 311, 314, 353, 356, 359].includes(c)) return '🌧️';
-  if ([179, 182, 185, 227, 230, 317, 320, 323, 326, 329, 332, 335, 338, 350, 362, 365, 368, 371, 374, 377].includes(c)) return '❄️';
-  if ([200, 386, 389, 392, 395].includes(c)) return '⛈️';
-  return '☀️';
+  if (c === 113) return 'sun';
+  if (c === 116) return 'partly';
+  if ([119, 122].includes(c)) return 'cloud';
+  if ([143, 248, 260].includes(c)) return 'fog';
+  if ([176, 263, 266, 281, 284, 293, 296, 299, 302, 305, 308, 311, 314, 353, 356, 359].includes(c)) return 'rain';
+  if ([179, 182, 185, 227, 230, 317, 320, 323, 326, 329, 332, 335, 338, 350, 362, 365, 368, 371, 374, 377].includes(c)) return 'snow';
+  if ([200, 386, 389, 392, 395].includes(c)) return 'storm';
+  return 'sun';
+}
+
+function getWeatherIconLabel(type) {
+  if (type === 'sun') return '☀';
+  if (type === 'partly') return '⛅';
+  if (type === 'cloud') return '☁';
+  if (type === 'fog') return '〰';
+  if (type === 'rain') return '☔';
+  if (type === 'snow') return '❄';
+  if (type === 'storm') return '⚡';
+  return '☀';
+}
+
+function renderWeatherIcon(type, x, y, size) {
+  const s = Math.max(14, Number(size) || 18);
+  const cx = Number(x) || 0;
+  const cy = Number(y) || 0;
+  const sunCore = `<circle cx="${cx}" cy="${cy}" r="${s * 0.18}" fill="#FFD54F" stroke="#FFB300" stroke-width="${s * 0.04}"/>`;
+  const sunRays = Array.from({ length: 8 }, (_, i) => {
+    const angle = (Math.PI * 2 * i) / 8;
+    const x1 = cx + Math.cos(angle) * s * 0.25;
+    const y1 = cy + Math.sin(angle) * s * 0.25;
+    const x2 = cx + Math.cos(angle) * s * 0.36;
+    const y2 = cy + Math.sin(angle) * s * 0.36;
+    return `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="#FFC107" stroke-width="${s * 0.05}" stroke-linecap="round"/>`;
+  }).join('');
+  const cloud = `
+    <g>
+      <ellipse cx="${cx - s * 0.12}" cy="${cy + s * 0.04}" rx="${s * 0.18}" ry="${s * 0.14}" fill="#F7FBFF" stroke="#C9D8E6" stroke-width="${s * 0.035}"/>
+      <ellipse cx="${cx + s * 0.02}" cy="${cy - s * 0.04}" rx="${s * 0.23}" ry="${s * 0.17}" fill="#F7FBFF" stroke="#C9D8E6" stroke-width="${s * 0.035}"/>
+      <ellipse cx="${cx + s * 0.20}" cy="${cy + s * 0.04}" rx="${s * 0.17}" ry="${s * 0.13}" fill="#F7FBFF" stroke="#C9D8E6" stroke-width="${s * 0.035}"/>
+      <rect x="${cx - s * 0.26}" y="${cy + s * 0.02}" width="${s * 0.52}" height="${s * 0.16}" rx="${s * 0.08}" fill="#F7FBFF" stroke="#C9D8E6" stroke-width="${s * 0.03}"/>
+    </g>
+  `;
+  const fogLines = [-0.08, 0.08, 0.24].map((offset) =>
+    `<line x1="${cx - s * 0.26}" y1="${cy + s * offset}" x2="${cx + s * 0.26}" y2="${cy + s * offset}" stroke="#B0BEC5" stroke-width="${s * 0.045}" stroke-linecap="round" opacity="0.9"/>`
+  ).join('');
+  const rainDrops = [-0.16, 0, 0.16].map((offset) =>
+    `<line x1="${cx + s * offset}" y1="${cy + s * 0.22}" x2="${cx + s * (offset - 0.05)}" y2="${cy + s * 0.38}" stroke="#4FC3F7" stroke-width="${s * 0.05}" stroke-linecap="round"/>`
+  ).join('');
+  const snowDots = [-0.14, 0, 0.14].map((offset) =>
+    `<g>
+      <line x1="${cx + s * (offset - 0.05)}" y1="${cy + s * 0.24}" x2="${cx + s * (offset + 0.05)}" y2="${cy + s * 0.34}" stroke="#90CAF9" stroke-width="${s * 0.032}" stroke-linecap="round"/>
+      <line x1="${cx + s * (offset + 0.05)}" y1="${cy + s * 0.24}" x2="${cx + s * (offset - 0.05)}" y2="${cy + s * 0.34}" stroke="#90CAF9" stroke-width="${s * 0.032}" stroke-linecap="round"/>
+      <line x1="${cx + s * offset}" y1="${cy + s * 0.22}" x2="${cx + s * offset}" y2="${cy + s * 0.36}" stroke="#90CAF9" stroke-width="${s * 0.028}" stroke-linecap="round"/>
+    </g>`
+  ).join('');
+  const bolt = `<path d="M ${cx + s * 0.03} ${cy + s * 0.10} L ${cx - s * 0.04} ${cy + s * 0.30} L ${cx + s * 0.03} ${cy + s * 0.30} L ${cx - s * 0.02} ${cy + s * 0.46} L ${cx + s * 0.15} ${cy + s * 0.22} L ${cx + s * 0.06} ${cy + s * 0.22} Z" fill="#FFCA28" stroke="#F9A825" stroke-width="${s * 0.02}" stroke-linejoin="round"/>`;
+
+  if (type === 'sun') return `<g>${sunRays}${sunCore}</g>`;
+  if (type === 'partly') return `<g transform="translate(${-s * 0.04},${-s * 0.02})">${Array.from({ length: 8 }, (_, i) => {
+    const angle = (Math.PI * 2 * i) / 8;
+    const x1 = cx - s * 0.10 + Math.cos(angle) * s * 0.18;
+    const y1 = cy - s * 0.10 + Math.sin(angle) * s * 0.18;
+    const x2 = cx - s * 0.10 + Math.cos(angle) * s * 0.27;
+    const y2 = cy - s * 0.10 + Math.sin(angle) * s * 0.27;
+    return `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="#FFC107" stroke-width="${s * 0.045}" stroke-linecap="round"/>`;
+  }).join('')}<circle cx="${cx - s * 0.10}" cy="${cy - s * 0.10}" r="${s * 0.15}" fill="#FFD54F" stroke="#FFB300" stroke-width="${s * 0.035}"/>${cloud}</g>`;
+  if (type === 'cloud') return `<g>${cloud}</g>`;
+  if (type === 'fog') return `<g>${cloud}${fogLines}</g>`;
+  if (type === 'rain') return `<g>${cloud}${rainDrops}</g>`;
+  if (type === 'snow') return `<g>${cloud}${snowDots}</g>`;
+  if (type === 'storm') return `<g>${cloud}${bolt}</g>`;
+  return `<g>${sunRays}${sunCore}</g>`;
 }
 
 function formatSignedTemp(value) {
@@ -327,27 +393,21 @@ function setWeatherCache(cacheKey, data, expiresAt, staleUntil, meta = {}) {
   weatherCache.set(cacheKey, { data, expiresAt, staleUntil, ...meta });
 }
 
-function pickHourlyEntries(times = [], temps = [], codes = [], limit = 4) {
+function pickHourlyEntries(times = [], temps = [], codes = [], iconResolver = getOpenMeteoIconType) {
+  const formattedTimes = times.map((time) => formatHourLabel(time));
   const entries = [];
-  const now = Date.now();
-  const raw = times.map((time, index) => ({
-    index,
-    time,
-    ts: Number.isFinite(Date.parse(time)) ? Date.parse(time) : Number.NaN,
-  }));
 
-  let start = raw.findIndex((item) => Number.isFinite(item.ts) && item.ts >= now);
-  if (start < 0) start = 0;
-
-  for (let i = start; i < raw.length && entries.length < limit; i += 1) {
-    const idx = raw[i].index;
-    if (temps[idx] == null) continue;
+  WEATHER_TARGET_HOURS.forEach((targetHour) => {
+    const idx = formattedTimes.findIndex((hour) => hour === targetHour);
+    if (idx < 0 || temps[idx] == null) return;
+    const iconType = iconResolver(codes[idx]);
     entries.push({
-      hour: formatHourLabel(raw[i].time),
+      hour: targetHour,
       temp: formatSignedTemp(temps[idx]),
-      icon: getOpenMeteoIcon(codes[idx]),
+      iconType,
+      icon: getWeatherIconLabel(iconType),
     });
-  }
+  });
 
   return entries;
 }
@@ -390,7 +450,8 @@ async function fetchWeatherFromOpenMeteo(city, lang = 'ru') {
   return {
     provider: 'open-meteo',
     temp: formatSignedTemp(data.current.temperature_2m),
-    icon: getOpenMeteoIcon(data.current.weather_code),
+    iconType: getOpenMeteoIconType(data.current.weather_code),
+    icon: getWeatherIconLabel(getOpenMeteoIconType(data.current.weather_code)),
     cityLabel: [location.name, location.admin1, location.country].filter(Boolean).join(', '),
     timezone: data.timezone || timezone,
     dailyMax: data.daily && Array.isArray(data.daily.temperature_2m_max) ? formatSignedTemp(data.daily.temperature_2m_max[0]) : null,
@@ -399,7 +460,7 @@ async function fetchWeatherFromOpenMeteo(city, lang = 'ru') {
       data.hourly && Array.isArray(data.hourly.time) ? data.hourly.time : [],
       data.hourly && Array.isArray(data.hourly.temperature_2m) ? data.hourly.temperature_2m : [],
       data.hourly && Array.isArray(data.hourly.weather_code) ? data.hourly.weather_code : [],
-      4,
+      getOpenMeteoIconType,
     ),
   };
 }
@@ -417,19 +478,14 @@ async function fetchWeatherFromWttr(city, lang = 'ru') {
 
   const current = data.current_condition[0];
   const today = data.weather && data.weather[0] ? data.weather[0] : null;
-  const hourly = [];
-
-  if (today && Array.isArray(today.hourly)) {
-    for (let i = 0; i < today.hourly.length && hourly.length < 4; i += 1) {
-      const hData = today.hourly[i];
-      if (!hData) continue;
-      hourly.push({
-        hour: formatHourLabel(hData.time),
-        temp: formatSignedTemp(hData.tempC),
-        icon: getWwoIcon(hData.weatherCode),
-      });
-    }
-  }
+  const hourly = today && Array.isArray(today.hourly)
+    ? pickHourlyEntries(
+        today.hourly.map((item) => item && item.time),
+        today.hourly.map((item) => item && item.tempC),
+        today.hourly.map((item) => item && item.weatherCode),
+        getWwoIconType,
+      )
+    : [];
 
   let areaName = normalizedCity;
   if (data.nearest_area && data.nearest_area[0] && data.nearest_area[0].areaName && data.nearest_area[0].areaName[0]) {
@@ -439,7 +495,8 @@ async function fetchWeatherFromWttr(city, lang = 'ru') {
   return {
     provider: 'wttr.in',
     temp: formatSignedTemp(current.temp_C),
-    icon: getWwoIcon(current.weatherCode),
+    iconType: getWwoIconType(current.weatherCode),
+    icon: getWeatherIconLabel(getWwoIconType(current.weatherCode)),
     cityLabel: areaName,
     timezone: 'auto',
     dailyMax: today ? formatSignedTemp(today.maxtempC) : null,
@@ -708,7 +765,10 @@ function renderHeader(cfg, theme, labels, now, stats, width, padding, topY, FONT
 
     cfg.weatherDataList.slice(0, 3).forEach((wd) => {
       const cityLabel = String(wd.cityLabel || '').split(',')[0].trim();
-      rightSvg += `<text x="${weatherX}" y="${currentY}" text-anchor="end" fill="${theme.text}" font-size="${wTitleSize}" font-family="${FONT}" font-weight="700">${wd.temp}°C ${wd.icon}</text>`;
+      const iconSize = isMulti ? wTitleSize * 0.92 : wTitleSize * 1.02;
+      const tempOffset = iconSize * 0.78;
+      rightSvg += renderWeatherIcon(wd.iconType || 'sun', weatherX - tempOffset, currentY - wTitleSize * 0.34, iconSize);
+      rightSvg += `<text x="${weatherX}" y="${currentY}" text-anchor="end" fill="${theme.text}" font-size="${wTitleSize}" font-family="${FONT}" font-weight="700">${wd.temp}°C</text>`;
       if (cityLabel) {
         rightSvg += `<text x="${weatherX}" y="${currentY + wTitleSize * 0.95}" text-anchor="end" fill="${theme.muted}" font-size="${wSubSize}" font-family="${FONT}" font-weight="600">${escapeXml(cityLabel.length > 18 ? cityLabel.slice(0,17)+'…' : cityLabel)}</text>`;
       }
@@ -905,7 +965,8 @@ function renderFooter(cfg, theme, labels, now, stats, width, footerBox, FONT) {
       let out = base + `<text x="${x + pad}" y="${y + h * 0.28}" fill="${theme.accent2}" font-size="${subSize}" font-family="${FONT}" font-weight="700">${cfg.lang === 'ru' ? 'Сводка среды' : 'Ambient summary'}</text>`;
       cfg.weatherDataList.forEach((wd, i) => {
         const cx = x + pad + i * slotW;
-        out += `<text x="${cx}" y="${y + h * 0.65}" fill="${theme.text}" font-size="${textSize*0.8}" font-family="${FONT}" font-weight="800">${escapeXml(wd.temp + '°C ' + wd.icon)}</text>`;
+        out += renderWeatherIcon(wd.iconType || 'sun', cx + textSize * 0.18, y + h * 0.59, textSize * 0.62);
+        out += `<text x="${cx + textSize * 0.52}" y="${y + h * 0.65}" fill="${theme.text}" font-size="${textSize*0.8}" font-family="${FONT}" font-weight="800">${escapeXml(wd.temp + '°C')}</text>`;
         out += `<text x="${cx}" y="${y + h * 0.88}" fill="${theme.muted}" font-size="${subSize*0.85}" font-family="${FONT}" font-weight="600">${escapeXml(wd.cityLabel.length > 12 ? wd.cityLabel.slice(0,11)+'…' : wd.cityLabel)}</text>`;
       });
       return out;
@@ -948,7 +1009,7 @@ function renderFooter(cfg, theme, labels, now, stats, width, footerBox, FONT) {
         out += `<line x1="${rowX + rowW * 0.18}" y1="${ry + rowH * 0.78}" x2="${rowX + rowW}" y2="${ry + rowH * 0.78}" stroke="${alpha(theme.accent, 0.14)}"/>`;
         out += `<rect x="${rowX}" y="${ry + rowH * 0.10}" width="${rowW * 0.18}" height="${rowH * 0.62}" rx="${rowH * 0.31}" fill="${alpha(theme.bg, 0.16)}" stroke="${alpha(theme.accent, 0.22)}"/>`;
         out += `<text x="${rowX + rowW * 0.09}" y="${ry + rowH * 0.54}" text-anchor="middle" fill="${theme.accent2}" font-size="${subSize * 0.72}" font-family="${FONT}" font-weight="700">${escapeXml(item.hour)}</text>`;
-        out += `<text x="${rowX + rowW * 0.24}" y="${ry + rowH * 0.56}" fill="${theme.text}" font-size="${subSize * 0.9}" font-family="${FONT}">${item.icon}</text>`;
+        out += renderWeatherIcon(item.iconType || 'sun', rowX + rowW * 0.245, ry + rowH * 0.43, rowH * 0.62);
         out += `<text x="${rowX + rowW}" y="${ry + rowH * 0.56}" text-anchor="end" fill="${theme.text}" font-size="${subSize * 0.86}" font-family="${FONT}" font-weight="800">${escapeXml(item.temp)}°</text>`;
       });
       return out;
@@ -972,7 +1033,7 @@ function renderFooter(cfg, theme, labels, now, stats, width, footerBox, FONT) {
         out += `<line x1="${colX + slotW * 0.18}" y1="${ry + rowH * 0.78}" x2="${colX + slotW * 0.92}" y2="${ry + rowH * 0.78}" stroke="${alpha(theme.accent, 0.14)}"/>`;
         out += `<rect x="${colX + slotW * 0.02}" y="${ry + rowH * 0.10}" width="${slotW * 0.30}" height="${rowH * 0.62}" rx="${rowH * 0.31}" fill="${alpha(theme.bg, 0.16)}" stroke="${alpha(theme.accent, 0.22)}"/>`;
         out += `<text x="${colX + slotW * 0.17}" y="${ry + rowH * 0.54}" text-anchor="middle" fill="${theme.accent2}" font-size="${subSize * 0.70}" font-family="${FONT}" font-weight="700">${escapeXml(item.hour)}</text>`;
-        out += `<text x="${colX + slotW * 0.40}" y="${ry + rowH * 0.56}" fill="${theme.text}" font-size="${subSize * 0.88}" font-family="${FONT}">${item.icon}</text>`;
+        out += renderWeatherIcon(item.iconType || 'sun', colX + slotW * 0.42, ry + rowH * 0.43, rowH * 0.56);
         out += `<text x="${colX + slotW * 0.92}" y="${ry + rowH * 0.56}" text-anchor="end" fill="${theme.text}" font-size="${subSize * 0.84}" font-family="${FONT}" font-weight="800">${escapeXml(item.temp)}°</text>`;
       });
     });
